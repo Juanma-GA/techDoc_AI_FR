@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
+import structlog
 from lxml import etree
 
 from app.core import xml_safe
@@ -34,6 +35,8 @@ from app.core.procedure_structure import is_numbered_procedure_group as _is_numb
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
 from app.core.s1000d_ids import normalize_dm_ids
 from app.core.xsd_model import ConstraintReport, load_xsd_model
+
+log = structlog.get_logger(__name__)
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
@@ -48,8 +51,9 @@ _MISSING_DATA_COMMENT_PREFIX = "A REMPLACER AVANT PUBLICATION:"
 _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]")
 # Nom d'element XML valide (les candidats viennent d'un override humain).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
-_GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
-_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+_GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png|cgm|svg)$", re.IGNORECASE)
+_GRAPHIC_FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|cgm|svg)", re.IGNORECASE)
+_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png", ".cgm": "cgm", ".svg": "svg"}
 _ICN_TITLE_TOKEN = re.compile(
     r"(?<![A-Za-z0-9_-])ICN-[A-Za-z0-9_.-]+?(?:\.(?:jpe?g|png))?"
     r"(?=$|[\s,;|)\]}])",
@@ -366,38 +370,62 @@ def _figure_icns(node: IRNode) -> list[str]:
     return names
 
 
-def _doctype(root: IRNode, dmodule: etree._Element | None = None) -> str:
+def _entity_decl(ident: str, filename: str, notation: str) -> str:
+    if (
+        not _NCNAME.fullmatch(ident)
+        or not _GRAPHIC_FILENAME.fullmatch(filename)
+        or notation not in _GRAPHIC_NOTATION.values()
+    ):
+        raise ValueError("Invalid graphic entity name.")
+    return f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
+
+
+def _doctype(
+    root: IRNode,
+    dmodule: etree._Element | None = None,
+    *,
+    image_name_map: dict[str, str] | None = None,
+    diagnostics: SerializationDiagnostics | None = None,
+) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
     placeholder_ident = "ICN-ZZZ-00000"
+
+    def declare(ident: str, source_name: str) -> None:
+        if ident in declared:
+            return
+        declared.add(ident)
+        filename = (image_name_map or {}).get(source_name, source_name)
+        suffix = re.search(r"\.[^.]+$", filename)
+        notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "") if suffix else ""
+        try:
+            declaration = _entity_decl(ident, filename, notation)
+        except ValueError as exc:
+            log.warning("graphic_name_invalid", filename=filename, entity_ident=ident,
+                        error_type=type(exc).__name__)
+            if diagnostics is not None:
+                diagnostics.xsd_violations.append({
+                    "severity": "error",
+                    "rule": "GRAPHIC_NAME_INVALID",
+                    "message": f"Nom de fichier graphique invalide : {filename}",
+                    "path": "/dmodule/content//graphic",
+                })
+            return
+        declarations.append(declaration)
+
     for node in root.walk():
         if node.kind != "figure" or node.is_pictogram:
             continue
         if not _figure_icns(node) and placeholder_ident not in declared:
-            declarations.append(
-                f'<!ENTITY {placeholder_ident} SYSTEM "{placeholder_ident}.jpg" NDATA jpg>'
-            )
-            declared.add(placeholder_ident)
+            declare(placeholder_ident, f"{placeholder_ident}.jpg")
         for icn in _figure_icns(node):
-            filename = xml_text(icn)
-            ident = _graphic_ident(filename)
-            if not filename or ident in declared or not _NCNAME.fullmatch(ident):
-                continue
-            declared.add(ident)
-            suffix = re.search(r"\.[^.]+$", filename)
-            notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
-            declarations.append(
-                f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
-            )
+            declare(_graphic_ident(icn), icn)
     if dmodule is not None:
         for graphic in dmodule.iter("graphic"):
             ident = graphic.get("infoEntityIdent", "")
             if ident and ident not in declared and _NCNAME.fullmatch(ident):
-                declarations.append(
-                    f'<!ENTITY {ident} SYSTEM "{ident}.jpg" NDATA jpg>'
-                )
-                declared.add(ident)
+                declare(ident, f"{ident}.jpg")
     declarations.append(
         '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">'
     )
@@ -1614,6 +1642,7 @@ def serialize(
     reference_dm_id: str = "",
     created_at: datetime | None = None,
     diagnostics: SerializationDiagnostics | None = None,
+    image_name_map: dict[str, str] | None = None,
 ) -> str:
     """Construit un squelette XML S1000D contraint par le XSD local (UTF-8 indente)."""
     if issue not in {"4.1", "4.2"}:
@@ -1684,5 +1713,5 @@ def serialize(
     tree = dmodule.getroottree()
     return etree.tostring(
         tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",
-        doctype=_doctype(root, dmodule),
+        doctype=_doctype(root, dmodule, image_name_map=image_name_map, diagnostics=diagnostics),
     ).decode("utf-8")

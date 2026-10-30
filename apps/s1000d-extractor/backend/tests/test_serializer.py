@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import pytest
+from lxml import etree
 
 from app.core import xml_safe
-from lxml import etree
 from app.core.dmrl import DmrlEntry
-from app.core.ir import IRNode, InlineRun, from_dict, to_dict
+from app.core.ir import InlineRun, IRNode, from_dict, to_dict
 from app.core.resolver import resolve
 from app.core.s1000d_schema import validate_xsd
-from app.core.s1000d_serializer import build_reference_index, clean_title, missing_data_fields, serialize
+from app.core.s1000d_serializer import (
+    SerializationDiagnostics,
+    build_reference_index,
+    clean_title,
+    missing_data_fields,
+    serialize,
+)
 from app.core.structure_heuristics import detect_refs
 
 
@@ -44,6 +50,54 @@ def _serialize_with_dmc(root: IRNode, issue: str, dm_type: str) -> str:
 def test_issue_5_0_is_not_a_generation_target() -> None:
     with pytest.raises(ValueError, match="Generation XSD non disponible"):
         serialize(IRNode(id="root", kind="section"), issue="5.0", dm_type="descriptive")
+
+
+@pytest.mark.parametrize("filename", [
+    'figure"><!ENTITY injected SYSTEM "injected.png".png',
+    "figure>injected.png",
+    "../figure.png",
+    "figure",
+    "figure.png\x00",
+    "file:///figure.png",
+])
+def test_invalid_graphic_filename_is_not_declared(filename: str) -> None:
+    root = IRNode(id="root", kind="section", children=[
+        IRNode(id="figure", kind="figure", text="Figure 1", icn=filename),
+    ])
+    diagnostics = SerializationDiagnostics()
+
+    xml = serialize(root, issue="4.2", dm_type="descriptive", diagnostics=diagnostics)
+
+    _parse(xml)
+    assert "<!ENTITY injected " not in xml
+    entities = etree.fromstring(xml.encode()).getroottree().docinfo.internalDTD.iterentities()
+    assert {entity.name for entity in entities} <= {"ISOEntities", "ZZ"}
+    assert any(item["rule"] == "GRAPHIC_NAME_INVALID" for item in diagnostics.xsd_violations)
+
+
+@pytest.mark.parametrize("extension", ["jpg", "jpeg", "png", "cgm", "svg"])
+def test_graphic_entity_filename_map_changes_only_the_declaration(extension: str) -> None:
+    root = IRNode(id="root", kind="section", children=[
+        IRNode(id="figure", kind="figure", text="Figure 1", icn="figure.png"),
+    ])
+    xml = serialize(root, issue="4.2", dm_type="descriptive",
+                    image_name_map={"figure.png": f"exported.{extension}"})
+    notation = "jpg" if extension == "jpeg" else extension
+    assert f'<!ENTITY figure SYSTEM "exported.{extension}" NDATA {notation}>' in xml
+    assert 'infoEntityIdent="figure"' in xml
+
+
+@pytest.mark.parametrize("filename", ['bad".jpg', "bad>.jpg", "../bad.jpg"])
+def test_invalid_exported_graphic_name_is_not_declared(filename: str) -> None:
+    root = IRNode(id="root", kind="section", children=[
+        IRNode(id="figure", kind="figure", text="Figure 1", icn="figure.png"),
+    ])
+    diagnostics = SerializationDiagnostics()
+    xml = serialize(root, issue="4.2", dm_type="descriptive",
+                    diagnostics=diagnostics, image_name_map={"figure.png": filename})
+    _parse(xml)
+    assert "<!ENTITY figure " not in xml
+    assert any(item["rule"] == "GRAPHIC_NAME_INVALID" for item in diagnostics.xsd_violations)
 
 
 def _parse(xml: str):

@@ -3,12 +3,36 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
+
+import pymupdf as fitz
+import pytest
 
 from app.config import settings
 from app.core.pdf_cut import _start_page_after_tables_list, detect_start_pages
 from app.core.pdf_cut_scoring import dmrl_data_module_titles, dmrl_scoring_title
 from app.core.pdf_cut_scoring import score_page as _score_page
+
+
+def test_failed_pdf_save_keeps_previous_cut(tmp_path, pdf_bytes, monkeypatch) -> None:
+    from app.core.pdf_cut import cut_from_page
+
+    source = tmp_path / "source.pdf"
+    source.write_bytes(pdf_bytes)
+    document = SimpleNamespace(id="synthetic", storage_path=str(source))
+    output = Path(cut_from_page(document, 1))
+    previous = output.read_bytes()
+
+    def fail_save(_document, filename, *_args, **_kwargs):
+        Path(filename).write_bytes(b"partial")
+        raise OSError("Synthetic PDF save failure")
+
+    monkeypatch.setattr(fitz.Document, "save", fail_save)
+    with pytest.raises(OSError, match="Synthetic PDF save failure"):
+        cut_from_page(document, 1)
+    assert output.read_bytes() == previous
+    assert set(tmp_path.iterdir()) == {source, output}
 
 
 def _upload(client, data: bytes) -> str:

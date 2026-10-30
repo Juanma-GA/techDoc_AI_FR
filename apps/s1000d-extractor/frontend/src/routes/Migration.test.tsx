@@ -1,12 +1,40 @@
 import { describe, expect, it } from "vitest";
+import { createInstance } from "i18next";
+import { renderToStaticMarkup } from "react-dom/server";
+import { I18nextProvider } from "react-i18next";
 
+import en from "../locales/en.json";
+import fr from "../locales/fr.json";
 import type { DmrlRow, WizardState } from "../lib/api";
 import { hasUnmatchedDmrlDms, needsDmrlReview } from "../lib/wizardReview";
 import {
   generationFile,
   getCommonMissingFields,
   isRestorableMigrationInput,
+  IllustrationWarning,
 } from "./Migration";
+
+describe("illustration extraction warning", () => {
+  it.each([
+    ["fr", 1, "1 erreur."],
+    ["fr", 2, "2 erreurs."],
+    ["en", 1, "1 error."],
+    ["en", 2, "2 errors."],
+  ] as const)("shows %s diagnostics for %i error(s)", async (language, count, text) => {
+    const i18n = createInstance();
+    await i18n.init({ lng: language, resources: { en: { translation: en }, fr: { translation: fr } } });
+    const markup = renderToStaticMarkup(
+      <I18nextProvider i18n={i18n}><IllustrationWarning count={count} /></I18nextProvider>,
+    );
+    expect(markup).toContain(text);
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain('aria-live="polite"');
+  });
+
+  it("does not display a warning after a successful extraction", () => {
+    expect(renderToStaticMarkup(<IllustrationWarning count={0} />)).toBe("");
+  });
+});
 
 function wizardWithDmrl(dmrl: DmrlRow[]): WizardState {
   return { step: "dmrl", split_level: "chapter", dms: [], dmrl };

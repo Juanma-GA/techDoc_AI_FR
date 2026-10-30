@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import perf_counter
 
 import structlog
@@ -32,6 +33,7 @@ from app.core import (
     context_classifier,
     dm_header,
     form_segmenter,
+    illustrations,
     ingest,
     resolver,
     splitter,
@@ -47,6 +49,7 @@ from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
+from app.core.fs import replace_directory
 from app.core.preliminary_projection import reviewed_root, sync_mappings
 from app.core.s1000d_serializer import (
     ReferenceIndex,
@@ -115,27 +118,33 @@ def images_dir(doc_id: str, *, root: Path | None = None) -> Path:
     return root / f"document_{doc_id}_images"
 
 
-def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
-    """Extrait les images du PDF en JPG et pose l'ICN sur les figures (no-op si
-    echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
-    doit pas empiler des doublons d'illustrations."""
-    from app.core import illustrations
+def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> illustrations.IllustrationResult:
+    """Publish new images and IR links only after a successful extraction."""
     out_dir = images_dir(doc.id, root=Path(doc.storage_path).parent)
+    staged_root = ir_mod.from_dict(ir_mod.to_dict(root))
     try:
-        if out_dir.exists():
-            for old in out_dir.iterdir():
-                if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                    old.unlink(missing_ok=True)
-        return illustrations.attach_illustrations(
-            root,
-            pdf_path=doc.pdf_cut_path or doc.storage_path,
-            out_dir=out_dir,
-            doc_id=doc.id,
-            dm_level=splitter.level_of(_DEFAULT_LEVEL),
-        )
-    except Exception as exc:  # jamais bloquant : le squelette reste generable sans images
-        log.warning("wizard_illustrations_failed", error_type=type(exc).__name__)
-        return 0
+        with TemporaryDirectory(prefix=f"{out_dir.name}-", suffix=".tmp", dir=out_dir.parent) as name:
+            staging = Path(name)
+            result = illustrations.attach_illustrations(
+                staged_root,
+                pdf_path=doc.pdf_cut_path or doc.storage_path,
+                out_dir=staging,
+                doc_id=doc.id,
+                dm_level=splitter.level_of(_DEFAULT_LEVEL),
+            )
+            if result.illustration_errors:
+                log.warning("wizard_illustrations_not_published", document_id=doc.id,
+                            illustration_errors=result.illustration_errors)
+                return illustrations.IllustrationResult(illustration_errors=result.illustration_errors)
+            replace_directory(staging, out_dir)
+        root.children = staged_root.children
+        root.icn = staged_root.icn
+        root.icns = staged_root.icns
+        return result
+    except (OSError, RuntimeError, ValueError) as exc:
+        log.warning("wizard_illustrations_failed", document_id=doc.id,
+                    error_type=type(exc).__name__, exc_info=True)
+        return illustrations.IllustrationResult(illustration_errors=1)
 
 
 def _apply_dmrl_icns(
@@ -249,15 +258,29 @@ def start(
         duration_ms=round((perf_counter() - stage_started) * 1000, 1),
         block_count=len(blocks),
     )
+    illustration_result = illustrations.IllustrationResult()
     if doc.source_format == "pdf":
         stage_started = perf_counter()
-        illustration_count = _extract_illustrations(doc, root)
+        illustration_result = _extract_illustrations(doc, root)
         log.info(
             "wizard_stage_timing",
             stage="illustration_extraction",
             duration_ms=round((perf_counter() - stage_started) * 1000, 1),
-            image_count=illustration_count,
+            image_count=illustration_result.saved_count,
+            illustration_errors=illustration_result.illustration_errors,
         )
+    violations = [
+        item for item in json.loads(doc.violations_json or "[]")
+        if item.get("rule") != "ILLUSTRATION_EXTRACTION"
+    ]
+    if illustration_result.illustration_errors:
+        violations.append({
+            "rule": "ILLUSTRATION_EXTRACTION",
+            "severity": "warning",
+            "message": "Extraction des illustrations incomplete ; les anciens fichiers sont conserves.",
+            "count": illustration_result.illustration_errors,
+        })
+    doc.violations_json = json.dumps(violations, ensure_ascii=False)
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
@@ -622,6 +645,10 @@ def state(doc: Document) -> dict:
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
         "has_brex_profile": bool(doc.brex_id),
+        "illustration_errors": sum(
+            item.get("count", 0) for item in json.loads(doc.violations_json or "[]")
+            if item.get("rule") == "ILLUSTRATION_EXTRACTION"
+        ),
         "resources": _resources_state(doc),
         "dms": out_dms,
     }
@@ -651,6 +678,7 @@ def dm_xml(
     *,
     db: Session | None = None,
     reference_index: ReferenceIndex | None = None,
+    image_name_map: dict[str, str] | None = None,
 ) -> str:
     dms = ws.load_dms(doc)
     res = wres.load_resources(doc)
@@ -692,6 +720,7 @@ def dm_xml(
                 ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
+                image_name_map=image_name_map,
             )
             sync_mappings(root, render_root)
             dm["tree"] = ir_mod.to_dict(root)
@@ -706,25 +735,26 @@ def dm_xml(
             xsd_results.extend(serialization.xsd_violations)
             dm["violations"] = [
                 violation for violation in dm.get("violations") or []
-                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE"}
+                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE", "GRAPHIC_NAME_INVALID"}
             ] + xsd_results + template_violations
             dm["xsd_valid"] = xsd_is_valid(xsd_results)
             dm["missing_fields"] = missing_data_fields(
                 xml, template_missing_fields,
             )
-            doc.status = (
-                "incomplete"
-                if any(
-                    item.get("xsd_valid") is not True
-                    or item.get("missing_fields")
-                    or any(
-                        violation.get("severity") == "error"
-                        for violation in item.get("violations") or []
+            if image_name_map is None:
+                doc.status = (
+                    "incomplete"
+                    if any(
+                        item.get("xsd_valid") is not True
+                        or item.get("missing_fields")
+                        or any(
+                            violation.get("severity") == "error"
+                            for violation in item.get("violations") or []
+                        )
+                        for item in dms
                     )
-                    for item in dms
+                    else "extracted"
                 )
-                else "extracted"
-            )
-            ws.save_dms(doc, dms)
+                ws.save_dms(doc, dms)
             return xml
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)

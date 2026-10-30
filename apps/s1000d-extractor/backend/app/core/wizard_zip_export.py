@@ -119,16 +119,6 @@ def prepare_zip_images(
     return exports, image_name_map
 
 
-def _rewrite_image_entity_names(xml: str, image_name_map: dict[str, str]) -> str:
-    for source_name, output_name in image_name_map.items():
-        source_notation = "png" if Path(source_name).suffix.lower() == ".png" else "jpg"
-        output_notation = "png" if Path(output_name).suffix.lower() == ".png" else "jpg"
-        source_declaration = f'SYSTEM "{source_name}" NDATA {source_notation}>'
-        output_declaration = f'SYSTEM "{output_name}" NDATA {output_notation}>'
-        xml = xml.replace(source_declaration, output_declaration)
-    return xml
-
-
 def reference_index_documents(
     dms: list[dict],
     dmrl_by_dmc: dict[str, dict],
@@ -175,12 +165,8 @@ def generate_zip_dm_xmls(
             dm_id,
             db=db,
             reference_index=reference_index,
+            image_name_map=image_name_map,
         )
         for dm_id in dm_ids
     }
-    if image_name_map:
-        return {
-            dm_id: _rewrite_image_entity_names(xml, image_name_map)
-            for dm_id, xml in xml_by_dm.items()
-        }
     return xml_by_dm

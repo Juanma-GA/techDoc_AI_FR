@@ -3,7 +3,7 @@ import { CircleHelp, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useDemoMode } from "@internal/ui";
+import { Card, CardHeader, useDemoMode } from "@internal/ui";
 
 import { BrexAnalysisSummary } from "../components/BrexAnalysisSummary";
 import { PreliminaryReview } from "../components/business/PreliminaryReview";
@@ -37,6 +37,18 @@ import { needsDmrlReview } from "../lib/wizardReview";
 import { splitImageNames } from "../lib/imageClassification";
 
 export { hasUnmatchedDmrlDms } from "../lib/wizardReview";
+
+export function IllustrationWarning({ count }: { count: number }) {
+  const { t } = useTranslation();
+  if (!count) return null;
+  return (
+    <Card role="status" aria-live="polite">
+      <CardHeader>
+        {t("migration.generate.illustrationErrors", { count })}
+      </CardHeader>
+    </Card>
+  );
+}
 
 export function isRestorableMigrationInput(
   kind: MigrationInputKind,
@@ -925,6 +937,8 @@ export function Migration() {
       {/* Generation */}
       <div ref={wizRef}>
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
+
+        <IllustrationWarning count={wiz?.illustration_errors ?? 0} />
 
         {wiz?.resources?.errors?.length ? (
           <div className="card">

@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+import threading
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.api import brex, extract, resources, validation
 from app.core.dm_validation import validate_dm
 from app.core.ir import IRNode
 from app.core.resolver import resolve
@@ -104,6 +112,75 @@ def test_validation_api_accepts_multiple_dms(client) -> None:
     results = response.json()["results"]
     assert [result["status"] for result in results] == ["valid", "invalid"]
     assert [result["issue"] for result in results] == ["4.1", "4.2"]
+
+
+@pytest.mark.parametrize("endpoint", [
+    validation.validate_dms,
+    extract.upload_document,
+    resources.upload_resource,
+    brex.upload_brex,
+])
+def test_blocking_handlers_are_synchronous(endpoint) -> None:
+    assert not inspect.iscoroutinefunction(endpoint)
+
+
+async def test_validation_batch_keeps_event_loop_responsive(app, monkeypatch, pdf_bytes) -> None:
+    from app.api import validation as validation_api
+
+    xml = _valid_dm().encode()
+    loop_thread = threading.get_ident()
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_validate(data: bytes, *, filename: str, issue_override: str | None = None) -> dict:
+        started.set()
+        assert threading.get_ident() != loop_thread
+        if not release.wait(timeout=10):
+            raise TimeoutError("Validation worker was not released.")
+        return validate_dm(data, filename=filename, issue_override=issue_override)
+
+    monkeypatch.setattr(validation_api, "validate_dm", blocking_validate)
+
+    def extraction_progress(doc_id, progress_cb, _demo_mode):
+        progress_cb("parse", 10)
+        progress_cb("infer", 50)
+        progress_cb("done", 100)
+        return {"document_id": doc_id}
+
+    monkeypatch.setattr(extract, "_run_and_persist", extraction_progress)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        validation_task = asyncio.create_task(client.post(
+            "/api/v1/validation/dms",
+            files=[
+                ("files", (f"DM-{index}.xml", xml, "application/xml"))
+                for index in range(50)
+            ],
+        ))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            health = await asyncio.wait_for(client.get("/api/v1/health"), timeout=5)
+            assert health.status_code == 200
+            uploaded = await asyncio.wait_for(client.post(
+                "/api/v1/documents", files={"file": ("synthetic.pdf", pdf_bytes)},
+            ), timeout=5)
+            assert uploaded.status_code == 201
+            doc_id = uploaded.json()["id"]
+            stream = await asyncio.wait_for(
+                client.post(f"/api/v1/documents/{doc_id}/extract"), timeout=5,
+            )
+            assert stream.status_code == 200
+            assert "event: progress" in stream.text
+            assert '"pct": 50' in stream.text
+            assert "event: done" in stream.text
+            assert not validation_task.done()
+        finally:
+            release.set()
+            response = await asyncio.wait_for(validation_task, timeout=30)
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 50
+    assert all(result["status"] == "valid" for result in results)
 
 
 def test_validates_declared_legacy_encoding() -> None:

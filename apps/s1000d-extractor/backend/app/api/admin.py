@@ -6,19 +6,20 @@ resets (le BREX est une config projet, pas de la donnee jetable).
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.core.fs import remove_files
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
 
-log = logging.getLogger("s1000d_extractor.admin")
+log = structlog.get_logger("s1000d_extractor.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -34,8 +35,8 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
     for (path,) in db.execute(select(Document.storage_path)).all():
         try:
             total_size += Path(path).stat().st_size
-        except OSError:
-            pass
+        except OSError as exc:
+            log.warning("document_size_failed", path=path, error_type=type(exc).__name__, exc_info=True)
     return AdminStatsOut(
         documents=docs, extracted=extracted, brex_profiles=brex, total_size_bytes=total_size
     )
@@ -82,11 +83,11 @@ def reset_documents(
 
 def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
     """Purge documents + fichiers (PDF/DOCX/XML). Preserve app_config + BREX."""
-    import shutil
-
     from app.core.wizard import images_dir
 
     docs = db.scalars(select(Document)).all()
+    paths: list[Path] = []
+    directories: list[Path] = []
     for d in docs:
         for p in (
             d.storage_path,
@@ -98,20 +99,13 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
             d.brex_rules_path,
         ):
             if p:
-                try:
-                    Path(p).unlink(missing_ok=True)
-                except OSError:
-                    pass
-        try:
-            shutil.rmtree(
-                images_dir(d.id, root=Path(d.storage_path).parent), ignore_errors=True
-            )  # illustrations extraites
-        except OSError:
-            pass
+                paths.append(Path(p))
+        directories.append(images_dir(d.id, root=Path(d.storage_path).parent))
     count = len(docs)
     db.query(DmDocumentLink).delete()
     db.query(DmVersion).delete()
     db.query(Document).delete()
     db.commit()
-    log.info("admin reset scope=%s documents=%d", scope, count)
+    remove_files(paths, directories=directories)
+    log.info("admin_reset", scope=scope, documents=count)
     return AdminResetOut(scope=scope, deleted={"documents": count})

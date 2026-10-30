@@ -114,6 +114,7 @@ export type WizardState = {
   dms: WizardDm[];
   can_undo?: boolean;
   has_brex_profile?: boolean;
+  illustration_errors?: number;
   resources?: WizardResources;
   dmrl?: DmrlRow[];
   preliminary?: import("./preliminaryTypes").PreliminaryState;

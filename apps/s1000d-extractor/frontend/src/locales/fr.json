@@ -402,6 +402,8 @@
       "cirUnresolved": "{{count}} référence(s) de contenu partagé à vérifier",
       "xml": "Télécharger le DM",
       "images": "Illustrations extraites ({{count}})",
+      "illustrationErrors_one": "L’extraction des illustrations a rencontré {{count}} erreur. Les illustrations précédentes ont été conservées.",
+      "illustrationErrors_other": "L’extraction des illustrations a rencontré {{count}} erreurs. Les illustrations précédentes ont été conservées.",
       "imageAlt": "Illustration extraite {{index}}",
       "pictograms": "Pictogrammes extraits ({{count}})",
       "pictogramAlt": "Pictogramme extrait {{index}}",

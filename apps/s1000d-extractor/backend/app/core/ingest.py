@@ -10,19 +10,19 @@ ignorees et aucun contenu n'est transmis a un service externe.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
 import pymupdf as fitz
+import structlog
 
 from app.core.errors import AppError
 from app.core.ir import RawBlock
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf_pages
 
-log = logging.getLogger("s1000d_extractor.ingest")
+log = structlog.get_logger("s1000d_extractor.ingest")
 
 ProgressCb = Callable[[str, int], None]
 
@@ -56,13 +56,12 @@ def extract_blocks(
     )
     scanned = [p for p in pages if not p.has_text]
     log.info(
-        "pdf_parse_timing duration_ms=%.1f page_count=%d text_page_count=%d "
-        "scanned_page_count=%d block_count=%d",
-        (perf_counter() - parse_started) * 1000,
-        len(pages),
-        len(pages) - len(scanned),
-        len(scanned),
-        sum(len(page.blocks) for page in pages),
+        "document_ingest_done",
+        duration_ms=round((perf_counter() - parse_started) * 1000, 1),
+        page_count=len(pages),
+        text_page_count=len(pages) - len(scanned),
+        scanned_page_count=len(scanned),
+        block_count=sum(len(page.blocks) for page in pages),
     )
     if scanned:
         with fitz.open(str(path)) as source:

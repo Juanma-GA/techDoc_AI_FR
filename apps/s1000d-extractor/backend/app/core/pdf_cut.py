@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.errors import AppError
+from app.core.fs import atomic_output_path
 from app.core.pdf_cut_scoring import dmrl_data_module_titles
 from app.core.pdf_cut_scoring import score_page as _score_page
 from app.db.models import Document
@@ -150,7 +151,8 @@ def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -
         cut = fitz.open()
         try:
             cut.insert_pdf(source, from_page=start_page - 1, to_page=selected_end_page - 1)
-            cut.save(str(output))
+            with atomic_output_path(output) as temporary:
+                cut.save(str(temporary))
         finally:
             cut.close()
     finally:

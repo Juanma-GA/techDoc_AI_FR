@@ -402,6 +402,8 @@
       "cirUnresolved": "{{count}} shared-content reference(s) to review",
       "xml": "Download DM",
       "images": "Extracted illustrations ({{count}})",
+      "illustrationErrors_one": "Illustration extraction encountered {{count}} error. Previous illustrations have been preserved.",
+      "illustrationErrors_other": "Illustration extraction encountered {{count}} errors. Previous illustrations have been preserved.",
       "imageAlt": "Extracted illustration {{index}}",
       "pictograms": "Extracted pictograms ({{count}})",
       "pictogramAlt": "Extracted pictogram {{index}}",

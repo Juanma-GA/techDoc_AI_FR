@@ -97,7 +97,7 @@ function RulesEditor({ initial, onDirtyChange }: {
   });
   const busy = save.isPending || reloading;
   const disarm = () => { clearTimeout(timer.current); setArmed(null); };
-  const confirm = (target: "save" | "reload", action: () => void) => {
+  const confirmAction = (target: "save" | "reload", action: () => void) => {
     if (armed !== target) {
       clearTimeout(timer.current);
       setArmed(target);
@@ -136,7 +136,7 @@ function RulesEditor({ initial, onDirtyChange }: {
     <form className="space-y-4" aria-label={t("settingsRules.title")} onSubmit={(event) => {
       event.preventDefault();
       if (!valid || !dirty || busy || changedElsewhere) return;
-      if (removals) confirm("save", persist);
+      if (removals) confirmAction("save", persist);
       else persist();
     }}>
       <p className="text-sm text-fg-dim">{t("settingsRules.listHelp")}</p>
@@ -177,7 +177,7 @@ function RulesEditor({ initial, onDirtyChange }: {
           {t(busy ? "preliminary.saving" : armed === "save" ? "preliminary.confirmAgain" : "settingsRules.save")}
         </Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => {
-          if (dirty) confirm("reload", () => void reload());
+          if (dirty) confirmAction("reload", () => void reload());
           else void reload();
         }}>{t(armed === "reload" ? "preliminary.confirmAgain" : "settingsRules.reload")}</Button>
       </div>

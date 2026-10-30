@@ -17,6 +17,7 @@ from app.config import settings
 from app.core.brex_profile import inspect_brex, normalize_brex_upload
 from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
+from app.core.fs import atomic_write_text
 from app.core.s1000d_schema import SUPPORTED_ISSUES
 from app.db.models import BrexProfile, Document
 from app.db.session import get_db, storage_directory
@@ -154,7 +155,7 @@ def get_brex(brex_id: str, db: Session = Depends(get_db)) -> BrexProfileDetailOu
 
 
 @router.post("", response_model=BrexProfileOut, status_code=201)
-async def upload_brex(
+def upload_brex(
     file: UploadFile = File(...),
     name: str = Form(...),
     s1000d_issue: str = Form("4.2"),
@@ -164,7 +165,7 @@ async def upload_brex(
         raise AppError("DEMO_BREX_DISABLED", "Les profils BREX ne sont pas disponibles en mode démo.", 409)
     if s1000d_issue not in SUPPORTED_ISSUES:
         raise AppError("BAD_ISSUE", f"Issue non supportee : {s1000d_issue}", 422)
-    raw = await file.read()
+    raw = file.file.read()
     if len(raw) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", "Fichier BREX trop volumineux.", 413)
     try:
@@ -194,7 +195,7 @@ async def upload_brex(
     db.add(profile)
     db.flush()  # genere l'id
     path = _storage(db) / f"brex_{profile.id}.xml"
-    path.write_text(xml, encoding="utf-8")
+    atomic_write_text(path, xml)
     profile.xml_path = str(path)
     db.commit()
     return _to_out(profile)

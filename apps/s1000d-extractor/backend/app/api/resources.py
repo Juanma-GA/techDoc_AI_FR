@@ -28,6 +28,7 @@ from app.core.brex_rules import load_brex_rules
 from app.core.cir import load_cir
 from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
+from app.core.fs import atomic_write_bytes
 from app.core.pmc import pmc_filename
 from app.db.models import Document
 from app.db.session import get_db
@@ -53,12 +54,12 @@ def _store(doc: Document, kind: str, suffix: str, raw: bytes) -> Path:
     directory = Path(doc.storage_path).parent
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"document_{doc.id}_{kind}{suffix}"
-    path.write_bytes(raw)
+    atomic_write_bytes(path, raw)
     return path
 
 
 @router.post("/{doc_id}/resources/{kind}")
-async def upload_resource(
+def upload_resource(
     doc_id: str, kind: str, file: UploadFile = File(...), db: Session = Depends(get_db)
 ) -> dict:
     if kind not in _KINDS:
@@ -74,7 +75,7 @@ async def upload_resource(
             f"Extension attendue pour {kind} : {', '.join(sorted(_KINDS[kind]))}",
             422,
         )
-    raw = await file.read()
+    raw = file.file.read()
     if len(raw) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", "Fichier trop volumineux.", 413)
     path = _store(doc, kind, suffix, raw)

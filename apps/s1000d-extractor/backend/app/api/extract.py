@@ -10,6 +10,8 @@ import asyncio
 import json
 from pathlib import Path
 
+import pymupdf as fitz
+import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -26,6 +28,7 @@ from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
+from app.core.fs import atomic_write_bytes, atomic_write_text, remove_files
 from app.core.s1000d_schema import SELECTABLE_ISSUES
 from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields
 from app.core.validator import validate_document, xsd_is_valid
@@ -36,6 +39,7 @@ from app.parsers.pdf_parser import pdf_page_count
 from app.schemas import DocumentOut, ExtractDoneOut, NodeOverrideIn
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+log = structlog.get_logger(__name__)
 
 _HINTS = {"mixed", "descriptive", "procedural"}
 
@@ -90,26 +94,23 @@ def delete_document(
             422,
         )
     doc = _require(db, doc_id)
-    import shutil
-
     from app.core.wizard import images_dir
 
-    for path in (
+    paths = [Path(path) for path in (
         doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.dmrl_path,
         doc.dm_header_path, doc.cir_path, doc.brex_rules_path,
-    ):
-        if path:
-            Path(path).unlink(missing_ok=True)
-    shutil.rmtree(images_dir(doc.id, root=Path(doc.storage_path).parent), ignore_errors=True)
+    ) if path]
+    directory = images_dir(doc.id, root=Path(doc.storage_path).parent)
     db.query(DmDocumentLink).filter(DmDocumentLink.doc_id == doc.id).delete()
     db.query(DmVersion).filter(DmVersion.doc_id == doc.id).delete()
     db.delete(doc)
     db.commit()
+    remove_files(paths, directories=[directory])
     return {"id": doc_id, "status": "deleted"}
 
 
 @router.post("", response_model=DocumentOut, status_code=201)
-async def upload_document(
+def upload_document(
     file: UploadFile = File(...),
     s1000d_issue: str = Form("4.2"),
     context_hint: str = Form("mixed"),
@@ -123,7 +124,7 @@ async def upload_document(
     if brex_id and is_demo_mode(db):
         raise AppError("DEMO_BREX_DISABLED", "Les profils BREX ne sont pas disponibles en mode démo.", 409)
     fmt = detect_format(file.filename or "")
-    raw = await file.read()
+    raw = file.file.read()
     if len(raw) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", "Document trop volumineux.", 413)
     if brex_id:
@@ -145,12 +146,14 @@ async def upload_document(
     db.add(doc)
     db.flush()
     path = _storage(db) / f"document_{doc.id}.{fmt}"
-    path.write_bytes(raw)
+    atomic_write_bytes(path, raw)
     doc.storage_path = str(path)
     if fmt == "pdf":
         try:
             doc.page_count = pdf_page_count(path)
-        except Exception:
+        except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+            log.warning("document_page_count_failed", document_id=doc.id,
+                        error_type=type(exc).__name__, exc_info=True)
             doc.page_count = None
     migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
     db.commit()
@@ -242,7 +245,7 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
             ),
         )
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
-        Path(doc.xml_path).write_text(xml, encoding="utf-8")
+        atomic_write_text(Path(doc.xml_path), xml)
     violations = validate_document(
         xml,
         issue=doc.s1000d_issue,
@@ -323,7 +326,7 @@ def override_node(
         )
         else "extracted"
     )
-    Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
+    atomic_write_text(Path(doc.xml_path), xml)  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
     db.commit()
@@ -389,7 +392,7 @@ def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
             db.commit()
             raise
         xml_path = _storage(db) / f"document_{doc.id}.xml"
-        xml_path.write_text(result.xml, encoding="utf-8")
+        atomic_write_text(xml_path, result.xml)
         doc.xml_path = str(xml_path)
         doc.dm_type = result.dm_type
         doc.ir_json = json.dumps(result.tree, ensure_ascii=False)

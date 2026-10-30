@@ -12,7 +12,7 @@ router = APIRouter(prefix="/validation", tags=["validation"])
 
 
 @router.post("/dms")
-async def validate_dms(
+def validate_dms(
     files: list[UploadFile] = File(...),
     issue_overrides: str = Form(default="[]"),
 ) -> dict:
@@ -29,7 +29,7 @@ async def validate_dms(
     results = []
     for index, upload in enumerate(files):
         results.append(validate_dm(
-            await upload.read(),
+            upload.file.read(),
             filename=upload.filename or f"DM-{index + 1}.xml",
             issue_override=overrides[index] if index < len(overrides) else None,
         ))
