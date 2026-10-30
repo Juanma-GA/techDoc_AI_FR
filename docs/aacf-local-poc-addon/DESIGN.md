@@ -16,7 +16,7 @@ The source is `design-tokens/tokens.json`: `color.*` contains the dark values an
 | Token | Dark | Light (v2) |
 |---|---|---|
 | `bg.base` | `#0e1117` | `#f5f7fb` |
-| `bg.2` | `#131720` | `#ffffff` |
+| `bg.2` | `#131720` | `#f8fafc` |
 | `bg.3` | `#1a2035` | `#eaeef4` |
 | `card.base` | `#161c2b` | `#ffffff` |
 | `card.hover` | `#1d2540` | `#f1f5f9` |

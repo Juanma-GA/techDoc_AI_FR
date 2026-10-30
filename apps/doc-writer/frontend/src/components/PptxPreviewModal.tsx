@@ -458,7 +458,7 @@ export function PptxPreviewModal({
 
             {/* Droite : edition */}
             <div>
-              <h3 style={{ marginTop: 0, fontFamily: "'Orbitron',sans-serif", fontSize: "0.9rem" }}>
+              <h3 style={{ marginTop: 0, fontFamily: "var(--font-display)", fontSize: "0.9rem" }}>
                 {t("pptx.preview.editTitle")}
               </h3>
               <small style={{ display: "block", color: "var(--fg-dim)", fontSize: "0.78rem", marginBottom: 8 }}>
@@ -632,7 +632,7 @@ export function PptxPreviewModal({
 
               {/* Ajouter une zone */}
               <div className="card" style={{ marginTop: 10, background: "var(--bg-2)" }}>
-                <h3 style={{ margin: "0 0 8px 0", fontFamily: "'Orbitron',sans-serif", fontSize: "0.85rem" }}>
+                <h3 style={{ margin: "0 0 8px 0", fontFamily: "var(--font-display)", fontSize: "0.85rem" }}>
                   {t("pptx.preview.addZoneTitle")}
                 </h3>
                 <small style={{ display: "block", color: "var(--fg-dim)", fontSize: "0.78rem", marginBottom: 8 }}>

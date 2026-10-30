@@ -4,8 +4,8 @@
  * communes sont fournies par @internal/ui.
  *
  * Variables CSS = memes valeurs que design-tokens/tokens.json. :root = clair,
- * .dark = sombre (toggle via la classe .dark sur <html>). Polices via <link>
- * dans index.html (Inter / JetBrains Mono / Orbitron).
+ * .dark = sombre (toggle via la classe .dark sur <html>). Polices self-hosted
+ * via @internal/design-tokens/base.css (Inter / JetBrains Mono / Orbitron).
  */
 
 :root {
@@ -30,7 +30,6 @@
   --accent-pink: var(--color-accent-pink);
   --accent-purple: var(--color-accent-purple);
   --accent-teal: var(--color-accent-teal);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .dark {
@@ -53,24 +52,24 @@
 }
 
 .ct *, .ct *::before, .ct *::after { box-sizing: border-box; }
-.ct { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; }
+.ct { font-family: var(--font-sans); line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; }
 .ct .ui-main a { color: var(--brand-light); text-decoration: none; }
 .ct button { cursor: pointer; }
 .ct [hidden] { display: none !important; }
 
-.label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
+.label { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
 
 .page-header { margin-bottom: 24px; }
-.page-header h1 { font-family: "Orbitron", sans-serif; font-size: 1.5rem; margin: 0 0 4px 0; }
+.page-header h1 { font-family: var(--font-display); font-size: 1.5rem; margin: 0 0 4px 0; }
 .page-header p { color: var(--fg-dim); margin: 0; }
 
 .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
 .banner strong { color: var(--fg); }
 .banner.warn { border-color: var(--warning); color: var(--warning); }
-.banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
+.banner code { font-family: var(--font-mono); background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 16px; }
-.card-title { font-family: "Orbitron", sans-serif; font-size: 1.05rem; margin: 0 0 14px 0; }
+.card-title { font-family: var(--font-display); font-size: 1.05rem; margin: 0 0 14px 0; }
 .card-sub { color: var(--fg-dim); font-size: 0.85rem; margin: -8px 0 14px 0; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .grow { flex: 1; min-width: 0; }
@@ -94,7 +93,7 @@
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-.kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+.kpi-value { font-family: var(--font-mono); font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
 .kpi-value.ok { color: var(--success); }
 .kpi-value.warn { color: var(--warning); }
 .kpi-value.err { color: var(--danger); }
@@ -102,11 +101,11 @@
 
 .form { display: flex; flex-direction: column; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
-.field > label, .field-label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; color: var(--fg-dim); }
+.field > label, .field-label { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; color: var(--fg-dim); }
 .input, .ct select, .ct textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
-.ct textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
+.ct textarea { font-family: var(--font-sans); min-height: 80px; resize: vertical; }
 .input:focus, .ct select:focus, .ct textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
-.input.mono { font-family: "JetBrains Mono", monospace; }
+.input.mono { font-family: var(--font-mono); }
 .checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .checkbox input { accent-color: var(--brand); }
 .hint { color: var(--fg-dim); font-size: 0.8rem; }
@@ -131,7 +130,7 @@
 .error { border: 1px solid var(--danger); color: var(--danger); }
 .success { border: 1px solid var(--success); color: var(--success); }
 
-.badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; }
+.badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; }
 .badge.info  { color: var(--info);  border-color: var(--info); }
 .badge.ok    { color: var(--success); border-color: var(--success); }
 .badge.warn  { color: var(--warning); border-color: var(--warning); }
@@ -139,7 +138,7 @@
 .badge.off   { color: var(--fg-dim); border-color: var(--border); }
 .badge.default { color: var(--fg-dim); border-color: var(--border); }
 
-.llm-status { display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-family: "JetBrains Mono", monospace; font-size: 0.62rem; letter-spacing: 1px; color: var(--fg-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.llm-status { display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 1px; color: var(--fg-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
 
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
@@ -160,10 +159,10 @@ table.tbl tr:hover td { background: var(--bg-2); }
 /* Architecture */
 .arch-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .arch-step { display: flex; gap: 10px; padding: 8px 12px; background: var(--bg-2); border-left: 3px solid var(--brand); border-radius: 4px; font-size: 0.9rem; }
-.arch-step .step-n { color: var(--brand-light); font-family: "JetBrains Mono", monospace; font-weight: 700; flex-shrink: 0; }
+.arch-step .step-n { color: var(--brand-light); font-family: var(--font-mono); font-weight: 700; flex-shrink: 0; }
 .arch-split { padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
 .arch-split .label.brand-color { color: var(--brand-light); margin-bottom: 6px; }
-.arch-split code { background: var(--bg-3); padding: 1px 5px; border-radius: 3px; font-family: "JetBrains Mono", monospace; font-size: 0.8rem; }
+.arch-split code { background: var(--bg-3); padding: 1px 5px; border-radius: 3px; font-family: var(--font-mono); font-size: 0.8rem; }
 
 /* ---- catia-toolbox specifique ---- */
 
@@ -178,7 +177,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .item-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* Arborescence (tree mono) */
-.tree { font-family: "JetBrains Mono", monospace; font-size: 0.85rem; max-height: 420px; overflow-y: auto; }
+.tree { font-family: var(--font-mono); font-size: 0.85rem; max-height: 420px; overflow-y: auto; }
 .tree ul { list-style: none; margin: 0; padding: 0; }
 .tree ul ul { margin-left: 8px; border-left: 1px solid var(--border); padding-left: 12px; }
 .tree-node { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
@@ -197,7 +196,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 /* Apercu tabulaire (premieres lignes xlsm / nomenclature) */
 /* width:max-content => la table depasse le conteneur ; c'est le wrapper
    (div overflow:auto) qui porte les scrollbars H et V, toujours visibles. */
-.preview-table { border-collapse: collapse; font-size: 0.74rem; font-family: "JetBrains Mono", monospace; width: max-content; max-width: none; }
+.preview-table { border-collapse: collapse; font-size: 0.74rem; font-family: var(--font-mono); width: max-content; max-width: none; }
 .preview-table td, .preview-table th { border: 1px solid var(--border); padding: 2px 6px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .preview-table th { color: var(--fg-dim); text-transform: uppercase; background: var(--bg-2); }
 .preview-table .rownum { color: var(--fg-dim); text-align: right; background: var(--bg-2); position: sticky; left: 0; }

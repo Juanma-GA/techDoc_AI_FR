@@ -85,7 +85,7 @@ Dark remains the default theme (`.dark`, applied by the anti-flash script). Ligh
 | Role | Light token | Value | Intent |
 |---|---|---|---|
 | App background | `bg.base` | `#f5f7fb` | Slightly tinted so white cards stand out |
-| Sidebar | `bg.2` | `#ffffff` | Sidebar separated by its border |
+| Sidebar / recessed panels | `bg.2` | `#f8fafc` (unchanged) | Kept for compatibility: apps use `bg-2` for recessed panels (KPI, code); the sidebar is separated by its border |
 | Recessed areas | `bg.3` | `#eaeef4` | Tracks, inactive switches |
 | Cards / hover | `card.base` / `card.hover` | `#ffffff` / `#f1f5f9` | |
 | Text | `text.base` / `dim` / `muted` | `#0f172a` / `#475569` / `#64748b` | AA for body and secondary text |
@@ -164,3 +164,20 @@ Shared component conventions (v2):
 - Dev-only gallery: `/design` (`routes/DesignGallery.tsx`) is registered only when `import.meta.env.DEV`; production builds exclude it.
 - `tests/e2e/design-system.spec.ts`: 8 combinations (dark/light x FR/EN x 1366/760px). It asserts the theme class, that Inter, JetBrains Mono and Orbitron faces are loaded, and that `main` does not overflow horizontally; screenshots are attached to the report (no committed baselines because rendering differs per OS).
 - The `llm` profile overlay (`apps/_template/profiles/llm`) replaces `App.tsx`, `routes/Settings.tsx` and the locales: any template change to these files must be mirrored there.
+
+## 7. App Migration (October 2026)
+
+All ten app frontends (catia-toolbox, corpus-agent, doc-reviewer, doc-writer, ecm-automation, flowchart-generator, image-processor, ocr-vision, pdf-toolkit, s1000d-extractor) were migrated mechanically, without visual redesign:
+
+- Google Fonts `<link>`/`preconnect` tags removed from `index.html` (7 apps); `<meta name="color-scheme" content="dark light">` added where missing.
+- `src/index.css` imports `@internal/design-tokens/base.css` instead of `theme.css`; app-level `@fontsource` imports and dependencies removed (flowchart-generator, image-processor, pdf-toolkit).
+- Literal font names in app CSS and inline styles replaced by `var(--font-sans|mono|display)`; inline SVG text uses `style={{ fontFamily: "var(--font-mono)" }}` because CSS variables do not resolve in presentation attributes.
+- `preview-skin.css` files no longer redefine `--shadow-card` (the themed token applies, so light mode gets its light shadow); their aliases (`--bg`, `--fg`, ...) are kept for compatibility.
+
+Rules for app CSS from now on:
+
+- Alias variables (`--bg: var(--color-bg-base)`) are tolerated in existing apps; new code uses Tailwind utilities or `var(--color-*)` directly.
+- Never declare rules whose selector starts with a shared `.ui-*` class: the shell and primitives are styled by `@internal/ui` only. Element resets (`button { font: inherit }`) are acceptable.
+- Recessed panels use `bg-2` / `surface.sunken`, cards use `card`, the page uses `bg`.
+
+Each app owner should still review its screens in both themes; screens were not individually redesigned.
