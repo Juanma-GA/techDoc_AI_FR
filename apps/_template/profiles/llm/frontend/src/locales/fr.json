@@ -99,7 +99,7 @@
   },
   "design": {
     "title": "Système de design",
-    "subtitle": "Composants partagés @internal/ui rendus avec les design tokens. Développement uniquement.",
+    "subtitle": "Composants partagés @internal/ui rendus avec les design tokens.",
     "eyebrow": "Référence",
     "colors": "Couleurs",
     "buttons": "Boutons",

@@ -31,15 +31,20 @@ declare global {
   }
 }
 
+// Reference of the shared components: always in `pnpm dev`; in builds only when
+// VITE_DESIGN_GALLERY=true (set by the template's frontend/.env.production, which
+// new_poc.mjs does not copy, so generated apps do not ship it by default).
+const DESIGN_GALLERY_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_DESIGN_GALLERY === "true";
+
 const NAV_ITEMS = [
   { to: "/", key: "nav.home", icon: "home" },
   { to: "/data", key: "nav.data", icon: "data" },
   { to: "/settings", key: "nav.settings", icon: "settings" },
-  // Development-only reference of the shared components (not shipped in builds).
-  ...(import.meta.env.DEV ? [{ to: "/design", key: "nav.design", icon: "color" } as const] : []),
+  ...(DESIGN_GALLERY_ENABLED ? [{ to: "/design", key: "nav.design", icon: "color" } as const] : []),
 ] as const;
 
-const DesignGallery = import.meta.env.DEV
+const DesignGallery = DESIGN_GALLERY_ENABLED
   ? lazy(() => import("./routes/DesignGallery").then((module) => ({ default: module.DesignGallery })))
   : null;
 

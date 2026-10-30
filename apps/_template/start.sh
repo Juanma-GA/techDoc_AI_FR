@@ -62,6 +62,7 @@ if command -v pnpm >/dev/null 2>&1; then
         newer="$(find "${FRONTEND_DIR}/src" "${FRONTEND_DIR}/index.html" \
             "${FRONTEND_DIR}/package.json" "${FRONTEND_DIR}/vite.config.ts" \
             "${FRONTEND_DIR}/tailwind.config.ts" "${FRONTEND_DIR}/postcss.config.js" \
+            "${FRONTEND_DIR}/.env.production" \
             -newer "$dist_index" -print -quit 2>/dev/null || true)"
         [[ -n "$newer" ]] && need_build=1
     fi
