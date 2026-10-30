@@ -1,5 +1,5 @@
 /*
- * fonts.css - self-hosted brand fonts (local-first: never fonts.googleapis.com).
+ * fonts.css - self-hosted brand fonts (local-first: never a font CDN).
  *
  * Imported by base.css; apps do not import @fontsource themselves. Weights are
  * the only ones the design system uses. @fontsource declares font-display: swap,

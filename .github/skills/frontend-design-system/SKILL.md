@@ -58,6 +58,7 @@ Any new shared path or dependency requires a new approved batch.
 - The shared AI4TECHDOC logo must also appear as the browser tab icon: call `setAi4TechDocFavicon()` from `@internal/ui` once in the frontend entry point (`src/main.tsx`) and do not leave the default Vite icon. Use `Ai4TechDocLogo` rather than copying the asset; see `docs/standards/demo-mode-integration.md`.
 - For apps with the `llm` profile, the LLM settings (key, base URL, models, connection test) must sit in a collapsible section of Settings, collapsed by default once configured, with an accessible toggle (`aria-expanded`) and FR/EN labels. The models available from the provider (returned by the connection test, `models` field of `POST /api/v1/settings/test`) must be listed and selectable for the chat, embedding and vision model fields rather than typed blind; free text stays possible when the list is empty.
 - No hardcoded hex, raw machine tokens, prohibited UI libraries, browser alerts, or Unicode icons are introduced.
+- `bash scripts/check_standard.sh` design-system checks 18-22 pass (generated theme, no font CDN, `var(--font-*)` only, `base.css` + `color-scheme` in every frontend, no `.ui-*` overrides in app CSS).
 - Frontend build, typecheck, lint, Vitest, and Playwright status is recorded as executed or recommended.
 
 ## Expected Output

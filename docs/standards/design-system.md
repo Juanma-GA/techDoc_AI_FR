@@ -181,3 +181,25 @@ Rules for app CSS from now on:
 - Recessed panels use `bg-2` / `surface.sunken`, cards use `card`, the page uses `bg`.
 
 Each app owner should still review its screens in both themes; screens were not individually redesigned.
+
+## 8. Guardrails
+
+`bash scripts/check_standard.sh` enforces the design system (checks 18-22):
+
+| Check | Fails when |
+|---|---|
+| 18 `theme.css genere depuis tokens.json` | `theme.css` was edited by hand or `tokens.json` changed without `pnpm tokens:build` |
+| 19 `Pas de CDN de polices` | `fonts.googleapis.com` / `fonts.gstatic.com` appears in a frontend, `packages/` or `design-tokens/` |
+| 20 `Polices via var(--font-*) uniquement` | `@fontsource` or a literal `Inter` / `Orbitron` / `JetBrains Mono` font declaration appears in app sources, `packages/ui/src`, or an app `package.json` |
+| 21 `base.css + meta color-scheme` | a frontend `index.html` lacks `<meta name="color-scheme">` or its `src/index.css` does not import `@internal/design-tokens/base.css` |
+| 22 `Pas de surcharge des classes .ui-*` | an app CSS rule selector starts with a shared `.ui-*` class |
+
+Automated tests complete the guardrails:
+
+| Command | Covers |
+|---|---|
+| `pnpm --filter @internal/design-tokens test` | theme.css sync, legacy variables, light/dark key parity, WCAG contrast of both palettes |
+| `pnpm --filter @internal/ui test` | one Vitest per shared primitive |
+| `pnpm --filter @apps/TEMPLATE-frontend test:e2e` | `/design` gallery in dark/light x FR/EN x 1366/760px, fonts loaded, no horizontal overflow |
+
+Run them whenever `design-tokens/`, `packages/ui/` or `apps/_template/` change; they are cross-application changes that need explicit approval.

@@ -541,7 +541,7 @@ while (true) {
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 22 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM, 1 de robustesse du launcher, 2 de registre/thème et 5 de design system (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
 1. Préfixe `/api/v1/` monté dans chaque backend : routeur FastAPI ou groupe Gin pour Go.
@@ -560,6 +560,14 @@ while (true) {
 11. Section `## Auth` présente dans chaque `apps/<poc>/README.md` (palier 1 explicite).
 12. Chaque dossier `apps/<poc>/` (sauf `_template`) a un script `dev:<poc>` dans le `package.json` racine.
 13. Aucun `--host 0.0.0.0` dans les `_run.bat` / `start.sh` (palier 1 strict).
+
+**Design system** (checks 18 à 22, détail : [supplément design system §8](./docs/standards/design-system.md#8-guardrails)) :
+
+18. `design-tokens/theme.css` est à jour avec `tokens.json` (`pnpm tokens:check`).
+19. Aucun CDN de polices (`fonts.googleapis.com` / `fonts.gstatic.com`) dans les frontends, `packages/` et `design-tokens/`.
+20. Aucun `@fontsource` ni nom de police littéral (`Inter`, `Orbitron`, `JetBrains Mono`) dans `apps/*/frontend/src`, `packages/ui/src` et les `package.json` d'apps : utiliser `var(--font-*)`.
+21. Chaque `apps/*/frontend/index.html` déclare `<meta name="color-scheme">` et chaque `src/index.css` importe `@internal/design-tokens/base.css`.
+22. Aucune règle CSS d'app dont le sélecteur commence par une classe `.ui-*` (le shell et les primitives restent stylés par `@internal/ui`).
 
 ## 9. Lanceurs locaux et packaging
 
