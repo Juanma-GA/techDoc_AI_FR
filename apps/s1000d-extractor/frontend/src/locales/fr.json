@@ -23,6 +23,9 @@
     "remaining": "{{count}} passage(s) sans décision sur {{total}}",
     "confirmWhole": "J'ai vérifié le DM entier, y compris les catégories vides et les passages non repérés par les règles.",
     "complete": "Marquer cette procédure comme vérifiée",
+    "skip": "Ignorer les revues et générer en l'état",
+    "skipConfirm": "Confirmer la génération sans revue",
+    "skipHelp": "Cette action ignore toutes les revues des DM procéduraux et génère à partir de la structure extraite, sans appliquer de décisions de classement.",
     "generate": "Générer et valider le XML",
     "sourceAt": "Voir la source — page {{page}}",
     "unlocated": "Page source non déterminée",
@@ -61,6 +64,7 @@
     "status": {
       "pending": "Revue en cours",
       "reviewed": "Vérifié",
+      "skipped": "Revue ignorée",
       "stale": "Revue obsolète"
     },
     "category": {

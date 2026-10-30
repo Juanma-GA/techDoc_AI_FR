@@ -122,7 +122,9 @@ procedural DMs then enter **Review the procedural DM**, before generation.
   distinguishable.
 - A procedure is reviewed only after all content passages have decisions **and** the
   reviewer confirms checking the whole DM, including empty categories. No
-  detection is not equivalent to a verified absence.
+  detection is not equivalent to a verified absence. The separate explicit skip
+  action marks every procedural review as skipped and generates from the original
+  extracted structure without applying review decisions.
 - Decisions, corrections, split source ranges, current procedure, selected
   passage, page and scroll position persist in SQLite, not browser storage.
   Saving failures remain visible and block leaving via wizard controls.
@@ -137,10 +139,13 @@ procedural DMs then enter **Review the procedural DM**, before generation.
   before the source-role/context change become stale and require an explicit
   restart, without silently migrating or discarding their saved decisions.
 - Human decisions, not heading heuristics, drive reviewed procedural XML in both
-  individual and ZIP exports. The original source tree is not rewritten.
-  BREX-guided mapping choices remain persisted. Incomplete/stale procedural
-  reviews block generation and export. Single-document extraction/override/XML
-  APIs reject wizard documents rather than bypassing this workflow.
+  individual and ZIP exports. Skipped reviews remain distinct from reviewed ones
+  and preserve the original extracted structure for generation. The original
+  source tree is not rewritten. BREX-guided mapping choices remain persisted.
+  Incomplete/stale procedural reviews block generation and export until they are
+  reviewed or explicitly skipped against the current source. Single-document
+  extraction/override/XML APIs reject wizard documents rather than bypassing this
+  workflow.
 
 The new nullable `preliminary_review_json` column is introduced by
 [migration 0011](backend/alembic/versions/0011_preliminary_review.py).

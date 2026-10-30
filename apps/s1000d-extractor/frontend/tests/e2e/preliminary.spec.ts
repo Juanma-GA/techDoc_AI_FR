@@ -35,6 +35,7 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     revision: 0, groups: [{ category: "conditions", kind: "keyword", fr: ["avant"], en: ["before"] }],
   };
   const writes: Array<ReviewAction & { revision: number }> = [];
+  let advances = 0;
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -60,6 +61,12 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
         title: id === "proc" ? "Synthetic removal" : "Synthetic empty", node_count: 18,
       })),
     };
+    else if (path.endsWith("/wizard/advance")) {
+      advances += 1;
+      response = {
+        step: "generate", dms: [], steps: ["split", "type", "structure", "preliminary", "generate"],
+      };
+    }
     else if (path.endsWith("/wizard/preliminary")) {
       if (failSave) {
         await route.fulfill({ status: 503, json: { code: "SYNTHETIC_FAILURE", message: "Synthetic save failure" } });
@@ -81,6 +88,12 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
         if ("destination" in action) passage.decision = action.destination ?? null;
         passage.text = action.text ?? passage.text;
       } else if (action.op === "complete") review.status = "reviewed";
+      else if (action.op === "skip") {
+        for (const skipped of Object.values(state.reviews)) {
+          skipped.status = "skipped";
+          skipped.saved_at = "2026-10-27T14:00:00Z";
+        }
+      }
       else if (action.op === "cursor") review.position = {
         page: action.page ?? 1, scroll_top: action.scroll_top ?? 0, selected_id: action.selected_id ?? null,
       };
@@ -104,7 +117,10 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     else if (path.includes("/migration-inputs")) response = [];
     await route.fulfill({ json: response });
   });
-  return { writes, read: () => state, fail: (value: boolean) => { failSave = value; } };
+  return {
+    writes, read: () => state, advances: () => advances,
+    fail: (value: boolean) => { failSave = value; },
+  };
 }
 
 test("classifies, scrolls continuously, and restores after reopening without advancing", async ({ page }) => {
@@ -339,7 +355,7 @@ test("source navigation loads an offscreen PDF page before refining the highligh
   await expect(reader.locator("[data-passage]")).toHaveCount(0);
 });
 
-test("distinguishes empty from reviewed, changes language and resumes the active procedure", async ({ page }) => {
+test("auto-advances after review, distinguishes empty from reviewed and resumes the active procedure", async ({ page }) => {
   const server = await mockApplication(page, "docx", true);
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
@@ -352,11 +368,28 @@ test("distinguishes empty from reviewed, changes language and resumes the active
   await page.keyboard.press("Space");
   await page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" }).click();
   await expect.poll(() => server.read().reviews.empty!.status).toBe("reviewed");
+  await expect.poll(() => server.read().active_dm_id).toBe("proc");
+  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("proc");
   await page.getByRole("button", { name: "EN", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review the procedural DM" })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("empty");
+  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("proc");
+});
+
+test("skips every procedural review and starts generation directly", async ({ page }) => {
+  const server = await mockApplication(page, "docx", true);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+
+  await page.getByRole("button", { name: "Ignorer les revues et générer en l'état" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmer la génération sans revue" });
+  await expect(confirm).toBeVisible();
+  await confirm.click();
+
+  await expect.poll(() => Object.values(server.read().reviews)
+    .every((review) => review.status === "skipped")).toBe(true);
+  await expect.poll(() => server.advances()).toBe(1);
 });
 
 test("editorial structure is not classified and closing conditions have their own destination", async ({ page }) => {

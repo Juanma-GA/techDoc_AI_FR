@@ -23,6 +23,9 @@
     "remaining": "{{count}} passage(s) without a decision out of {{total}}",
     "confirmWhole": "I checked the entire DM, including empty categories and passages not detected by the rules.",
     "complete": "Mark this procedure as reviewed",
+    "skip": "Skip reviews and generate as-is",
+    "skipConfirm": "Confirm generation without review",
+    "skipHelp": "This skips every procedural DM review and generates from the extracted structure without applying review decisions.",
     "generate": "Generate and validate XML",
     "sourceAt": "Show source — page {{page}}",
     "unlocated": "Source page unknown",
@@ -61,6 +64,7 @@
     "status": {
       "pending": "Review in progress",
       "reviewed": "Reviewed",
+      "skipped": "Review skipped",
       "stale": "Outdated review"
     },
     "category": {

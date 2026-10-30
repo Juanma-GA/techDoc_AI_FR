@@ -33,12 +33,17 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const [filter, setFilter] = useState("all");
   const [restartArmed, setRestartArmed] = useState(false);
   const [reloadArmed, setReloadArmed] = useState(false);
+  const [skipArmed, setSkipArmed] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout>>();
+  const skipTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     onFlushReady(() => review.flush());
     return () => onFlushReady(null);
   }, [onFlushReady, review.flush]);
-  useEffect(() => () => clearTimeout(armTimer.current), []);
+  useEffect(() => () => {
+    clearTimeout(armTimer.current);
+    clearTimeout(skipTimer.current);
+  }, []);
   if (!current) return <p role="alert">{t("preliminary.unavailable")}</p>;
   const index = procedures.findIndex((dm) => dm.dm_id === active);
   const disabled = busy || review.saving || Boolean(review.error);
@@ -49,7 +54,9 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     filter === "all" || (filter === "pending"
       ? !passage.decision
       : passage.decision === filter || (!passage.decision && passage.suggested === filter));
-  const complete = Object.values(review.state.reviews).every((item) => item.status === "reviewed");
+  const complete = Object.values(review.state.reviews).every(
+    (item) => item.status === "reviewed" || item.status === "skipped",
+  );
 
   const changeProcedure = async (id: string) => {
     if (!await review.flush()) return;
@@ -63,6 +70,27 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     setJump(0);
     setConfirmed(false);
     setRestartArmed(false);
+    setSkipArmed(false);
+    clearTimeout(skipTimer.current);
+  };
+  const completeProcedure = async () => {
+    if (!await review.act({ dm_id: active, op: "complete", confirm_empty: confirmed })) return;
+    const next = procedures.slice(index + 1).concat(procedures.slice(0, index)).find((dm) => {
+      if (dm.dm_id === active) return false;
+      const status = review.state.reviews[dm.dm_id]?.status;
+      return status !== "reviewed" && status !== "skipped";
+    });
+    if (next) await changeProcedure(next.dm_id);
+  };
+  const skipReviews = async () => {
+    if (!skipArmed) {
+      setSkipArmed(true);
+      skipTimer.current = setTimeout(() => setSkipArmed(false), 3000);
+      return;
+    }
+    clearTimeout(skipTimer.current);
+    setSkipArmed(false);
+    if (await review.act({ dm_id: active, op: "skip" })) onGenerate();
   };
   const savedLabel = review.error ? "saveFailed"
     : review.saving || review.dirty ? "saving" : current.saved_at ? "saved" : "notReviewed";
@@ -175,7 +203,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                   <span>{t("preliminary.confirmWhole")}</span>
                 </div>
                 <Button disabled={disabled || review.dirty || undecided > 0 || !confirmed || current.status === "reviewed"}
-                  onClick={() => void review.act({ dm_id: active, op: "complete", confirm_empty: confirmed })}>
+                  onClick={() => void completeProcedure()}>
                   {t("preliminary.complete")}
                 </Button>
               </section>
@@ -184,7 +212,15 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
         )}
         <div className="flex flex-wrap gap-3 justify-between">
           <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
-          <Button disabled={disabled || !complete || review.dirty} onClick={onGenerate}>{t("preliminary.generate")}</Button>
+          <div className="space-y-2">
+        <p className="max-w-xl text-sm text-fg-dim">{t("preliminary.skipHelp")}</p>
+        <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
+          {t(skipArmed ? "preliminary.skipConfirm" : "preliminary.skip")}
+        </Button>
+          </div>
+          <Button disabled={disabled || !complete || review.dirty} onClick={onGenerate}>
+        {t("preliminary.generate")}
+          </Button>
         </div>
       </CardContent>
     </Card>

@@ -228,6 +228,35 @@ def test_decisions_drive_xml_zip_and_keep_source_immutable(procedure, client):
     assert client.post(f"/api/v1/documents/{doc_id}/wizard/back").json()["step"] == "preliminary"
 
 
+def test_skipping_reviews_generates_original_procedural_structure(procedure, client):
+    doc_id, _ = procedure
+    with SessionLocal() as db:
+        original = json.loads(db.get(Document, doc_id).dms_json)[0]["tree"]
+
+    skipped = _action(client, doc_id, op="skip")
+    assert skipped.status_code == 200, skipped.text
+    assert all(item["status"] == "skipped" for item in skipped.json()["reviews"].values())
+
+    generated = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["step"] == "generate"
+    with SessionLocal() as db:
+        assert all(item["status"] == "skipped"
+                   for item in review.view(db.get(Document, doc_id))["reviews"].values())
+
+    xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/proc/xml")
+    assert xml.status_code == 200, xml.text
+    assert "Ensure the power is off." in xml.text
+    assert "Disconnect the connector." in xml.text
+    download = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    assert download.status_code == 200, download.text
+    with ZipFile(BytesIO(download.content)) as archive:
+        assert archive.read("proc.xml") == xml.content
+
+    with SessionLocal() as db:
+        assert json.loads(db.get(Document, doc_id).dms_json)[0]["tree"] == original
+
+
 def test_empty_review_requires_positive_confirmation_and_word_has_reading_pages(client):
     with SessionLocal() as db:
         doc = Document(filename="empty.docx", source_format="docx", storage_path="synthetic-unused",
