@@ -82,6 +82,8 @@ def _build_lines(prediction: object) -> list[dict[str, object]]:
     for index, text in enumerate(texts):
         if not isinstance(text, str):
             raise RuntimeError("PaddleOCR a renvoyé une ligne sans texte valide.")
+        if not text.strip():
+            continue
         lines.append(
             {
                 "text": text,

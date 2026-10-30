@@ -4,6 +4,7 @@ import base64
 import json
 from io import BytesIO
 
+import structlog
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -34,11 +35,12 @@ def test_reapply_replacements_uses_shifted_boxes_and_original_source(
 
     monkeypatch.setattr("app.api.line_replacement.apply_replacements", fake_apply_replacements)
     line = {"text": "R-001", "box": [[110, 120], [210, 120], [210, 150], [110, 150]]}
+    empty_line = {"text": "", "box": [[110, 160], [210, 160], [210, 190], [110, 190]]}
     response = client.post(
         "/api/v1/image-processor/reapply-replacements",
         files={"image": ("source.jpg", _source_jpeg(), "image/jpeg")},
         data={
-            "lines_json": json.dumps([line]),
+            "lines_json": json.dumps([empty_line, line]),
             "replacement_pairs_json": json.dumps([
                 {"reference": "R-001", "replacement": "R-002"},
             ]),
@@ -82,6 +84,30 @@ def test_reapply_replacements_rejects_boxes_outside_a4(client: TestClient) -> No
 
     assert response.status_code == 422
     assert response.json()["message"] == "Une boîte OCR est hors de l'image."
+
+
+def test_reapply_replacements_logs_safe_validation_details(client: TestClient) -> None:
+    private_ocr_text = "PRIVATE OCR TEXT"
+    with structlog.testing.capture_logs() as logs:
+        response = client.post(
+            "/api/v1/image-processor/reapply-replacements",
+            files={"image": ("source.jpg", _source_jpeg(), "image/jpeg")},
+            data={
+                "lines_json": json.dumps([{
+                    "text": private_ocr_text,
+                    "box": [[110, 120], [210, 120], [210, 150]],
+                }]),
+                "replacement_pairs_json": json.dumps([
+                    {"reference": "R-001", "replacement": "R-002"},
+                ]),
+            },
+        )
+
+    assert response.status_code == 422
+    event = next(log for log in logs if log["event"] == "reapply_replacements_payload_invalid")
+    assert event["field"] == "lines_json"
+    assert event["validation_errors"]
+    assert private_ocr_text not in repr(event)
 
 
 def test_workspace_ocr_line_persists_box_offset() -> None:

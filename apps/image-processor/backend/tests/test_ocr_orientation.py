@@ -66,6 +66,22 @@ def test_narrow_single_digit_is_not_mistaken_for_a_vertical_line():
     assert text_frame(_build_lines(prediction)[0]["box"]).angle == 0
 
 
+def test_empty_recognized_lines_are_skipped():
+    first = [[10, 10], [110, 10], [110, 30], [10, 30]]
+    second = [[10, 60], [110, 60], [110, 80], [10, 80]]
+    third = [[10, 110], [110, 110], [110, 130], [10, 130]]
+    prediction = SimpleNamespace(json={"res": {
+        "rec_texts": ["", "R-001", "   "],
+        "rec_scores": [0.99, 0.99, 0.99],
+        "rec_polys": [first, second, third],
+    }})
+
+    lines = _build_lines(prediction)
+
+    assert len(lines) == 1
+    assert lines[0]["text"] == "R-001"
+
+
 def test_tall_crop_test_uses_maximum_edge_lengths_not_average_lengths():
     box = [[0, 0], [120, 0], [100, 150], [20, 150]]
     assert reading_order_box(box, 0) == box
