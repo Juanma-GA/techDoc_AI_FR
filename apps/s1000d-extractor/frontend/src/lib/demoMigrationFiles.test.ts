@@ -8,11 +8,11 @@ afterEach(() => {
 
 describe("loadDemoMigrationFiles", () => {
   it("loads the three sample assets as named files", async () => {
-    const requests: string[] = [];
+    const requests: { url: string; cache: RequestCache | undefined }[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        requests.push(String(input));
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), cache: init?.cache });
         return new Response(new Blob(["synthetic demo fixture"]));
       }),
     );
@@ -26,7 +26,10 @@ describe("loadDemoMigrationFiles", () => {
       `${import.meta.env.BASE_URL}demo/WEG-WMO.pdf`,
       `${import.meta.env.BASE_URL}demo/DMRL_v2.xlsx`,
       `${import.meta.env.BASE_URL}demo/dm_header_template.example.json`,
-    ]);
+    ].map((url) => ({
+      url,
+      cache: "no-store",
+    })));
   });
 
   it("reports missing sample assets instead of returning partial files", async () => {
