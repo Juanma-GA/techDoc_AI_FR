@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
+
+from alembic import command
 
 
 def test_migration_purges_provider_config_and_preserves_demo_mode(tmp_path, monkeypatch) -> None:
@@ -36,6 +37,9 @@ def test_migration_purges_provider_config_and_preserves_demo_mode(tmp_path, monk
         )
 
     command.upgrade(config, "head")
+    assert {"sha256", "resource_sha256_json"} <= {
+        column["name"] for column in inspect(engine).get_columns("documents")
+    }
     with engine.connect() as connection:
         remaining = dict(connection.execute(text("SELECT key, value FROM app_config")).all())
     engine.dispose()

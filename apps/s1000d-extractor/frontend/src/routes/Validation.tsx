@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -19,6 +19,8 @@ import {
   type DmValidationStatus,
   type DmValidationViolation,
 } from "../lib/api";
+import { ValidationQueue, VALIDATION_BATCH_SIZE } from "../lib/validationQueue";
+import { collectDroppedFiles } from "../lib/validationDrop";
 
 const ISSUES = ["4.1", "4.2"] as const;
 
@@ -88,6 +90,7 @@ export function Validation() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement | null>(null);
   const importedGenerated = useRef<string | null>(null);
+  const pendingGenerated = useRef(new Map<string, ReturnType<typeof wizardApi.validate>>());
   const [items, setItems] = useState<ValidationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorsOnly, setErrorsOnly] = useState(false);
@@ -95,6 +98,9 @@ export function Validation() {
   const [dragging, setDragging] = useState(false);
   const [listDragging, setListDragging] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [queue] = useState(() => new ValidationQueue(2));
+  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const generated = (location.state as GeneratedState | null)?.generated;
 
   const visibleItems = errorsOnly ? items.filter((item) => item.error_count > 0) : items;
   const selected = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null;
@@ -137,16 +143,20 @@ export function Validation() {
     setLoadError(null);
     setItems((current) => [...entries, ...current]);
     setSelectedId((current) => current ?? entries[0]?.id ?? null);
-    setPendingCount((current) => current + 1);
-    void validationApi
-      .validate(
-        files,
-        entries.map(() => null),
-        entries.map((entry) => entry.displayName),
-      )
-      .then(({ results }) => updateFromResults(entries, results))
-      .catch((error: unknown) => markRequestFailed(entries, error))
-      .finally(() => setPendingCount((current) => Math.max(0, current - 1)));
+    setProgress((current) => ({ ...current, total: current.total + files.length }));
+    const batches = Math.ceil(files.length / VALIDATION_BATCH_SIZE);
+    setPendingCount((current) => current + batches);
+    for (let offset = 0; offset < entries.length; offset += VALIDATION_BATCH_SIZE) {
+      const batch = entries.slice(offset, offset + VALIDATION_BATCH_SIZE);
+      const payload = files.slice(offset, offset + VALIDATION_BATCH_SIZE);
+      void queue.enqueue(() => validationApi.validate(payload, batch.map(() => null), batch.map((item) => item.displayName)))
+        .then(({ results }) => updateFromResults(batch, results))
+        .catch((error: unknown) => markRequestFailed(batch, error))
+        .finally(() => {
+          setPendingCount((current) => Math.max(0, current - 1));
+          setProgress((current) => ({ ...current, completed: current.completed + batch.length }));
+        });
+    }
   };
 
   const chooseIssue = (item: ValidationItem, issue: string) => {
@@ -159,7 +169,7 @@ export function Validation() {
       : item.generated
         ? wizardApi.downloadDmFile(item.generated.docId, item.generated.dmId)
         : Promise.reject(new Error(t("validation.sourceUnavailable")));
-    void file.then((source) => validationApi.validate([source], [issue], [item.displayName]))
+    void queue.enqueue(() => file.then((source) => validationApi.validate([source], [issue], [item.displayName])))
       .then(({ results }) => updateFromResults([item], results))
       .catch((error: unknown) => markRequestFailed([item], error))
       .finally(() => setPendingCount((current) => Math.max(0, current - 1)));
@@ -167,16 +177,29 @@ export function Validation() {
 
   useEffect(() => {
     const generated = (location.state as GeneratedState | null)?.generated;
-    if (!generated || importedGenerated.current === generated.documentId) return;
-    importedGenerated.current = generated.documentId;
+    if (!generated) return;
+    const key = `${generated.documentId}:${generated.dmIds.join(",")}`;
+    if (importedGenerated.current === key) return;
     let cancelled = false;
+    let pending = pendingGenerated.current.get(key);
+    if (!pending) {
+      setPendingCount((current) => current + 1);
+      pending = queue.enqueue(() => wizardApi.validate(generated.documentId, generated.dmIds));
+      pendingGenerated.current.set(key, pending);
+      const finish = () => {
+        pendingGenerated.current.delete(key);
+        setPendingCount((current) => Math.max(0, current - 1));
+      };
+      void pending.then(finish, finish);
+    }
+    const request = pending;
 
     const loadGeneratedDms = async () => {
       setLoadError(null);
-      setPendingCount((current) => current + 1);
       try {
-        const { results } = await wizardApi.validate(generated.documentId, generated.dmIds);
+        const { results } = await request;
         if (cancelled) return;
+        importedGenerated.current = key;
 
         const entries: ValidationItem[] = results.map((result) => ({
           ...result, id: crypto.randomUUID(), file: null, displayName: result.filename,
@@ -186,8 +209,6 @@ export function Validation() {
         setSelectedId((current) => current ?? entries[0]?.id ?? null);
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!cancelled) setPendingCount((current) => Math.max(0, current - 1));
       }
     };
 
@@ -198,9 +219,8 @@ export function Validation() {
   }, [location.state]);
 
   const removeItem = (id: string) => {
-    const remaining = items.filter((item) => item.id !== id);
-    setItems(remaining);
-    if (selectedId === id) setSelectedId(remaining[0]?.id ?? null);
+    setItems((current) => current.filter((item) => item.id !== id));
+    setSelectedId((current) => current === id ? null : current);
   };
 
   const validCount = items.filter((item) => item.status === "valid").length;
@@ -212,6 +232,9 @@ export function Validation() {
       <header className="page-header">
         <h1>{t("validation.title")}</h1>
         <p>{t("validation.subtitle")}</p>
+        {generated ? <Link to={`/migration/${generated.documentId}`}>
+          {t("validation.backToConversion")}
+        </Link> : null}
       </header>
 
       <section
@@ -227,7 +250,8 @@ export function Validation() {
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          importFiles(Array.from(event.dataTransfer.files));
+          void collectDroppedFiles(event.dataTransfer).then(importFiles)
+            .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : String(error)));
         }}
       >
         <input
@@ -277,6 +301,9 @@ export function Validation() {
       </section>
 
       {loadError ? <div className="alert error">{loadError}</div> : null}
+      {progress.total ? <p role="status" aria-live="polite">
+        {t("validation.progress", progress)}
+      </p> : null}
 
       <div className="validation-summary" aria-live="polite">
         <span>{t("validation.summary.documents", { count: items.length })}</span>
@@ -414,7 +441,8 @@ export function Validation() {
                 if (items.length) return;
                 event.preventDefault();
                 setListDragging(false);
-                importFiles(Array.from(event.dataTransfer.files));
+                void collectDroppedFiles(event.dataTransfer).then(importFiles)
+                  .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : String(error)));
               }}
             >
               {items.length ? (

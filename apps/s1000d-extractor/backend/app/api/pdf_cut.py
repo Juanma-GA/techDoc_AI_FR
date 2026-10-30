@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api_models import PdfCutConfirmedOut, PdfCutDetectionOut
 from app.config import settings
 from app.core import pdf_cut
 from app.core.errors import AppError
@@ -22,7 +23,7 @@ def _require(db: Session, doc_id: str) -> Document:
     return doc
 
 
-@router.post("/{doc_id}/pdf-cut/detect")
+@router.post("/{doc_id}/pdf-cut/detect", response_model=PdfCutDetectionOut)
 def detect_pdf_start(
     doc_id: str,
     params: dict = Body(default={}),
@@ -52,7 +53,7 @@ def preview_pdf_page(doc_id: str, page_number: int, db: Session = Depends(get_db
                         headers={"Cache-Control": "private, max-age=3600"})
 
 
-@router.post("/{doc_id}/pdf-cut/confirm")
+@router.post("/{doc_id}/pdf-cut/confirm", response_model=PdfCutConfirmedOut)
 def confirm_pdf_start(
     doc_id: str,
     params: dict = Body(default={}),

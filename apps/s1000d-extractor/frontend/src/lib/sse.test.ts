@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { readSse } from "./sse";
+import { readSse } from "./api/sse";
 
 function response(chunks: string[]) {
   const encoder = new TextEncoder();

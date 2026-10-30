@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 from starlette.background import BackgroundTask
 
+from app.api_models import WizardStateOut, WizardValidationOut
 from app.core import preliminary_review as preliminary
 from app.core import wizard
 from app.core import wizard_resources as wres
@@ -26,6 +27,7 @@ from app.core.demo_mode import is_demo_mode
 from app.core.dm_validation import validate_dm
 from app.core.errors import AppError
 from app.core.fs import remove_files
+from app.core.image_previews import thumbnail_path
 from app.core.sse import Progress, stream_threaded_job
 from app.core.wizard_fingerprint import dm_xml_fingerprint, xml_context_fingerprint
 from app.core.wizard_zip_export import (
@@ -86,7 +88,7 @@ def _image_paths(doc_id: str, *, root: Path | None = None) -> list[Path]:
     )
 
 
-@router.post("/{doc_id}/wizard/start")
+@router.post("/{doc_id}/wizard/start", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_start(
     doc_id: str,
     params: dict = Body(default={}),
@@ -129,7 +131,7 @@ async def wizard_start_stream(
     )
 
 
-@router.get("/{doc_id}/wizard")
+@router.get("/{doc_id}/wizard", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_state(doc_id: str, db: Session = Depends(get_db)) -> dict:
     doc = _require(db, doc_id)
     if not doc.wizard_step:
@@ -147,17 +149,17 @@ def wizard_state(doc_id: str, db: Session = Depends(get_db)) -> dict:
     return wizard.state(doc)
 
 
-@router.post("/{doc_id}/wizard/update")
+@router.post("/{doc_id}/wizard/update", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_update(doc_id: str, params: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
     return wizard.update(db, _require(db, doc_id), params)
 
 
-@router.post("/{doc_id}/wizard/advance")
+@router.post("/{doc_id}/wizard/advance", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_advance(doc_id: str, params: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
     return wizard.advance(db, _require(db, doc_id), params)
 
 
-@router.post("/{doc_id}/wizard/back")
+@router.post("/{doc_id}/wizard/back", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_back(doc_id: str, db: Session = Depends(get_db)) -> dict:
     return wizard.back(db, _require(db, doc_id))
 
@@ -175,7 +177,7 @@ def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Res
     )
 
 
-@router.post("/{doc_id}/wizard/validate")
+@router.post("/{doc_id}/wizard/validate", response_model=WizardValidationOut, response_model_exclude_unset=True)
 def wizard_validate(doc_id: str, body: WizardValidateIn, db: Session = Depends(get_db)) -> dict:
     doc = _require(db, doc_id)
     if not doc.wizard_step:
@@ -283,3 +285,18 @@ def wizard_zip(
         path, media_type="application/zip", filename=f"{doc.id}_dms.zip",
         background=BackgroundTask(remove_files, [path]),
     )
+
+
+@router.get("/{doc_id}/wizard/images/{name}/thumb")
+def wizard_thumbnail(
+    doc_id: str, name: str, size: int = Query(default=192, ge=32, le=1024),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    doc = _require(db, doc_id)
+    if Path(name).name != name or Path(name).suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+        raise AppError("IMAGE_NOT_FOUND", "Illustration inconnue.", 404)
+    source = wizard.images_dir(doc_id, root=Path(doc.storage_path).parent) / name
+    if not source.is_file():
+        raise AppError("IMAGE_NOT_FOUND", "Illustration inconnue.", 404)
+    return FileResponse(thumbnail_path(source, size), media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=3600"})

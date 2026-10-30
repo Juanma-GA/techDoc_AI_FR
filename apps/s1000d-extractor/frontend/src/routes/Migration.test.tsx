@@ -11,8 +11,8 @@ import {
   generationFile,
   getCommonMissingFields,
   isRestorableMigrationInput,
-  IllustrationWarning,
-} from "./Migration";
+} from "../lib/migrationUtils";
+import { IllustrationWarning } from "../features/migration/WizardNotices";
 
 describe("illustration extraction warning", () => {
   it.each([
@@ -31,8 +31,12 @@ describe("illustration extraction warning", () => {
     expect(markup).toContain('aria-live="polite"');
   });
 
-  it("does not display a warning after a successful extraction", () => {
-    expect(renderToStaticMarkup(<IllustrationWarning count={0} />)).toBe("");
+  it("does not display a warning after a successful extraction", async () => {
+    const i18n = createInstance();
+    await i18n.init({ lng: "fr", resources: { fr: { translation: fr } } });
+    expect(renderToStaticMarkup(<I18nextProvider i18n={i18n}>
+      <IllustrationWarning count={0} />
+    </I18nextProvider>)).toBe("");
   });
 });
 

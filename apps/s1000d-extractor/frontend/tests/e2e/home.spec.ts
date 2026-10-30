@@ -1,9 +1,21 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/settings")) await route.fulfill({ json: { demo_enabled: false } });
+    else if (path.endsWith("/migration-inputs")) await route.fulfill({
+      json: { issue: "4.2", context_hint: "mixed", brex_id: null, files: {} },
+    });
+    else await route.fulfill({ json: [] });
+  });
+});
+
 test("root redirects to migration", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/migration$/);
-  await expect(page.getByRole("heading", { name: "Migration" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Conversion S1000D" })).toBeVisible();
 });
 
 test("validation route exposes the batch import workspace", async ({ page }) => {

@@ -64,7 +64,7 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     else if (path.endsWith("/wizard/advance")) {
       advances += 1;
       response = {
-        step: "generate", dms: [], steps: ["split", "type", "structure", "preliminary", "generate"],
+        step: "generate", split_level: "section", dms: [], steps: ["split", "type", "structure", "preliminary", "generate"],
       };
     }
     else if (path.endsWith("/wizard/preliminary")) {
@@ -114,7 +114,10 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
       });
       return;
     } else if (path.includes("/brex")) response = [];
-    else if (path.includes("/migration-inputs")) response = [];
+    else if (path.endsWith("/wizard/images")) response = [];
+    else if (path.includes("/migration-inputs")) response = {
+      issue: "4.2", context_hint: "mixed", brex_id: null, files: {},
+    };
     await route.fulfill({ json: response });
   });
   return {
@@ -159,7 +162,7 @@ test("saving rules in Settings flags an already-open review without discarding i
   await category.locator("fieldset").first().getByLabel("Liste française (FR)").fill("avant\navant intervention");
   await form.getByRole("button", { name: "Enregistrer les règles", exact: true }).click();
   await expect(form.getByRole("status")).toContainText("révision 1");
-  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
+  await page.getByRole("link", { name: "Conversion S1000D", exact: true }).click();
   await expect(page.getByRole("button", { name: "Recommencer cette revue", exact: true })).toBeVisible();
   expect(server.read().reviews.proc!.passages[0]?.decision).toBe("safety");
   expect(server.writes.some((write) => write.op === "restart")).toBe(false);

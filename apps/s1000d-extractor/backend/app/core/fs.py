@@ -56,6 +56,11 @@ def atomic_write_text(path: Path, text: str) -> None:
     atomic_write_bytes(path, text.encode("utf-8"))
 
 
+def publish_file(staging: Path, destination: Path) -> None:
+    with _PUBLISH_LOCK:
+        os.replace(staging, destination)
+
+
 def replace_directory(staging: Path, destination: Path) -> None:
     backup = destination.with_name(f".{destination.name}.{uuid4().hex}.bak")
     with _PUBLISH_LOCK:

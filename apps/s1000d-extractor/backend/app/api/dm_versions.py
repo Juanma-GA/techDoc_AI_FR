@@ -12,9 +12,10 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.orm import Session
 
+from app.api_models import LinkDmrlOut, RestoredVersionOut
 from app.config import settings
 from app.core.errors import AppError
-from app.db.models import Document, DmDocumentLink, DmVersion
+from app.db.models import DmDocumentLink, DmVersion, Document
 from app.db.session import get_db
 from app.schemas import (
     DmDocumentLinkOut,
@@ -37,7 +38,7 @@ def _require(db: Session, doc_id: str) -> Document:
 # ----- DMRL Linking -----
 
 
-@router.post("/{doc_id}/link-dmrl")
+@router.post("/{doc_id}/link-dmrl", response_model=LinkDmrlOut)
 def link_dmrl(
     doc_id: str,
     payload: LinkDmrlIn,
@@ -236,7 +237,7 @@ def get_dm_version(
     )
 
 
-@router.post("/{doc_id}/dm-versions/{version_id}/restore")
+@router.post("/{doc_id}/dm-versions/{version_id}/restore", response_model=RestoredVersionOut)
 def restore_dm_version(
     doc_id: str,
     version_id: str = Path(..., min_length=1),

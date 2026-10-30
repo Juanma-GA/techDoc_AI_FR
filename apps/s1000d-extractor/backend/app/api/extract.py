@@ -28,11 +28,12 @@ from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
-from app.core.fs import atomic_write_bytes, atomic_write_text, remove_files
+from app.core.fs import atomic_write_text, publish_file, remove_files
 from app.core.pdf_cut import previews_dir
 from app.core.s1000d_schema import SELECTABLE_ISSUES
 from app.core.s1000d_serializer import missing_data_fields
 from app.core.sse import JobCancelled, stream_threaded_job
+from app.core.uploads import UPLOAD_LOCK, file_sha256, staged_upload
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db, open_session, storage_directory
@@ -114,6 +115,7 @@ def delete_document(
 
 @router.post("", response_model=DocumentOut, status_code=201)
 def upload_document(
+    response: Response,
     file: UploadFile = File(...),
     s1000d_issue: str = Form("4.2"),
     context_hint: str = Form("mixed"),
@@ -127,9 +129,6 @@ def upload_document(
     if brex_id and is_demo_mode(db):
         raise AppError("DEMO_BREX_DISABLED", "Les profils BREX ne sont pas disponibles en mode démo.", 409)
     fmt = detect_format(file.filename or "")
-    raw = file.file.read()
-    if len(raw) > settings.max_upload_size_bytes:
-        raise AppError("FILE_TOO_LARGE", "Document trop volumineux.", 413)
     if brex_id:
         profile = db.get(BrexProfile, brex_id)
         if profile is None:
@@ -141,26 +140,57 @@ def upload_document(
                 422,
             )
 
-    doc = Document(
-        filename=file.filename or f"document.{fmt}", source_format=fmt,
-        s1000d_issue=s1000d_issue, context_hint=context_hint, brex_id=brex_id,
-        storage_path="", status="uploaded",
-    )
-    db.add(doc)
-    db.flush()
-    path = _storage(db) / f"document_{doc.id}.{fmt}"
-    atomic_write_bytes(path, raw)
-    doc.storage_path = str(path)
-    if fmt == "pdf":
-        try:
-            doc.page_count = pdf_page_count(path)
-        except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
-            log.warning("document_page_count_failed", document_id=doc.id,
-                        error_type=type(exc).__name__, exc_info=True)
-            doc.page_count = None
-    migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
-    db.commit()
-    return _to_out(doc)
+    with staged_upload(file.file, _storage(db), settings.max_upload_size_bytes) as (staging, digest):
+        with UPLOAD_LOCK:
+            candidates = db.scalars(select(Document).where(
+                Document.sha256 == digest, Document.s1000d_issue == s1000d_issue,
+                Document.context_hint == context_hint, Document.brex_id == brex_id,
+            ).order_by(Document.created_at)).all()
+            doc = next((candidate for candidate in candidates if Path(candidate.storage_path).is_file()), None)
+            if doc is None:
+                saved = migration_inputs.saved_file(db, "document")
+                mapping = migration_inputs.load(db)
+                previous_path = mapping["files"].get("document", {}).get("path")
+                legacy = db.scalar(select(Document).where(
+                    Document.storage_path == previous_path, Document.sha256.is_(None),
+                    Document.s1000d_issue == s1000d_issue, Document.context_hint == context_hint,
+                    Document.brex_id == brex_id,
+                )) if saved and previous_path else None
+                if legacy is not None and saved:
+                    try:
+                        legacy.sha256 = file_sha256(saved[0])
+                        if legacy.sha256 == digest:
+                            doc = legacy
+                    except OSError as exc:
+                        log.warning("document_legacy_hash_failed", document_id=legacy.id,
+                                    error_type=type(exc).__name__, exc_info=True)
+            if doc is not None:
+                if doc.source_format != fmt:
+                    raise AppError("BAD_FORMAT", "L'extension ne correspond pas au document existant.", 422)
+                migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
+                db.commit()
+                response.headers["X-Reused"] = "true"
+                return _to_out(doc)
+            doc = Document(
+                filename=file.filename or f"document.{fmt}", source_format=fmt,
+                s1000d_issue=s1000d_issue, context_hint=context_hint, brex_id=brex_id,
+                storage_path="", status="uploaded", sha256=digest,
+            )
+            db.add(doc)
+            db.flush()
+            path = _storage(db) / f"document_{doc.id}.{fmt}"
+            publish_file(staging, path)
+            doc.storage_path = str(path)
+            if fmt == "pdf":
+                try:
+                    doc.page_count = pdf_page_count(path)
+                except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+                    log.warning("document_page_count_failed", document_id=doc.id,
+                                error_type=type(exc).__name__, exc_info=True)
+                    doc.page_count = None
+            migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
+            db.commit()
+            return _to_out(doc)
 
 
 @router.post("/{doc_id}/extract")

@@ -20,6 +20,7 @@ from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.ir import IRNode, to_dict
+from app.core.progress import scaled_progress
 
 ProgressCb = Callable[[str, int], None]
 
@@ -52,7 +53,7 @@ def run(
     blocks = ingest.extract_blocks(path, fmt=fmt, progress_cb=progress_cb)
 
     progress_cb("infer", 30)
-    root: IRNode = structure_infer.build_ir(blocks)
+    root: IRNode = structure_infer.build_ir(blocks, progress_cb=scaled_progress(progress_cb, "infer", 30, 45))
 
     progress_cb("context", 45)
     dm_type = context_classifier.classify(root, hint=hint)

@@ -52,6 +52,7 @@ from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
 from app.core.fs import replace_directory
 from app.core.preliminary_projection import reviewed_root, sync_mappings
+from app.core.progress import scaled_progress
 from app.core.s1000d_serializer import (
     ReferenceIndex,
     build_reference_index,
@@ -262,7 +263,7 @@ def start(
     )
     progress_cb("infer", 40)
     stage_started = perf_counter()
-    root = structure_infer.build_ir(blocks)
+    root = structure_infer.build_ir(blocks, progress_cb=scaled_progress(progress_cb, "infer", 40, 55))
     log.info(
         "wizard_stage_timing",
         stage="structure_inference",

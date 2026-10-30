@@ -16,6 +16,10 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
     created_at: "2026-10-30T10:00:00Z",
   };
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
+  await page.route("**/demo/**", (route) => route.fulfill({
+    contentType: route.request().url().endsWith(".json") ? "application/json" : "application/octet-stream",
+    body: route.request().url().endsWith(".json") ? '{"security":{}}' : "Synthetic demo fixture only.",
+  }));
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -60,32 +64,31 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
   });
 
   await page.goto("/migration");
+  await page.getByRole("heading", { name: "Conversion S1000D", exact: true }).waitFor();
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
-  const issueSelect = page.getByLabel("Version S1000D");
+  const issueSelect = page.getByRole("combobox", { name: "Version S1000D", exact: true });
   await expect(issueSelect).toHaveValue("4.2");
   const documentInput = page.locator('input[type="file"][accept=".pdf,.docx"]');
-  await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
-    .toBe("normal-input.pdf");
+  await expect(page.getByText(/normal-input\.pdf/)).toBeVisible();
+  await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.length)).toBe(0);
 
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
   await expect(page.getByText(/LLM|Mistral/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Mode démo", exact: true }).click();
-  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
+  await page.getByRole("link", { name: "Conversion S1000D", exact: true }).click();
   await expect(page.getByText("demo-history.pdf")).toBeVisible();
   await expect(page.getByText("normal-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(0);
   await expect(issueSelect).toHaveValue("4.1");
-  await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
-    .toBe("WEG-WMO.pdf");
+  await expect(page.getByText(/WEG-WMO\.pdf/)).toBeVisible();
 
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
   await page.getByRole("button", { name: "Mode normal", exact: true }).click();
-  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
+  await page.getByRole("link", { name: "Conversion S1000D", exact: true }).click();
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.getByText("demo-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
   await expect(issueSelect).toHaveValue("4.2");
-  await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
-    .toBe("normal-input.pdf");
+  await expect(page.getByText(/normal-input\.pdf/)).toBeVisible();
 });

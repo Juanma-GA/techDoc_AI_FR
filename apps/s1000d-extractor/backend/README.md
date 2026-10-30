@@ -81,6 +81,30 @@ asynchronous and offload their processing with `asyncio.to_thread`.
   data and incomplete final blocks, and aborts wizard streams on unmount or a
   document change.
 
+## Conversion Contracts And Upload Reuse
+
+- Migration `0013_upload_hashes` adds a nullable indexed document SHA-256 and
+  per-resource hash/count metadata. It does not read existing source files.
+  The last restored legacy input is hashed lazily on an explicit upload, not
+  by scanning the storage directory.
+- Document uploads are streamed in bounded chunks and reuse a matching
+  SHA-256/Issue/BREX/context record, returning `X-Reused: true`. Unchanged
+  resources reuse their saved count without rewriting or parsing their files.
+  A local-process lock prevents concurrent identical uploads creating duplicates.
+- Resource replacements are parsed before publication. Invalid content leaves
+  the previous file and metadata intact. Explicit resource removal clears the
+  mapping and hash, commits first, and then cleans up the file.
+- Imported XML validation accepts at most `MAX_VALIDATION_FILES` files per
+  request (20 by default) and enforces `MAX_UPLOAD_SIZE_MB` across the whole batch.
+- Wizard, review, source-anchor, PDF-cut, resource and validation responses have
+  explicit Pydantic contracts. `python -m app.openapi_export` exports those
+  contracts with temporary database/storage configuration and without loading
+  the application's `.env`. `S1000D_ENV_FILE` can select an alternate settings
+  file; an explicitly empty value disables dotenv loading.
+- In the frontend, `pnpm openapi:gen` generates tracked TypeScript contracts
+  without starting or connecting to a running application. `pnpm openapi:check`
+  fails if those contracts are stale.
+
 ## À adapter dans un nouveau POC
 
 - `pyproject.toml` : `name = "<poc>-backend"`

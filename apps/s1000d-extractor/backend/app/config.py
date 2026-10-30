@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
         "http://localhost:8006",
     ]
     max_upload_size_mb: int = 50
+    max_validation_files: int = Field(default=20, ge=1)
     pdf_cut_requires_validation: bool = True
 
     @field_validator("cors_origins", mode="before")
@@ -52,4 +54,5 @@ class Settings(BaseSettings):
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
 
-settings = Settings()
+_env_file = os.environ.get("S1000D_ENV_FILE")
+settings = Settings(_env_file=BASE_DIR / ".env" if _env_file is None else _env_file or None)

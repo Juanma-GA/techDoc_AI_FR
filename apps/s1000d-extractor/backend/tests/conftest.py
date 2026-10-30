@@ -23,6 +23,7 @@ _STORAGE = _TMP / "s1000d_extractor_test_storage"
 _DEMO_STORAGE = _TMP / "s1000d_extractor_demo_test_storage"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
+os.environ["S1000D_ENV_FILE"] = ""
 os.environ["DEMO_DATABASE_URL"] = f"sqlite:///{_DEMO_DB}"
 os.environ["STORAGE_DIR"] = str(_STORAGE)
 os.environ["DEMO_STORAGE_DIR"] = str(_DEMO_STORAGE)

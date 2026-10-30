@@ -97,12 +97,11 @@
   },
   "nav": {
     "home": "Accueil",
-    "migration": "Génération de DM",
+    "migration": "Conversion S1000D",
     "validation": "Validation",
     "architecture": "Architecture",
     "data": "Données",
     "settings": "Paramètres",
-    "versioning": "Versions",
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
@@ -127,7 +126,10 @@
   },
   "common": {
     "back": "← Retour",
-    "none": "—"
+    "none": "—",
+    "confirmAgain": "Cliquer encore pour confirmer",
+    "loading": "Chargement",
+    "retry": "Réessayer"
   },
   "data": {
     "title": "Données",
@@ -194,30 +196,8 @@
       "VALIDATION_ERROR": "Listes invalides : chaque groupe actif doit contenir des expressions françaises et anglaises valides."
     }
   },
-  "versioning": {
-    "title": "Versions",
-    "subtitle": "Historique des Data Modules et restauration non destructive.",
-    "document": "Document",
-    "selectDocument": "Sélectionner un document",
-    "snapshots": "Snapshots",
-    "loading": "Chargement...",
-    "noVersions": "Aucune version enregistrée.",
-    "preview": "Aperçu",
-    "selectSnapshot": "Sélectionnez un snapshot.",
-    "restore": "Restaurer ce snapshot",
-    "restored": "Version restaurée comme nouveau snapshot.",
-    "restoreError": "Échec de la restauration : {{message}}",
-    "characters": "{{count}} caractères",
-    "status": {
-      "draft": "Brouillon",
-      "extracted": "Extrait",
-      "validated": "Validé",
-      "frozen": "Figé",
-      "restored": "Restauré"
-    }
-  },
   "migration": {
-    "title": "Migration",
+    "title": "Conversion S1000D",
     "subtitle": "Génération guidée de Data Modules S1000D.",
     "upload": {
       "title": "Charger un document",
@@ -442,6 +422,29 @@
         "warning": "Avertissement",
         "info": "Information"
       }
+    },
+    "ui": {
+      "invalidFile": "Choisissez un PDF ou un DOCX non vide.",
+      "invalidIssue": "Choisissez une Issue prise en charge.",
+      "lowConfidence": "Faible confiance",
+      "clearResource": "Retirer la ressource",
+      "search": "Rechercher un document",
+      "sort": "Trier les documents",
+      "sort_recent": "Plus récents d’abord",
+      "sort_oldest": "Plus anciens d’abord",
+      "sort_name": "Nom du fichier",
+      "noDocument": "Sélectionnez un document.",
+      "selectDm": "Sélectionner {{title}}",
+      "dmTitle": "Titre de {{title}}",
+      "expandAll": "Tout déplier",
+      "collapseAll": "Tout replier",
+      "useElement": "Utiliser {{element}}",
+      "selectedElement": "{{element}} retenu",
+      "validationDetails": "Détails des erreurs XSD",
+      "brexDetails": "Détails de l’analyse BREX",
+      "errorsOnly": "Erreurs uniquement",
+      "summary": "Valides : {{valid}} / Incomplets : {{incomplete}} / Erreurs XSD : {{errors}}",
+      "reused": "Document existant réutilisé : aucun doublon créé."
     }
   },
   "validation": {
@@ -493,6 +496,8 @@
       "unverifiable": "La validation XSD n’a pas pu être effectuée. Consulte le détail ci-dessous.",
       "violations": "Violations ({{count}})",
       "selectDm": "Sélectionne un DM pour consulter son résultat."
-    }
+    },
+    "progress": "{{completed}}/{{total}} fichiers traités",
+    "backToConversion": "Revenir à la conversion"
   }
 }

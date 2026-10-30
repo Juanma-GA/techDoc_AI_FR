@@ -1,3 +1,4 @@
+import { ApiRequestError, responseId } from "./client";
 export type SseEventHandler = (event: string, data: Record<string, unknown>) => void;
 
 function isEventData(value: unknown): value is Record<string, unknown> {
@@ -32,6 +33,7 @@ export async function readSse(
       if (!isEventData(parsed)) throw new Error("Invalid SSE event payload.");
       onEvent(event, parsed);
     }
+
     data = [];
     event = "message";
   };
@@ -63,5 +65,15 @@ export async function readSse(
   } finally {
     if (abortListener) signal?.removeEventListener("abort", abortListener);
     await closeReader(reader, signal);
+  }
+}
+
+export async function readApiSse(response: Response, onEvent: SseEventHandler, signal?: AbortSignal) {
+  try {
+    await readSse(response, onEvent, signal);
+  } catch (error) {
+    if (error instanceof ApiRequestError || signal?.aborted) throw error;
+    throw new ApiRequestError(response.status, "INVALID_STREAM",
+      error instanceof Error ? error.message : String(error), responseId(response));
   }
 }

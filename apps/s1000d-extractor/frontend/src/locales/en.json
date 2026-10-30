@@ -97,12 +97,11 @@
   },
   "nav": {
     "home": "Home",
-    "migration": "DM Generation",
+    "migration": "S1000D conversion",
     "validation": "Validation",
     "architecture": "Architecture",
     "data": "Data",
     "settings": "Settings",
-    "versioning": "Versions",
     "ariaLabel": "Main navigation",
     "themeToggle": "Switch theme",
     "languageSwitcher": "Language",
@@ -127,7 +126,10 @@
   },
   "common": {
     "back": "← Back",
-    "none": "—"
+    "none": "—",
+    "confirmAgain": "Click again to confirm",
+    "loading": "Loading",
+    "retry": "Retry"
   },
   "data": {
     "title": "Data",
@@ -194,30 +196,8 @@
       "VALIDATION_ERROR": "Invalid lists: every active group needs valid French and English expressions."
     }
   },
-  "versioning": {
-    "title": "Versioning",
-    "subtitle": "Data Module history and non-destructive restoration.",
-    "document": "Document",
-    "selectDocument": "Select a document",
-    "snapshots": "Snapshots",
-    "loading": "Loading...",
-    "noVersions": "No version recorded.",
-    "preview": "Preview",
-    "selectSnapshot": "Select a snapshot.",
-    "restore": "Restore this snapshot",
-    "restored": "Version restored as a new snapshot.",
-    "restoreError": "Restore failed: {{message}}",
-    "characters": "{{count}} characters",
-    "status": {
-      "draft": "Draft",
-      "extracted": "Extracted",
-      "validated": "Validated",
-      "frozen": "Frozen",
-      "restored": "Restored"
-    }
-  },
   "migration": {
-    "title": "Migration",
+    "title": "S1000D conversion",
     "subtitle": "Guided generation of S1000D Data Modules.",
     "upload": {
       "title": "Upload a document",
@@ -442,6 +422,29 @@
         "warning": "Warning",
         "info": "Information"
       }
+    },
+    "ui": {
+      "invalidFile": "Choose a non-empty PDF or DOCX.",
+      "invalidIssue": "Choose a supported Issue.",
+      "lowConfidence": "Low confidence",
+      "clearResource": "Remove resource",
+      "search": "Search documents",
+      "sort": "Sort documents",
+      "sort_recent": "Newest first",
+      "sort_oldest": "Oldest first",
+      "sort_name": "Filename",
+      "noDocument": "Select a document.",
+      "selectDm": "Select {{title}}",
+      "dmTitle": "Title of {{title}}",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "useElement": "Use {{element}}",
+      "selectedElement": "{{element}} selected",
+      "validationDetails": "XSD error details",
+      "brexDetails": "BREX analysis details",
+      "errorsOnly": "Errors only",
+      "summary": "Valid: {{valid}} / Incomplete: {{incomplete}} / XSD errors: {{errors}}",
+      "reused": "Existing document reused: no duplicate created."
     }
   },
   "validation": {
@@ -493,6 +496,8 @@
       "unverifiable": "XSD validation could not be completed. See the details below.",
       "violations": "Violations ({{count}})",
       "selectDm": "Select a DM to inspect its result."
-    }
+    },
+    "progress": "{{completed}}/{{total}} files processed",
+    "backToConversion": "Back to conversion"
   }
 }

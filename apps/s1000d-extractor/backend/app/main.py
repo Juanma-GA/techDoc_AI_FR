@@ -10,8 +10,19 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
-    admin, brex, dm_versions, extract, health, migration_inputs, pdf_cut, pmc, resources,
-    validation, wizard, preliminary, preliminary_rules,
+    admin,
+    brex,
+    dm_versions,
+    extract,
+    health,
+    migration_inputs,
+    pdf_cut,
+    pmc,
+    preliminary,
+    preliminary_rules,
+    resources,
+    validation,
+    wizard,
 )
 from app.api import settings as settings_route
 from app.config import settings
@@ -77,7 +88,7 @@ def create_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Requested-With", REQUEST_ID_HEADER],
-        expose_headers=[REQUEST_ID_HEADER],
+        expose_headers=[REQUEST_ID_HEADER, "X-Reused"],
     )
     app.add_middleware(RequestIdMiddleware)
 

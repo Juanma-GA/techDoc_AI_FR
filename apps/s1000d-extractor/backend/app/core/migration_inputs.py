@@ -128,6 +128,13 @@ def saved_file(db: Session, kind: str) -> tuple[Path, str] | None:
     return (path, item["filename"]) if path is not None else None
 
 
+def remove_resource(db: Session, document: Document, kind: str) -> None:
+    mapping = load(db)
+    if mapping["files"].get("document", {}).get("path") == document.storage_path:
+        mapping["files"].pop(kind, None)
+        _save(db, mapping)
+
+
 def _safe_path(raw_path: str, db: Session) -> Path | None:
     path = Path(raw_path)
     root = storage_directory(db).resolve()

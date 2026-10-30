@@ -127,6 +127,7 @@ def test_blocking_handlers_are_synchronous(endpoint) -> None:
 async def test_validation_batch_keeps_event_loop_responsive(app, monkeypatch, pdf_bytes) -> None:
     from app.api import validation as validation_api
 
+    monkeypatch.setattr(validation_api.settings, "max_validation_files", 50)
     xml = _valid_dm().encode()
     loop_thread = threading.get_ident()
     started = threading.Event()

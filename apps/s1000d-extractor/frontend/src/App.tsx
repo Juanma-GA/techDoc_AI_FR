@@ -6,16 +6,18 @@ import {
   LanguageSwitcher,
   SidebarNavContent,
   sidebarNavItemClass,
+  Spinner,
+  Button,
 } from "@internal/ui";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { settingsApi, type SettingsDto } from "./lib/api";
-import { Data } from "./routes/Data";
-import { Migration } from "./routes/Migration";
-import { Settings } from "./routes/Settings";
-import { Validation } from "./routes/Validation";
-import { Versioning } from "./routes/Versioning";
+const Data = lazy(() => import("./routes/Data").then((module) => ({ default: module.Data })));
+const Migration = lazy(() => import("./routes/Migration").then((module) => ({ default: module.Migration })));
+const Settings = lazy(() => import("./routes/Settings").then((module) => ({ default: module.Settings })));
+const Validation = lazy(() => import("./routes/Validation").then((module) => ({ default: module.Validation })));
 
 const navItems = [
   { to: "/migration", labelKey: "nav.migration", icon: "migration" },
@@ -28,9 +30,7 @@ const LANGS = ["fr", "en"] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();
-  const location = useLocation();
   const currentLang = (i18n.language || "fr").slice(0, 2);
-  const showMigration = location.pathname === "/migration";
   const settingsQuery = useQuery<SettingsDto>({
     queryKey: ["settings"],
     queryFn: settingsApi.read,
@@ -80,16 +80,22 @@ export function App() {
         mode={demoEnabled ? "demo" : "normal"}
         isReady={settingsQuery.isSuccess}
       >
-        <div hidden={!showMigration}>
-          <Migration />
-        </div>
+        {settingsQuery.error ? <div role="alert" className="space-y-2 text-danger">
+          <p>{settingsQuery.error.message}</p>
+          <Button type="button" variant="secondary" onClick={() => void settingsQuery.refetch()}>
+            {t("common.retry")}
+          </Button>
+        </div> : null}
+        <Suspense fallback={<Spinner aria-label={t("common.loading")} />}>
         <Routes>
           <Route path="/" element={<Navigate to="/migration" replace />} />
+          <Route path="/migration/:docId?" element={<Migration />} />
           <Route path="/data" element={<Data />} />
           <Route path="/validation" element={<Validation />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/versioning" element={<Versioning />} />
+          <Route path="*" element={<Navigate to="/migration" replace />} />
         </Routes>
+        </Suspense>
       </DemoModeProvider>
     </AppShell>
   );
