@@ -122,6 +122,65 @@ func TestPDFCPUExtractImagesCreatesZIP(t *testing.T) {
 	}
 }
 
+func TestPDFCPUExtractImagesGroupsRepeatedImagesInZIP(t *testing.T) {
+	tempDir := t.TempDir()
+	imagePaths := []string{
+		filepath.Join(tempDir, "first.png"),
+		filepath.Join(tempDir, "second.png"),
+		filepath.Join(tempDir, "third.png"),
+		filepath.Join(tempDir, "fourth.png"),
+	}
+	writeTestPNGWithPixelColor(t, imagePaths[0], color.White)
+	writeTestPNGWithPixelColor(t, imagePaths[1], color.RGBA{R: 255, A: 255})
+	writeTestPNGWithPixelColor(t, imagePaths[2], color.RGBA{G: 255, A: 255})
+	writeTestPNGWithPixelColor(t, imagePaths[3], color.RGBA{B: 255, A: 255})
+
+	inputImages := []string{
+		imagePaths[0], imagePaths[0], imagePaths[0],
+		imagePaths[1], imagePaths[1], imagePaths[1],
+		imagePaths[2], imagePaths[2],
+		imagePaths[3],
+	}
+	input := filepath.Join(tempDir, "images.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	if err := NewPDFCPU().ImagesToPDF(context.Background(), inputImages, input); err != nil {
+		t.Fatalf("ImagesToPDF() error = %v", err)
+	}
+	if err := NewPDFCPU().ExtractImages(context.Background(), input, output); err != nil {
+		t.Fatalf("ExtractImages() error = %v", err)
+	}
+
+	archive, err := zip.OpenReader(output)
+	if err != nil {
+		t.Fatalf("open extracted images archive: %v", err)
+	}
+	defer archive.Close()
+
+	wantNames := []string{
+		"images_recurrentes/groupe-001/page-0001-image-0001.png",
+		"images_recurrentes/groupe-001/page-0002-image-0002.png",
+		"images_recurrentes/groupe-001/page-0003-image-0003.png",
+		"images_recurrentes/groupe-002/page-0004-image-0004.png",
+		"images_recurrentes/groupe-002/page-0005-image-0005.png",
+		"images_recurrentes/groupe-002/page-0006-image-0006.png",
+		"page-0007-image-0007.png",
+		"page-0008-image-0008.png",
+		"page-0009-image-0009.png",
+	}
+	if len(archive.File) != len(wantNames) {
+		t.Fatalf("archive contains %d files, want %d", len(archive.File), len(wantNames))
+	}
+	gotNames := make(map[string]bool, len(archive.File))
+	for _, file := range archive.File {
+		gotNames[file.Name] = true
+	}
+	for _, wantName := range wantNames {
+		if !gotNames[wantName] {
+			t.Errorf("archive is missing %q", wantName)
+		}
+	}
+}
+
 func TestPDFCPUExtractImagesRejectsPDFWithoutImages(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "empty.pdf")
@@ -236,13 +295,17 @@ func TestPDFCPUSplitDocumentReusesSourceContext(t *testing.T) {
 }
 
 func writeTestPNG(t *testing.T, filePath string) {
+	writeTestPNGWithPixelColor(t, filePath, color.White)
+}
+
+func writeTestPNGWithPixelColor(t *testing.T, filePath string, pixelColor color.Color) {
 	t.Helper()
 	file, err := os.Create(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pixel := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	pixel.Set(0, 0, color.White)
+	pixel.Set(0, 0, pixelColor)
 	if err := png.Encode(file, pixel); err != nil {
 		_ = file.Close()
 		t.Fatal(err)

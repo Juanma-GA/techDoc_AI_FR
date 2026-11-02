@@ -3,11 +3,14 @@ package pdf
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -46,7 +49,13 @@ func (p *PDFCPU) ImagesToPDF(ctx context.Context, inputFiles []string, output st
 	return ctx.Err()
 }
 
-func (p *PDFCPU) ExtractImages(ctx context.Context, input, output string) error {
+type extractedImageFile struct {
+	name        string
+	path        string
+	contentHash [sha256.Size]byte
+}
+
+func (p *PDFCPU) ExtractImages(ctx context.Context, input, output string) (returnErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -54,16 +63,20 @@ func (p *PDFCPU) ExtractImages(ctx context.Context, input, output string) error 
 	if err != nil {
 		return fmt.Errorf("pdfcpu extract images open input: %w", err)
 	}
-	archiveFile, err := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	stagingDir, err := os.MkdirTemp(filepath.Dir(output), ".pdf-toolkit-images-")
 	if err != nil {
 		return errors.Join(
-			fmt.Errorf("%w: create extracted image archive: %w", services.ErrOutputWrite, err),
+			fmt.Errorf("%w: create image staging directory: %w", services.ErrOutputWrite, err),
 			source.Close(),
 		)
 	}
+	defer func() {
+		if err := os.RemoveAll(stagingDir); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("remove image staging directory: %w", err))
+		}
+	}()
 
-	archive := zip.NewWriter(archiveFile)
-	imageCount := 0
+	var images []extractedImageFile
 	extractErr := api.ExtractImages(source, nil, func(image model.Image, _ bool, _ int) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -76,40 +89,116 @@ func (p *PDFCPU) ExtractImages(ctx context.Context, input, output string) error 
 			return fmt.Errorf("image object %d has unsupported file type %q", image.ObjNr, image.FileType)
 		}
 
-		entryName := fmt.Sprintf("page-%04d-image-%04d.%s", image.PageNr, imageCount+1, extension)
-		entry, err := archive.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
+		entryName := fmt.Sprintf("page-%04d-image-%04d.%s", image.PageNr, len(images)+1, extension)
+		stagedPath := filepath.Join(stagingDir, entryName)
+		stagedFile, err := os.OpenFile(stagedPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err != nil {
-			return fmt.Errorf("%w: create image archive entry: %w", services.ErrOutputWrite, err)
+			return fmt.Errorf("%w: create staged image: %w", services.ErrOutputWrite, err)
 		}
-		if _, err := io.Copy(entry, image.Reader); err != nil {
-			return fmt.Errorf("%w: write image archive entry: %w", services.ErrOutputWrite, err)
+		contentHasher := sha256.New()
+		_, copyErr := io.Copy(io.MultiWriter(stagedFile, contentHasher), image.Reader)
+		closeErr := stagedFile.Close()
+		if copyErr != nil || closeErr != nil {
+			return fmt.Errorf(
+				"%w: write staged image: %w",
+				services.ErrOutputWrite,
+				errors.Join(copyErr, closeErr),
+			)
 		}
-		imageCount++
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var contentHash [sha256.Size]byte
+		copy(contentHash[:], contentHasher.Sum(nil))
+		images = append(images, extractedImageFile{
+			name:        entryName,
+			path:        stagedPath,
+			contentHash: contentHash,
+		})
 		return nil
 	}, model.NewDefaultConfiguration())
 
 	sourceCloseErr := source.Close()
+	operationErr := errors.Join(extractErr, sourceCloseErr, ctx.Err())
+	if operationErr != nil {
+		if errors.Is(operationErr, context.Canceled) || errors.Is(operationErr, context.DeadlineExceeded) {
+			return operationErr
+		}
+		if errors.Is(operationErr, services.ErrOutputWrite) {
+			return fmt.Errorf("%w: stage extracted images: %w", services.ErrOutputWrite, operationErr)
+		}
+		return fmt.Errorf("%w: pdfcpu extract images: %w", services.ErrInvalidPDF, operationErr)
+	}
+	if len(images) == 0 {
+		return services.ErrNoImages
+	}
+
+	archiveFile, err := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("%w: create extracted image archive: %w", services.ErrOutputWrite, err)
+	}
+	archive := zip.NewWriter(archiveFile)
+	archiveErr := writeExtractedImageArchive(ctx, archive, images)
 	archiveCloseErr := archive.Close()
 	outputCloseErr := archiveFile.Close()
-	operationErr := errors.Join(extractErr, sourceCloseErr, archiveCloseErr, outputCloseErr, ctx.Err())
+	operationErr = errors.Join(archiveErr, archiveCloseErr, outputCloseErr, ctx.Err())
 	if operationErr != nil {
 		removeErr := removeExtractImagesOutput(output)
 		if errors.Is(operationErr, context.Canceled) || errors.Is(operationErr, context.DeadlineExceeded) {
 			return errors.Join(operationErr, removeErr)
 		}
-		if errors.Is(operationErr, services.ErrOutputWrite) || archiveCloseErr != nil || outputCloseErr != nil {
-			return errors.Join(
-				fmt.Errorf("%w: write extracted image archive: %w", services.ErrOutputWrite, operationErr),
-				removeErr,
-			)
-		}
 		return errors.Join(
-			fmt.Errorf("%w: pdfcpu extract images: %w", services.ErrInvalidPDF, operationErr),
+			fmt.Errorf("%w: write extracted image archive: %w", services.ErrOutputWrite, operationErr),
 			removeErr,
 		)
 	}
-	if imageCount == 0 {
-		return errors.Join(services.ErrNoImages, removeExtractImagesOutput(output))
+	return nil
+}
+
+func writeExtractedImageArchive(
+	ctx context.Context,
+	archive *zip.Writer,
+	images []extractedImageFile,
+) error {
+	occurrences := make(map[[sha256.Size]byte]int, len(images))
+	for _, image := range images {
+		occurrences[image.contentHash]++
+	}
+
+	folders := make(map[[sha256.Size]byte]string)
+	groupNumber := 0
+	for _, image := range images {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		entryName := image.name
+		if occurrences[image.contentHash] > 2 {
+			folder, ok := folders[image.contentHash]
+			if !ok {
+				groupNumber++
+				folder = fmt.Sprintf("images_recurrentes/groupe-%03d", groupNumber)
+				folders[image.contentHash] = folder
+			}
+			entryName = path.Join(folder, image.name)
+		}
+
+		entry, err := archive.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
+		if err != nil {
+			return fmt.Errorf("%w: create image archive entry: %w", services.ErrOutputWrite, err)
+		}
+		stagedFile, err := os.Open(image.path)
+		if err != nil {
+			return fmt.Errorf("%w: open staged image: %w", services.ErrOutputWrite, err)
+		}
+		_, copyErr := io.Copy(entry, stagedFile)
+		closeErr := stagedFile.Close()
+		if copyErr != nil || closeErr != nil {
+			return fmt.Errorf(
+				"%w: write image archive entry: %w",
+				services.ErrOutputWrite,
+				errors.Join(copyErr, closeErr),
+			)
+		}
 	}
 	return nil
 }

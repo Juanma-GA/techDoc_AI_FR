@@ -21,7 +21,7 @@
     "downloadSuccess": "L’archive {{fileName}} a été téléchargée.",
     "downloadFailed": "Le téléchargement de l’archive a échoué.",
     "galleryTitle": "Vignettes des images ({{count}})",
-    "galleryDescription": "Cliquez sur une vignette pour télécharger cette image, ou choisissez le ZIP pour tout récupérer.",
+    "galleryDescription": "Cliquez sur une vignette pour télécharger cette image, ou choisissez le ZIP pour tout récupérer. Les images identiques présentes au moins 3 fois sont regroupées dans un dossier ; toutes les occurrences sont conservées.",
     "repeatedTitle": "Éléments récurrents (logos/icônes)",
     "repeatedDescription": "Les fichiers identiques sont regroupés et affichés une seule fois.",
     "repeatedOccurrences": "{{count}} occurrences identiques",

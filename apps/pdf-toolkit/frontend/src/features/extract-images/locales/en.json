@@ -21,7 +21,7 @@
     "downloadSuccess": "Downloaded the {{fileName}} archive.",
     "downloadFailed": "The archive download failed.",
     "galleryTitle": "Image previews ({{count}})",
-    "galleryDescription": "Click a thumbnail to download that image, or choose the ZIP to download them all.",
+    "galleryDescription": "Click a thumbnail to download that image, or choose the ZIP to download them all. Identical images found at least 3 times are grouped in a folder; all occurrences are kept.",
     "repeatedTitle": "Repeated items (logos/icons)",
     "repeatedDescription": "Identical files are grouped and shown only once.",
     "repeatedOccurrences": "{{count}} identical occurrences",
