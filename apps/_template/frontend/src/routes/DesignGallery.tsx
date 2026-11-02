@@ -15,7 +15,7 @@ import {
   KpiCard,
   LlmSettingsPanel,
   PageHeader,
-  Select,
+  SelectMenu,
   Skeleton,
   Switch,
   Table,
@@ -78,6 +78,7 @@ export function DesignGallery() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(true);
   const [selected, setSelected] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("medium");
   const [demoMode, setDemoMode] = useState<DemoMode>("normal");
   const [llmValue, setLlmValue] = useState<LlmSettingsValue>({
     llmEnabled: true,
@@ -163,14 +164,19 @@ export function DesignGallery() {
           <FormField label={t("design.name")} hint={t("design.nameHint")} required>
             <Input defaultValue="AI4TECHDOC" />
           </FormField>
-          <FormField label={t("design.model")}>
-            <Select
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-fg">{t("design.model")}</span>
+            <SelectMenu
+              id="design-model"
+              label={t("design.model")}
+              value={selectedModel}
               options={[
                 { value: "medium", label: "mistral-medium-latest" },
                 { value: "small", label: "mistral-small-latest" },
               ]}
+              onValueChange={setSelectedModel}
             />
-          </FormField>
+          </div>
           <FormField label={t("design.email")} error={t("design.emailError")}>
             <Input defaultValue="not-an-email" />
           </FormField>

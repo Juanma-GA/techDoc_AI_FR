@@ -23,8 +23,17 @@ for (const theme of THEMES) {
           },
           [theme, language] as const,
         );
+        await page.route("**/api/v1/settings", (route) =>
+          route.fulfill({ json: { demo_enabled: false } }),
+        );
         await page.goto("/design");
         await expect(page.getByTestId("design-gallery")).toBeVisible();
+        const modelPicker = page.locator("#design-model");
+        await modelPicker.click();
+        const modelListbox = page.locator("#design-model-listbox");
+        await expect(modelListbox).toBeVisible();
+        await modelListbox.getByRole("option", { name: "mistral-small-latest" }).click();
+        await expect(modelPicker).toContainText("mistral-small-latest");
 
         const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
         expect(isDark).toBe(theme === "dark");
