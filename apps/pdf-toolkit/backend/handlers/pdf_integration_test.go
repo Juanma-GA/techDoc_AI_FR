@@ -57,6 +57,11 @@ func (p *routeProcessor) Compress(_ context.Context, input, output string) error
 	return writeRoutePDF(output)
 }
 
+func (p *routeProcessor) Clean(_ context.Context, input, output string) error {
+	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
 func (p *routeProcessor) Protect(
 	_ context.Context,
 	_ string,
@@ -175,6 +180,28 @@ func TestCompressRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=compressed.pdf" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if response.Body.String() != "%PDF-1.7\nprocessed" {
+		t.Fatalf("response body = %q", response.Body.String())
+	}
+	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary input still exists after response: %v", err)
+	}
+}
+
+func TestCleanRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
+	processor := &routeProcessor{}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/clean", "file", "source.pdf", "%PDF-1.7\ninput", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=cleaned.pdf" {
 		t.Fatalf("Content-Disposition = %q", got)
 	}
 	if response.Body.String() != "%PDF-1.7\nprocessed" {

@@ -18,6 +18,7 @@ type PDFProcessor interface {
 	Merge(ctx context.Context, inputFiles []string, output string) error
 	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
 	Compress(ctx context.Context, input, output string) error
+	Clean(ctx context.Context, input, output string) error
 	Protect(ctx context.Context, input, output string, options PDFProtectionOptions) error
 	ChangeUserPassword(
 		ctx context.Context,
@@ -95,6 +96,24 @@ func (s *PDFService) Compress(ctx context.Context, input, output string) error {
 			return err
 		}
 		return fmt.Errorf("%w: compress PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) Clean(ctx context.Context, input, output string) error {
+	if input == "" || output == "" {
+		return fmt.Errorf("%w: input and output paths are required", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Clean(ctx, input, output); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: clean PDF: %w", ErrInvalidPDF, err)
 	}
 	return nil
 }

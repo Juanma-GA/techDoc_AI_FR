@@ -50,6 +50,8 @@ type fakeProcessor struct {
 	rotated      []int
 	rotation     int
 	compressCall bool
+	cleanCall    bool
+	cleanErr     error
 }
 
 func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) error {
@@ -60,6 +62,10 @@ func (p *fakeProcessor) ImagesToPDF(context.Context, []string, string) error { r
 func (p *fakeProcessor) Compress(context.Context, string, string) error {
 	p.compressCall = true
 	return nil
+}
+func (p *fakeProcessor) Clean(context.Context, string, string) error {
+	p.cleanCall = true
+	return p.cleanErr
 }
 func (p *fakeProcessor) Protect(context.Context, string, string, PDFProtectionOptions) error {
 	return nil
@@ -102,6 +108,31 @@ func TestDeleteCannotRemoveEveryPage(t *testing.T) {
 	err := service.Delete(context.Background(), "input.pdf", "output.pdf", "1-3")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("Delete() error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestCleanValidatesPathsAndDelegates(t *testing.T) {
+	processor := &fakeProcessor{}
+	service := NewPDFService(processor)
+
+	if err := service.Clean(context.Background(), "", "output.pdf"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("Clean() with empty input error = %v, want ErrInvalidInput", err)
+	}
+	if err := service.Clean(context.Background(), "input.pdf", "output.pdf"); err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+	if !processor.cleanCall {
+		t.Fatal("Clean() did not call the PDF processor")
+	}
+}
+
+func TestCleanRejectsInvalidPDF(t *testing.T) {
+	processor := &fakeProcessor{cleanErr: errors.New("invalid input")}
+	service := NewPDFService(processor)
+
+	err := service.Clean(context.Background(), "input.pdf", "output.pdf")
+	if !errors.Is(err, ErrInvalidPDF) {
+		t.Fatalf("Clean() error = %v, want ErrInvalidPDF", err)
 	}
 }
 

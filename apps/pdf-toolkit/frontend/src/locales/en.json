@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "PDF tools for processing documents locally.",
     "documentTitle": "PDF Toolkit — local PDF tools",
-    "metaDescription": "Merge, convert, extract, delete, reorder, compress, and rotate PDFs locally.",
+    "metaDescription": "Merge, convert, clean, extract, delete, reorder, compress, and rotate PDFs locally.",
     "local": "Local processing",
     "privacy": "Temporary files are deleted after each operation."
   },
@@ -59,6 +59,11 @@
       "tab": "Compress",
       "title": "Compress a PDF",
       "description": "Optimize your PDF structure without reducing the quality of its content."
+    },
+    "clean": {
+      "tab": "Clean PDF",
+      "title": "Clean a PDF",
+      "description": "Remove metadata and annotations from your PDF."
     },
     "protect": {
       "tab": "Protect PDF",
@@ -146,6 +151,18 @@
     "outputDescription": "PDF optimized without quality loss",
     "action": "Compress",
     "working": "Compressing…",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "clean": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "One document per operation.",
+    "stepOutput": "Create cleaned PDF",
+    "stepOutputDescription": "Metadata and all annotations will be removed.",
+    "privacy": "The file is sent to the local server for processing, then temporary files are deleted.",
+    "outputDescription": "Cleaned PDF",
+    "scopeWarning": "Attachments and scripts are not removed. An existing digital signature may be invalidated.",
+    "action": "Clean and download",
+    "working": "Cleaning…",
     "success": "{{fileName}} has been downloaded."
   },
   "imagesToPdf": {
@@ -290,6 +307,7 @@
   "errors": {
     "mergeFailed": "Merging failed.",
     "compressionFailed": "Compression failed.",
+    "cleanFailed": "Cleaning the PDF failed.",
     "pageOperationFailed": "Page processing failed.",
     "reorderFailed": "Reordering failed.",
     "rotationFailed": "Rotation failed.",

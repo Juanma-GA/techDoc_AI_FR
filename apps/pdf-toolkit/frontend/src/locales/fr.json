@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "Outils PDF pour traiter vos documents localement.",
     "documentTitle": "PDF Toolkit — outils PDF locaux",
-    "metaDescription": "Fusionnez, convertissez, extrayez, supprimez, réorganisez, compressez et faites pivoter des PDF localement.",
+    "metaDescription": "Fusionnez, convertissez, nettoyez, extrayez, supprimez, réorganisez, compressez et faites pivoter des PDF localement.",
     "local": "Traitement local",
     "privacy": "Vos fichiers temporaires sont supprimés après chaque opération."
   },
@@ -59,6 +59,11 @@
       "tab": "Compresser",
       "title": "Compresser un PDF",
       "description": "Optimisez la structure de votre PDF sans dégrader la qualité de son contenu."
+    },
+    "clean": {
+      "tab": "Nettoyer PDF",
+      "title": "Nettoyer un PDF",
+      "description": "Supprimez les métadonnées et les annotations de votre PDF."
     },
     "protect": {
       "tab": "Protéger PDF",
@@ -147,6 +152,18 @@
     "action": "Compresser",
     "working": "Compression en cours…",
     "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "clean": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Un seul document par opération.",
+    "stepOutput": "Créer le PDF nettoyé",
+    "stepOutputDescription": "Les métadonnées et toutes les annotations seront supprimées.",
+    "privacy": "Le fichier est transmis au serveur local pour être traité, puis les temporaires sont supprimés.",
+    "outputDescription": "PDF nettoyé",
+    "scopeWarning": "Les pièces jointes et scripts ne sont pas supprimés. Une signature numérique existante peut être invalidée.",
+    "action": "Nettoyer et télécharger",
+    "working": "Nettoyage en cours…",
+    "success": "Le fichier nettoyé {{fileName}} a été téléchargé."
   },
   "imagesToPdf": {
     "stepFiles": "Ajouter les images",
@@ -290,6 +307,7 @@
   "errors": {
     "mergeFailed": "La fusion a échoué.",
     "compressionFailed": "La compression a échoué.",
+    "cleanFailed": "Le nettoyage du PDF a échoué.",
     "pageOperationFailed": "Le traitement des pages a échoué.",
     "reorderFailed": "La réorganisation a échoué.",
     "rotationFailed": "La rotation a échoué.",

@@ -51,6 +51,58 @@ func (p *PDFCPU) Compress(ctx context.Context, input, output string) error {
 	return ctx.Err()
 }
 
+func (p *PDFCPU) Clean(ctx context.Context, input, output string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	file, err := os.Open(input)
+	if err != nil {
+		return fmt.Errorf("pdfcpu clean open input: %w", err)
+	}
+	conf := model.NewDefaultConfiguration()
+	conf.Cmd = model.REMOVEANNOTATIONS
+	document, err := api.ReadValidateAndOptimize(file, conf)
+	closeErr := file.Close()
+	if err != nil {
+		return errors.Join(fmt.Errorf("pdfcpu clean read input: %w", err), closeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("pdfcpu clean close input: %w", closeErr)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := pdfcpu.RemoveAnnotations(document, nil, nil, nil, false); err != nil {
+		return fmt.Errorf("pdfcpu clean remove annotations: %w", err)
+	}
+	if _, err := pdfcpu.PropertiesRemove(document, nil); err != nil {
+		return fmt.Errorf("pdfcpu clean remove metadata: %w", err)
+	}
+	if document.Info != nil {
+		if err := document.DeleteObjectGraph(*document.Info); err != nil {
+			return fmt.Errorf("pdfcpu clean remove document info object: %w", err)
+		}
+		document.Info = nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	file, err = os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("%w: pdfcpu clean create output: %w", services.ErrOutputWrite, err)
+	}
+	writeErr := api.WriteContext(document, file)
+	closeErr = file.Close()
+	if err := errors.Join(writeErr, closeErr, ctx.Err()); err != nil {
+		return errors.Join(
+			fmt.Errorf("%w: pdfcpu clean write output: %w", services.ErrOutputWrite, err),
+			removeCleanOutput(output),
+		)
+	}
+	return nil
+}
+
 func (p *PDFCPU) PageCount(ctx context.Context, input string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -139,6 +191,13 @@ func (d *pdfCPUSplitDocument) Close() error {
 func removeSplitOutput(output string) error {
 	if err := os.Remove(output); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove incomplete split output: %w", err)
+	}
+	return nil
+}
+
+func removeCleanOutput(output string) error {
+	if err := os.Remove(output); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove incomplete cleaned PDF: %w", err)
 	}
 	return nil
 }

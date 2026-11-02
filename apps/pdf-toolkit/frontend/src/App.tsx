@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
 import {
   Combine,
+  Eraser,
   FilePlus2,
   Grip,
   Image,
@@ -18,6 +19,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { CompressTool } from "./features/compress/CompressTool";
+import { CleanTool } from "./features/clean/CleanTool";
 import {
   AppShell,
   DemoModeBadge,
@@ -54,6 +56,7 @@ const tools = [
   { id: "delete", icon: Trash2 },
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
+  { id: "clean", icon: Eraser },
   { id: "protect", icon: LockKeyhole },
   { id: "rotate", icon: RotateCw },
   { id: "signature", icon: PenTool },
@@ -264,6 +267,7 @@ export function App() {
                 </Suspense>
               ) : null}
               {activeTool === "compress" ? <CompressTool /> : null}
+              {activeTool === "clean" ? <CleanTool /> : null}
               {activeTool === "protect" ? <ProtectTool /> : null}
               {activeTool === "rotate" ? <RotateTool /> : null}
               {activeTool === "signature" ? <SignatureTool /> : null}

@@ -24,6 +24,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 
 - Fusionner plusieurs PDF dans `merged.pdf`.
 - Compresser un PDF dans `compressed.pdf` par optimisation sans perte de qualité (le gain dépend du document).
+- Nettoyer un PDF dans `cleaned.pdf` en supprimant ses métadonnées Info/XMP et toutes ses annotations. Les pièces jointes et scripts ne sont pas supprimés ; la réécriture peut invalider une signature numérique.
 - Assembler des images PNG ou JPEG dans l'ordre choisi vers `images.pdf`.
 - Exporter toutes les pages d'un PDF en PNG ou JPEG dans `pdf-images.zip`, directement dans le navigateur.
 - Extraire des pages avec des sélections comme `1`, `1-5`, `1,3,7` ou `2-4,8` vers `extract.pdf`.
@@ -39,7 +40,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Renommer les fichiers exportés (et le dossier/ZIP de découpage) depuis chaque onglet. Au lancement de l'export, le sélecteur « Enregistrer sous » permet de choisir le nom et l'emplacement ; si le navigateur ne le prend pas en charge, le téléchargement standard est utilisé.
 - En mode bureau Tauri, les PDF intermédiaires du découpage apparaissent dans le dossier du ZIP pendant le traitement, puis sont supprimés après création de l’archive ou en cas d’échec. Le ZIP choisi reste le seul résultat.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
-- Shell et thème visuel repris de `apps/_template` et `packages/ui` : treize onglets, modes clair/sombre et interface française/anglaise.
+- Shell et thème visuel repris de `apps/_template` et `packages/ui` : quatorze onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
