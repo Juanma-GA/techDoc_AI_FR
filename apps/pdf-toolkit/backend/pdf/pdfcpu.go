@@ -1,9 +1,11 @@
 package pdf
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -42,6 +44,90 @@ func (p *PDFCPU) ImagesToPDF(ctx context.Context, inputFiles []string, output st
 		return fmt.Errorf("pdfcpu import images: %w", err)
 	}
 	return ctx.Err()
+}
+
+func (p *PDFCPU) ExtractImages(ctx context.Context, input, output string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	source, err := os.Open(input)
+	if err != nil {
+		return fmt.Errorf("pdfcpu extract images open input: %w", err)
+	}
+	archiveFile, err := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return errors.Join(
+			fmt.Errorf("%w: create extracted image archive: %w", services.ErrOutputWrite, err),
+			source.Close(),
+		)
+	}
+
+	archive := zip.NewWriter(archiveFile)
+	imageCount := 0
+	extractErr := api.ExtractImages(source, nil, func(image model.Image, _ bool, _ int) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if image.Reader == nil {
+			return fmt.Errorf("image object %d has no data", image.ObjNr)
+		}
+		extension, ok := extractedImageExtension(image.FileType)
+		if !ok {
+			return fmt.Errorf("image object %d has unsupported file type %q", image.ObjNr, image.FileType)
+		}
+
+		entryName := fmt.Sprintf("page-%04d-image-%04d.%s", image.PageNr, imageCount+1, extension)
+		entry, err := archive.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
+		if err != nil {
+			return fmt.Errorf("%w: create image archive entry: %w", services.ErrOutputWrite, err)
+		}
+		if _, err := io.Copy(entry, image.Reader); err != nil {
+			return fmt.Errorf("%w: write image archive entry: %w", services.ErrOutputWrite, err)
+		}
+		imageCount++
+		return nil
+	}, model.NewDefaultConfiguration())
+
+	sourceCloseErr := source.Close()
+	archiveCloseErr := archive.Close()
+	outputCloseErr := archiveFile.Close()
+	operationErr := errors.Join(extractErr, sourceCloseErr, archiveCloseErr, outputCloseErr, ctx.Err())
+	if operationErr != nil {
+		removeErr := removeExtractImagesOutput(output)
+		if errors.Is(operationErr, context.Canceled) || errors.Is(operationErr, context.DeadlineExceeded) {
+			return errors.Join(operationErr, removeErr)
+		}
+		if errors.Is(operationErr, services.ErrOutputWrite) || archiveCloseErr != nil || outputCloseErr != nil {
+			return errors.Join(
+				fmt.Errorf("%w: write extracted image archive: %w", services.ErrOutputWrite, operationErr),
+				removeErr,
+			)
+		}
+		return errors.Join(
+			fmt.Errorf("%w: pdfcpu extract images: %w", services.ErrInvalidPDF, operationErr),
+			removeErr,
+		)
+	}
+	if imageCount == 0 {
+		return errors.Join(services.ErrNoImages, removeExtractImagesOutput(output))
+	}
+	return nil
+}
+
+func extractedImageExtension(fileType string) (string, bool) {
+	switch fileType {
+	case "jpg", "png", "tif", "jpx", "jbig2":
+		return fileType, true
+	default:
+		return "", false
+	}
+}
+
+func removeExtractImagesOutput(output string) error {
+	if err := os.Remove(output); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove incomplete image archive: %w", err)
+	}
+	return nil
 }
 
 func (p *PDFCPU) Compress(ctx context.Context, input, output string) error {

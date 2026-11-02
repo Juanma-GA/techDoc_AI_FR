@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+
+	"pdf-toolkit/services"
 )
 
 func TestPDFCPUOperations(t *testing.T) {
@@ -82,6 +85,58 @@ func TestPDFCPUOperations(t *testing.T) {
 		t.Fatalf("Rotate() with empty selection error = %v", err)
 	}
 	assertPageCount(t, processor, rotatedAll, 3)
+}
+
+func TestPDFCPUExtractImagesCreatesZIP(t *testing.T) {
+	tempDir := t.TempDir()
+	imagePath := filepath.Join(tempDir, "source.png")
+	input := filepath.Join(tempDir, "images.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	writeTestPNG(t, imagePath)
+	if err := NewPDFCPU().ImagesToPDF(context.Background(), []string{imagePath}, input); err != nil {
+		t.Fatalf("ImagesToPDF() error = %v", err)
+	}
+
+	if err := NewPDFCPU().ExtractImages(context.Background(), input, output); err != nil {
+		t.Fatalf("ExtractImages() error = %v", err)
+	}
+	archive, err := zip.OpenReader(output)
+	if err != nil {
+		t.Fatalf("open extracted images archive: %v", err)
+	}
+	defer archive.Close()
+	if len(archive.File) != 1 || archive.File[0].Name != "page-0001-image-0001.png" {
+		t.Fatalf("archive files = %+v, want one PNG from page 1", archive.File)
+	}
+	extracted, err := archive.File[0].Open()
+	if err != nil {
+		t.Fatalf("open extracted image: %v", err)
+	}
+	config, decodeErr := png.DecodeConfig(extracted)
+	closeErr := extracted.Close()
+	if decodeErr != nil || closeErr != nil {
+		t.Fatalf("decode extracted image: %v", errors.Join(decodeErr, closeErr))
+	}
+	if config.Width != 2 || config.Height != 2 {
+		t.Fatalf("extracted image size = %dx%d, want 2x2", config.Width, config.Height)
+	}
+}
+
+func TestPDFCPUExtractImagesRejectsPDFWithoutImages(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "empty.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	if err := os.WriteFile(input, testPDF(t, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := NewPDFCPU().ExtractImages(context.Background(), input, output)
+	if !errors.Is(err, services.ErrNoImages) {
+		t.Fatalf("ExtractImages() error = %v, want ErrNoImages", err)
+	}
+	if _, statErr := os.Stat(output); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("empty image archive remains after extraction: %v", statErr)
+	}
 }
 
 func TestPDFCPUCleanRemovesMetadataAndAnnotations(t *testing.T) {

@@ -56,6 +56,9 @@ type fakeProcessor struct {
 	metadataCall bool
 	metadataErr  error
 	comments     []PDFComment
+	imageInput   string
+	imageOutput  string
+	imageErr     error
 }
 
 func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) error {
@@ -63,6 +66,11 @@ func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) erro
 	return nil
 }
 func (p *fakeProcessor) ImagesToPDF(context.Context, []string, string) error { return nil }
+func (p *fakeProcessor) ExtractImages(_ context.Context, input, output string) error {
+	p.imageInput = input
+	p.imageOutput = output
+	return p.imageErr
+}
 func (p *fakeProcessor) Compress(context.Context, string, string) error {
 	p.compressCall = true
 	return nil

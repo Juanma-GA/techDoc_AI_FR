@@ -1,0 +1,31 @@
+{
+  "tools": {
+    "extractImages": {
+      "tab": "Extraction images",
+      "title": "Extraire les images d’un PDF",
+      "description": "Récupérez les images intégrées et téléchargez-les séparément."
+    }
+  },
+  "extractImages": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Les images intégrées seront extraites sans convertir les pages.",
+    "stepOutput": "Extraire et prévisualiser",
+    "stepOutputDescription": "Les images sont affichées avant tout téléchargement. Aucun ZIP n’est téléchargé automatiquement.",
+    "outputDescription": "Nom de l’archive ZIP facultative",
+    "action": "Extraire et afficher les images",
+    "working": "Extraction des images…",
+    "extractedSuccess": "Images extraites. Téléchargez-les séparément ou choisissez l’archive ZIP.",
+    "downloadArchive": "Télécharger l’archive ZIP",
+    "downloadingArchive": "Préparation du téléchargement…",
+    "downloadSuccess": "L’archive {{fileName}} a été téléchargée.",
+    "downloadFailed": "Le téléchargement de l’archive a échoué.",
+    "galleryTitle": "Vignettes des images ({{count}})",
+    "galleryDescription": "Cliquez sur une vignette pour télécharger cette image, ou choisissez le ZIP pour tout récupérer.",
+    "downloadImage": "Télécharger {{name}}",
+    "previewUnavailable": "Aperçu indisponible pour ce format",
+    "noImagesFound": "Aucune image intégrée n’a été trouvée dans ce PDF.",
+    "failed": "L’extraction des images a échoué.",
+    "invalidArchive": "Le serveur n’a pas renvoyé une archive d’images valide.",
+    "emptyArchive": "L’archive d’images reçue est vide."
+  }
+}

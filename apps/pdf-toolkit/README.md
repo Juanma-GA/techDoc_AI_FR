@@ -28,6 +28,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Modifier les propriétés titre, auteur, sujet et mots-clés dans l’onglet Métadonnées vers `metadata.pdf`. Les valeurs existantes sont préremplies avec PDF.js ; vider un champ supprime la propriété. Les pages et annotations sont conservées. Les anciennes métadonnées XMP du document sont retirées pour éviter des valeurs contradictoires ; la conformité PDF/A peut être affectée et une signature numérique invalidée. Les PDF nécessitant un mot de passe ne sont pas pris en charge dans cet onglet.
 - Assembler des images PNG ou JPEG dans l'ordre choisi vers `images.pdf`.
 - Exporter toutes les pages d'un PDF en PNG ou JPEG dans `pdf-images.zip`, directement dans le navigateur.
+- Extraire toutes les images intégrées d'un PDF et les prévisualiser avant tout téléchargement ; chaque vignette télécharge une image, tandis que le ZIP complet est facultatif.
 - Extraire des pages avec des sélections comme `1`, `1-5`, `1,3,7` ou `2-4,8` vers `extract.pdf`.
 - Découper un PDF en plusieurs documents téléchargés dans un dossier ZIP. Découpage simple : un document toutes les N pages ou par plages personnalisées (`1-4 ; 5-8 ; 9-12`, un PDF par plage ; retour à la ligne également accepté, virgules pour réunir des pages dans un même PDF), fichiers numérotés `<nom>_01.pdf`, `<nom>_02.pdf`… Le panneau repliable « Découpage avancé » (« Advanced split ») regroupe le découpage par valeur : tableau pages / valeur, modèle de nom, collage `pages;valeur` depuis Excel et détection automatique (relancée à l'export si la zone ou les réglages ont changé) : l'utilisateur trace une zone sur l'aperçu (ou la saisit en %, décimales libres), ou cherche sur la page entière, et choisit le type de valeur (texte, nombre, code/référence, expression régulière) ; un nouveau document commence à chaque changement de valeur, ou les pages de même valeur sont regroupées. Les noms suivent un modèle paramétrable avec les balises `{valeur}`, `{n}`, `{pages}` et `{nom}` (ex. `DOC_{valeur}_rev1`), nettoyés et dédoublonnés. La lecture de zone se fait dans le navigateur et exige un PDF avec couche texte (pas d'OCR pour les scans). La progression affiche le nombre de PDF extraits puis ajoutés au ZIP.
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
@@ -49,7 +50,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 ```text
 frontend/
   src/App.tsx
-  src/features/{merge,compress,clean,metadata,protect,extract,split,insert,delete,reorder,rotate,comments,signature,images-to-pdf,pdf-to-images}
+  src/features/{merge,compress,clean,metadata,protect,extract,split,insert,delete,reorder,rotate,comments,signature,images-to-pdf,pdf-to-images,extract-images}
   src/shared
   src/locales/{fr,en}.json
 backend/
@@ -181,13 +182,14 @@ go build -o pdf-toolkit.exe .\cmd\pdf-toolkit
 
 ## API locale
 
-Toutes les réponses de traitement réussies sont des téléchargements `application/pdf`.
+Les réponses de traitement sont des téléchargements `application/pdf`, à l'exception de l'extraction d'images qui renvoie une archive `application/zip`.
 
 | Méthode | Route | Formulaire | Nom de sortie |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | — | — |
 | `POST` | `/api/v1/merge` | `files` répété, au moins 2 PDF | `merged.pdf` |
 | `POST` | `/api/v1/images-to-pdf` | `images` répété, PNG ou JPEG | `images.pdf` |
+| `POST` | `/api/v1/extract-images` | `file` | `extracted-images.zip` contenant les images intégrées séparément |
 | `POST` | `/api/v1/compress` | `file` | `compressed.pdf` |
 | `POST` | `/api/v1/extract` | `file`, `pages` | `extract.pdf` |
 | `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 5000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |

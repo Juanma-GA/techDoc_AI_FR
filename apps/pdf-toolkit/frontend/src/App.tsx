@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
 import {
   Combine,
+  Download,
   Eraser,
   FilePenLine,
   FilePlus2,
@@ -36,6 +37,7 @@ import {
 } from "@internal/ui";
 import { DeleteTool } from "./features/delete/DeleteTool";
 import { ExtractTool } from "./features/extract/ExtractTool";
+import { ExtractImagesTool } from "./features/extract-images/ExtractImagesTool";
 import { MergeTool } from "./features/merge/MergeTool";
 import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
 import { InsertTool } from "./features/insert/InsertTool";
@@ -58,6 +60,7 @@ const MetadataTool = lazy(() =>
 const tools = [
   { id: "merge", icon: Combine },
   { id: "extract", icon: Scissors },
+  { id: "extractImages", icon: Download },
   { id: "split", icon: Split },
   { id: "insert", icon: FilePlus2 },
   { id: "delete", icon: Trash2 },
@@ -260,6 +263,7 @@ export function App() {
             >
               {activeTool === "merge" ? <MergeTool /> : null}
               {activeTool === "extract" ? <ExtractTool /> : null}
+              {activeTool === "extractImages" ? <ExtractImagesTool /> : null}
               {activeTool === "split" ? <SplitTool /> : null}
               {activeTool === "insert" ? <InsertTool /> : null}
               {activeTool === "delete" ? <DeleteTool /> : null}

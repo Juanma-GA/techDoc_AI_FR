@@ -11,12 +11,14 @@ import (
 var (
 	ErrInvalidInput = errors.New("invalid PDF operation input")
 	ErrInvalidPDF   = errors.New("invalid or unsupported PDF")
+	ErrNoImages     = errors.New("PDF contains no extractable images")
 	ErrOutputWrite  = errors.New("PDF output could not be written")
 )
 
 type PDFProcessor interface {
 	Merge(ctx context.Context, inputFiles []string, output string) error
 	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
+	ExtractImages(ctx context.Context, input, output string) error
 	Compress(ctx context.Context, input, output string) error
 	Clean(ctx context.Context, input, output string) error
 	EditMetadata(ctx context.Context, input, output string, metadata PDFMetadata) error
@@ -183,6 +185,25 @@ func (s *PDFService) ImagesToPDF(ctx context.Context, inputFiles []string, outpu
 			return err
 		}
 		return fmt.Errorf("%w: convert images to PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) ExtractImages(ctx context.Context, input, output string) error {
+	if input == "" || output == "" {
+		return fmt.Errorf("%w: input and output paths are required", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.ExtractImages(ctx, input, output); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrNoImages) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: extract embedded images: %w", ErrInvalidPDF, err)
 	}
 	return nil
 }
