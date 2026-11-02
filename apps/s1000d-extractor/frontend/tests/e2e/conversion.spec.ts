@@ -34,14 +34,23 @@ async function syntheticConversion(page: Page, generated = false, unresolvedType
     dms: [{ dm_id: "synthetic-dm", title: "Synthetic section", dm_type: "descriptive", node_count: 1,
       has_xml: generated, xsd_valid: true, missing_fields: [], xsd_violations: [], brex_violations: [] }],
     ...(unresolvedTypes ? {
-      dmrl_dm_count: 1,
-      dmrl: [{
-        index: 0, arbo: "1", dmc: "DMC-SYNTHETIC", title: "Synthetic section",
-        dm_type: "", dmrl_type: "", info_code: "999", info_code_schema: "unknown",
-        info_code_dm_type: "", type_conflict: true, type_issue: "unsupported_schema",
-        icn: "", is_pm_title: false, matched: true, match_rank: "exact", page: 1,
-        matched_text: "Synthetic section",
-      }],
+      dmrl_dm_count: 2,
+      dmrl: [
+        {
+          index: 0, arbo: "1", dmc: "DMC-SYNTHETIC", title: "Synthetic section",
+          dm_type: "", dmrl_type: "", info_code: "999", info_code_schema: "unknown",
+          info_code_dm_type: "", type_conflict: true, type_issue: "unsupported_schema",
+          icn: "", is_pm_title: false, matched: true, match_rank: "exact", page: 1,
+          matched_text: "Synthetic section",
+        },
+        {
+          index: 1, arbo: "2", dmc: "DMC-SYNTHETIC-LONG-CODE", title: "Synthetic section with a longer title",
+          dm_type: "", dmrl_type: "", info_code: "998", info_code_schema: "unknown",
+          info_code_dm_type: "", type_conflict: true, type_issue: "unsupported_schema",
+          icn: "ICN-A-VERY-LONG-FILENAME-001.JPG", is_pm_title: false, matched: true,
+          match_rank: "contains", page: 3, matched_text: "Synthetic section with a longer title",
+        },
+      ],
     } : {}),
   };
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
@@ -104,6 +113,22 @@ test("keeps the DMRL type picker legible and conflict notice padded in both them
   await page.goto("/migration/synthetic-doc");
   const typeSelect = page.locator(".s1k-dm-type-select").first();
   await expect(typeSelect).toBeVisible();
+  const rows = page.locator(".s1k-dmrl-row");
+  await expect(rows).toHaveCount(2);
+  const triggerText = typeSelect.locator("span.truncate");
+  const triggerTextFits = await triggerText.evaluate(
+    (element) => element.scrollWidth <= element.clientWidth,
+  );
+  expect(triggerTextFits).toBe(true);
+  const gridTracks = await rows.evaluateAll((elements) =>
+    elements.map((element) => getComputedStyle(element).gridTemplateColumns),
+  );
+  expect(gridTracks[0]).toBe(gridTracks[1]);
+  const columns = gridTracks[0]!.split(" ");
+  expect(columns[1]).toBe(columns[4]);
+  expect(columns[4]).toBe(columns[5]);
+  await expect(rows.nth(1)).toContainText("à vérifier");
+  await expect(rows.nth(1)).not.toContainText(/P\. 3|approchant/i);
   const notice = page.locator('div[role="alert"]').filter({ has: page.locator("details.space-y-3") });
   await expect(notice).toBeVisible();
 
@@ -122,6 +147,7 @@ test("keeps the DMRL type picker legible and conflict notice padded in both them
     expect(Number.parseFloat(noticeStyles.lineHeight)).toBeGreaterThanOrEqual(20);
     expect(Number.parseFloat(noticeStyles.listSpacing)).toBeGreaterThan(0);
     await notice.screenshot({ path: `test-results/dmrl-type-notice-${theme}.png` });
+    await page.locator(".s1k-dmrl-rows").screenshot({ path: `test-results/dmrl-grid-${theme}.png` });
   }
 
   await typeSelect.click();

@@ -20,6 +20,18 @@
 }
 
 @layer components {
+  .s1k-dmrl-rows {
+    overflow-x: auto;
+  }
+
+  .s1k-dmrl-row {
+    display: grid;
+    grid-template-columns: 2rem minmax(12rem, 1fr) 18rem 11rem minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 80rem;
+  }
+
   .s1k-validation-page {
     display: flex;
     flex-direction: column;

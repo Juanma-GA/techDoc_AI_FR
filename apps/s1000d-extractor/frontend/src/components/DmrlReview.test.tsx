@@ -142,6 +142,30 @@ describe("DMRL review", () => {
     expect(markup).toContain("Found chapter");
   });
 
+  it("keeps source pages on exact matches but removes page and approximation wording from checks", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DmrlReview, {
+        rows: [
+          makeRow({ matched: true, match_rank: "exact", page: 1 }),
+          makeRow({ index: 1, matched: true, match_rank: "prefix", page: 2 }),
+          makeRow({ index: 2, matched: true, match_rank: "contains", page: 3 }),
+        ],
+        dmCount: 3,
+        busy: false,
+        edits: {},
+        onTitleChange: vi.fn(),
+        onUpdate: vi.fn(),
+        onAdvance: vi.fn(),
+      }),
+    );
+
+    expect(markup).toContain("migration.match.exact:1");
+    expect(markup).toContain("migration.match.prefix");
+    expect(markup).toContain("migration.match.contains");
+    expect(markup).not.toContain("migration.match.prefix:");
+    expect(markup).not.toContain("migration.match.contains:");
+  });
+
   it("does not alert when the only unmatched row is a publication title", () => {
     const markup = renderToStaticMarkup(
       createElement(DmrlReview, {

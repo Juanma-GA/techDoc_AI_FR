@@ -24,7 +24,7 @@ export function TypeStep({ state, wizard }: { state: WizardState; wizard: Migrat
           value={edits[dm.dm_id] ?? dm.dm_type}
           options={DM_TYPES.map((value) => ({ value, label: t(`dmType.${value}`) }))}
           onValueChange={(value) => setEdits((previous) => ({ ...previous, [dm.dm_id]: value }))}
-          triggerClassName="s1k-dm-type-select w-full sm:w-52"
+          triggerClassName="w-full sm:w-52"
         />
       </div>)}
     </CardContent>

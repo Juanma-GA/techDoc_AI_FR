@@ -30,12 +30,13 @@ type DmrlReviewProps = {
 function MatchBadge({ row }: { row: DmrlRow }) {
   const { t } = useTranslation();
   if (!row.matched) return <Badge variant="warning">{t("migration.match.notFound")}</Badge>;
-  const page = row.page ?? "?";
   if (row.match_rank === "exact")
-    return <Badge variant="success">{t("migration.match.exact", { page })}</Badge>;
+    return <Badge variant="success" className="whitespace-nowrap">
+      {t("migration.match.exact", { page: row.page ?? "?" })}
+    </Badge>;
   return (
-    <Badge variant="warning" title={row.matched_text}>
-      {t(`migration.match.${row.match_rank || "contains"}`, { page })}
+    <Badge variant="warning" title={row.matched_text} className="whitespace-nowrap">
+      {t(`migration.match.${row.match_rank || "contains"}`)}
     </Badge>
   );
 }
@@ -111,12 +112,12 @@ export function DmrlReview({
           {t("migration.dmrl.validate")}
         </Button>
       </div>
-      <div className="space-y-1">
+      <div className="s1k-dmrl-rows">
         {rows.map((row) => (
-          <div key={row.index} className="flex flex-wrap items-center gap-3 border-b border-md py-1.5">
-            <Badge variant="info">{row.arbo || t("common.none")}</Badge>
+          <div key={row.index} className="s1k-dmrl-row border-b border-md py-1.5">
+            <Badge variant="info" className="justify-self-start">{row.arbo || t("common.none")}</Badge>
             <Input
-              className="min-w-0 flex-1"
+              className="min-w-0 w-full"
               aria-label={t("migration.dmrl.titleInput", { title: row.title })}
               value={edits[row.index] ?? row.title}
               onChange={(event) => onTitleChange(row.index, event.target.value)}
@@ -126,7 +127,7 @@ export function DmrlReview({
             ) : (
               <>
                 <SelectMenu
-                  triggerClassName="s1k-dm-type-select w-full sm:w-52"
+                  triggerClassName="s1k-dm-type-select w-full"
                   id={`dmrl-type-${row.index}`}
                   label={t("migration.dmrl.typeLabel", { title: row.title })}
                   disabled={busy}
@@ -145,11 +146,11 @@ export function DmrlReview({
                     })}
                 />
                 <MatchBadge row={row} />
-                <span className="text-label font-mono uppercase text-fg-dim" title={row.dmc}>
+                <span className="min-w-0 break-all text-label font-mono uppercase text-fg-dim" title={row.dmc}>
                   {row.dmc || t("common.none")}
                 </span>
                 <span
-                  className="max-w-[17.5rem] whitespace-pre-line break-words text-label font-mono uppercase text-fg-dim"
+                  className="min-w-0 whitespace-pre-line break-words text-label font-mono uppercase text-fg-dim"
                   title={row.icn || undefined}
                 >
                   <strong>{t("migration.dmrl.icn")}:</strong>{" "}
@@ -157,6 +158,9 @@ export function DmrlReview({
                 </span>
               </>
             )}
+            {row.is_pm_title ? <span aria-hidden="true" /> : null}
+            {row.is_pm_title ? <span aria-hidden="true" /> : null}
+            {row.is_pm_title ? <span aria-hidden="true" /> : null}
             <Button
               type="button"
               variant="ghost"

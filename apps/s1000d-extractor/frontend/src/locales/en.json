@@ -403,8 +403,8 @@
     "match": {
       "notFound": "not found",
       "exact": "found p.{{page}}",
-      "prefix": "check p.{{page}} (prefix)",
-      "contains": "check p.{{page}} (approximate)"
+      "prefix": "check (prefix)",
+      "contains": "check"
     },
     "dmrl": {
       "title": "Validate the DMRL ({{count}} Data Modules)",
