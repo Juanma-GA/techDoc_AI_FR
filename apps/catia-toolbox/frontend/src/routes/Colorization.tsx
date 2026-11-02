@@ -179,7 +179,7 @@ export function Colorization() {
           <span>{t("colorization.apply")}</span>
         </label>
 
-        <div className="row">
+        <div className="row colorization-actions">
           <Button
             type="button"
             variant="primary"

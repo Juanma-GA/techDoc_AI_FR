@@ -51,7 +51,7 @@
 .success { color: var(--success); }
 .empty-state { padding: 1.5rem 1rem; color: var(--fg-dim); text-align: center; }
 
-.identification-layout { display: flex; width: 100%; min-width: 0; max-width: 88rem; margin-inline: auto; flex-direction: column; gap: 1.5rem; }
+.identification-layout { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: 1.5rem; }
 .identification-top-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr); align-items: start; gap: 1.5rem; }
 .identification-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.5rem; }
 .identification-import-list { min-width: 0; padding-left: 1rem; }
@@ -60,6 +60,7 @@
 .analysis-info.complete { color: var(--success); }
 .analysis-preview-controls { display: flex; min-height: 2.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 .analysis-preview-controls .error { margin-top: 0; }
+.colorization-actions { margin-block-start: 0.5rem; }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 0.75rem; }
 .kpi { display: flex; min-width: 0; padding-block: 0.75rem; flex-direction: column; gap: 0.25rem; }
