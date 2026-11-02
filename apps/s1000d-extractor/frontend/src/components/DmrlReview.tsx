@@ -1,6 +1,16 @@
 import { useTranslation } from "react-i18next";
 
-import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  SelectMenu,
+} from "@internal/ui";
 import { ConfirmButton } from "./ConfirmButton";
 import type { DmrlRow } from "../lib/api";
 import { DmrlTypeConflictNotice } from "./DmrlTypeConflictNotice";
@@ -115,26 +125,24 @@ export function DmrlReview({
               <Badge variant="info">{t("migration.dmrl.pmTitle")}</Badge>
             ) : (
               <>
-                <Select
-                  className="s1k-dm-type-select"
+                <SelectMenu
+                  triggerClassName="s1k-dm-type-select w-full sm:w-52"
                   id={`dmrl-type-${row.index}`}
-                  aria-label={t("migration.dmrl.typeLabel", { title: row.title })}
-                  aria-invalid={needsExplicitTypeChoice(row)}
+                  label={t("migration.dmrl.typeLabel", { title: row.title })}
                   disabled={busy}
                   value={needsExplicitTypeChoice(row) ? "" : row.dm_type || "descriptive"}
-                  onChange={(event) =>
-                    onUpdate({
-                      op: "set_type",
-                      index: row.index,
-                      dm_type: event.target.value,
-                    })
-                  }
+                  state={needsExplicitTypeChoice(row) ? "error" : "default"}
                   options={[
                     ...(needsExplicitTypeChoice(row)
                       ? [{ value: "", label: t("migration.dmrl.selectType") }]
                       : []),
                     ...DM_TYPES.map((type) => ({ value: type, label: t(`dmType.${type}`) })),
                   ]}
+                  onValueChange={(dm_type) => onUpdate({
+                      op: "set_type",
+                      index: row.index,
+                      dm_type,
+                    })}
                 />
                 <MatchBadge row={row} />
                 <span className="text-label font-mono uppercase text-fg-dim" title={row.dmc}>

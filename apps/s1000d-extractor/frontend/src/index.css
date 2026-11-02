@@ -20,19 +20,6 @@
 }
 
 @layer components {
-  .s1k-dm-type-select {
-    color-scheme: light;
-  }
-
-  .dark .s1k-dm-type-select {
-    color-scheme: dark;
-  }
-
-  .s1k-dm-type-select option {
-    background-color: var(--color-card-base);
-    color: var(--color-text-base);
-  }
-
   .s1k-validation-page {
     display: flex;
     flex-direction: column;

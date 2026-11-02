@@ -37,7 +37,7 @@ function makeRow(overrides: Partial<DmrlRow>): DmrlRow {
 }
 
 describe("DMRL review", () => {
-  it("uses themed native type choices and padded conflict notices", () => {
+  it("uses the shared type menu and padded conflict notices", () => {
     const notice = renderToStaticMarkup(
       createElement(DmrlTypeConflictNotice, {
         rows: [makeRow({
@@ -191,7 +191,7 @@ describe("DMRL review", () => {
     expect(markup).toContain("migration.dmrl.typeConflict");
     expect(markup).toContain("migration.dmrl.unsupportedSchema");
     expect(markup).toContain("migration.dmrl.typeSelected:dmType.descriptive");
-    expect(markup).toContain('value="descriptive" selected=""');
+    expect(markup).toContain("dmType.descriptive");
     expect(markup).not.toContain("migration.dmrl.typeResolutionRequiredRow");
     expect(markup).not.toContain("migration.dmrl.selectType");
     expect(markup).not.toContain('open=""');
@@ -227,7 +227,9 @@ describe("DMRL review", () => {
         onAdvance: vi.fn(),
       }),
     );
-    const pendingSelect = pendingMarkup.match(/<select\b[^>]*>/)?.[0] ?? "";
+    const pendingSelect = pendingMarkup.match(
+      /<button\b[^>]*aria-label="migration\.dmrl\.typeLabel:Removal Procedure"[^>]*>/,
+    )?.[0] ?? "";
     expect(pendingSelect).toContain("s1k-dm-type-select");
     expect(pendingSelect).toContain('disabled=""');
     expect(pendingMarkup).toContain('role="alert"');

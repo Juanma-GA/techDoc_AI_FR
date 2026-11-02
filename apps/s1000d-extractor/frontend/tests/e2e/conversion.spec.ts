@@ -73,6 +73,15 @@ async function syntheticConversion(page: Page, generated = false, unresolvedType
         `event: session\ndata: {"document_id":"synthetic-doc"}\n\n` +
         `event: progress\ndata: {"step":"infer","pct":50}\n\n` +
         `event: done\ndata: ${JSON.stringify(state)}\n\n` });
+    } else if (path.endsWith("/wizard/update")) {
+      const request = route.request().postDataJSON() as {
+        op?: string; index?: number; dm_type?: string;
+      };
+      if (request.op === "set_type" && request.index != null && state.dmrl) {
+        const row = state.dmrl[request.index];
+        if (row && request.dm_type) row.dm_type = request.dm_type;
+      }
+      await route.fulfill({ json: state });
     } else if (path.endsWith("/wizard/validate")) {
       counts.validations += 1;
       await route.fulfill({ json: { results: [{
@@ -102,16 +111,6 @@ test("keeps the DMRL type picker legible and conflict notice padded in both them
     await page.evaluate((value) => {
       document.documentElement.classList.toggle("dark", value === "dark");
     }, theme);
-    const selectStyles = await typeSelect.evaluate((select) => ({
-      scheme: getComputedStyle(select).colorScheme,
-      foreground: getComputedStyle(select).color,
-      optionForeground: getComputedStyle(select.options[0]!).color,
-      optionBackground: getComputedStyle(select.options[0]!).backgroundColor,
-    }));
-    expect(selectStyles.scheme).toBe(theme);
-    expect(contrastRatio(selectStyles.optionForeground, selectStyles.optionBackground))
-      .toBeGreaterThanOrEqual(4.5);
-
     const noticeStyles = await notice.evaluate((element) => ({
       paddingLeft: getComputedStyle(element).paddingLeft,
       paddingRight: getComputedStyle(element).paddingRight,
@@ -122,9 +121,31 @@ test("keeps the DMRL type picker legible and conflict notice padded in both them
     expect(noticeStyles.paddingLeft).toBe(noticeStyles.paddingRight);
     expect(Number.parseFloat(noticeStyles.lineHeight)).toBeGreaterThanOrEqual(20);
     expect(Number.parseFloat(noticeStyles.listSpacing)).toBeGreaterThan(0);
-    await typeSelect.screenshot({ path: `test-results/dmrl-type-picker-${theme}.png` });
     await notice.screenshot({ path: `test-results/dmrl-type-notice-${theme}.png` });
   }
+
+  await typeSelect.click();
+  const listbox = page.getByRole("listbox").first();
+  await expect(listbox).toBeVisible();
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.classList.toggle("dark", value === "dark");
+    }, theme);
+    const optionColors = await listbox.getByRole("option").evaluateAll((options) =>
+      options.map((option) => ({
+        foreground: getComputedStyle(option).color,
+        background: getComputedStyle(option).backgroundColor,
+      })),
+    );
+    expect(optionColors).toHaveLength(4);
+    for (const colors of optionColors) {
+      expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
+    }
+    await listbox.screenshot({ path: `test-results/dmrl-type-picker-${theme}.png` });
+  }
+
+  await listbox.getByRole("option", { name: fr.dmType.descriptive }).click();
+  await expect(typeSelect).toHaveText(fr.dmType.descriptive);
 });
 
 test("keeps inputs across navigation, reuses the upload and restores metadata without downloading", async ({ page }) => {

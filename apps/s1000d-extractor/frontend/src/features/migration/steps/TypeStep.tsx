@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardContent, CardHeader, CardTitle, Select } from "@internal/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, SelectMenu } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { DM_TYPES } from "../../../components/DmrlReview";
 import type { WizardState } from "../../../lib/api";
@@ -16,14 +16,17 @@ export function TypeStep({ state, wizard }: { state: WizardState; wizard: Migrat
     <CardHeader><CardTitle>{t("migration.type.title")}</CardTitle></CardHeader>
     <CardContent className="space-y-4">
       <p className="text-sm text-fg-dim">{t("migration.type.help")}</p>
-      {state.dms.map((dm) => <label key={dm.dm_id}
+      {state.dms.map((dm) => <div key={dm.dm_id}
         className="flex flex-wrap items-center justify-between gap-3 border-b border-md py-3">
         <span>{dm.is_orphan ? t("migration.dm.orphan") : dm.title}</span>
-        <Select className="s1k-dm-type-select"
-          value={edits[dm.dm_id] ?? dm.dm_type} options={DM_TYPES.map((value) => ({
-          value, label: t(`dmType.${value}`),
-        }))} onChange={(event) => setEdits((previous) => ({ ...previous, [dm.dm_id]: event.target.value }))} />
-      </label>)}
+        <SelectMenu
+          label={t("migration.dmrl.typeLabel", { title: dm.title })}
+          value={edits[dm.dm_id] ?? dm.dm_type}
+          options={DM_TYPES.map((value) => ({ value, label: t(`dmType.${value}`) }))}
+          onValueChange={(value) => setEdits((previous) => ({ ...previous, [dm.dm_id]: value }))}
+          triggerClassName="s1k-dm-type-select w-full sm:w-52"
+        />
+      </div>)}
     </CardContent>
     <div className="sticky bottom-0 z-10 flex justify-between gap-3 border-t border-md bg-card p-4">
       <Button type="button" variant="secondary" disabled={wizard.busy}
