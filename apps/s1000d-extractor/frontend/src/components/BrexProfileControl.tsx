@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FileDropzone } from "@internal/ui";
+import { FileText } from "lucide-react";
 
 import { brexApi, type S1000dIssue } from "../lib/api";
 import { BrexRulesPreview } from "./BrexRulesPreview";
@@ -23,7 +25,6 @@ export function BrexProfileControl({
 }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [profileName, setProfileName] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -73,7 +74,6 @@ export function BrexProfileControl({
       onChange(created.id);
       setFile(null);
       setProfileName("");
-      if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -84,22 +84,40 @@ export function BrexProfileControl({
   return (
     <div className="brex-profile-control form">
       <div className="label">{t("migration.brex.addProfileTitle")}</div>
-      <label>
-        <div className="label">{t("migration.brex.file")}</div>
-        <input
-          ref={fileInput}
-          className="input"
-          type="file"
+      <div className="space-y-2">
+        <span className="block text-label font-mono uppercase text-fg-dim">
+          {t("migration.brex.file")}
+        </span>
+        <FileDropzone
           accept=".xml"
+          multiple={false}
           disabled={disabled || uploading}
-          onChange={(event) => {
-            const selectedFile = event.target.files?.[0] ?? null;
+          className="p-4"
+          label={t("migration.upload.dropLabel")}
+          description="XML"
+          onFiles={(files) => {
+            const selectedFile = files[0];
+            if (!selectedFile) return;
+            if (!/\.xml$/i.test(selectedFile.name)) {
+              setFile(null);
+              setProfileName("");
+              setUploadError(t("migration.ui.invalidFile"));
+              return;
+            }
             setFile(selectedFile);
-            setProfileName(selectedFile?.name.replace(/\.[^.]+$/, "") ?? "");
+            setProfileName(selectedFile.name.replace(/\.[^.]+$/, ""));
             setUploadError(null);
           }}
         />
-      </label>
+        {file ? (
+          <div className="flex items-center gap-2 rounded-sm border bg-bg-2 px-3 py-1.5" role="status">
+            <FileText size={16} className="shrink-0 text-fg-dim" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-sm" title={file.name}>
+              {file.name}
+            </span>
+          </div>
+        ) : null}
+      </div>
       <div className="row">
         <label className="grow">
           <div className="label">{t("migration.brex.profileName")}</div>

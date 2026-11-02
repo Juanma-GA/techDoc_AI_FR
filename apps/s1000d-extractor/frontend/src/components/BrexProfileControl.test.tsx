@@ -69,6 +69,15 @@ function renderControl(issue: "4.1" | "4.2" = "4.2") {
 }
 
 describe("BREX profile control", () => {
+  it("uses the shared dropzone to select a BREX XML file", () => {
+    const markup = renderControl();
+
+    expect(markup).toContain('role="button"');
+    expect(markup).toContain("migration.upload.dropLabel");
+    expect(markup).toContain('accept=".xml"');
+    expect(markup).toContain("XML");
+  });
+
   it("offers profile upload before selecting an existing profile", () => {
     const markup = renderControl();
 
