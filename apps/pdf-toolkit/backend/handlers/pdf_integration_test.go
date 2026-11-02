@@ -18,12 +18,14 @@ import (
 )
 
 type routeProcessor struct {
-	pageCount int
-	inputPath string
-	collected []int
-	rotated   []int
-	rotation  int
-	protected services.PDFProtectionOptions
+	pageCount   int
+	inputPath   string
+	collected   []int
+	rotated     []int
+	rotation    int
+	protected   services.PDFProtectionOptions
+	metadata    services.PDFMetadata
+	metadataErr error
 }
 
 func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {
@@ -59,6 +61,15 @@ func (p *routeProcessor) Compress(_ context.Context, input, output string) error
 
 func (p *routeProcessor) Clean(_ context.Context, input, output string) error {
 	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) EditMetadata(_ context.Context, input, output string, metadata services.PDFMetadata) error {
+	p.inputPath = input
+	p.metadata = metadata
+	if p.metadataErr != nil {
+		return p.metadataErr
+	}
 	return writeRoutePDF(output)
 }
 

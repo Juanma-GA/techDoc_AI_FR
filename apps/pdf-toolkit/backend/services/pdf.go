@@ -19,6 +19,7 @@ type PDFProcessor interface {
 	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
 	Compress(ctx context.Context, input, output string) error
 	Clean(ctx context.Context, input, output string) error
+	EditMetadata(ctx context.Context, input, output string, metadata PDFMetadata) error
 	Protect(ctx context.Context, input, output string, options PDFProtectionOptions) error
 	ChangeUserPassword(
 		ctx context.Context,

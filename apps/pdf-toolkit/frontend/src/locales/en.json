@@ -65,6 +65,11 @@
       "title": "Clean a PDF",
       "description": "Remove metadata and annotations from your PDF."
     },
+    "metadata": {
+      "tab": "Edit metadata",
+      "title": "Edit PDF metadata",
+      "description": "Edit your PDF document’s title, author, subject and keywords."
+    },
     "protect": {
       "tab": "Protect PDF",
       "title": "Protect a PDF",
@@ -101,6 +106,22 @@
       "loading": "Loading the demo PDF…",
       "loadError": "Could not load the demo PDF."
     }
+  },
+  "metadata": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "Existing properties will be prefilled.",
+    "stepProperties": "Edit properties",
+    "fieldsHelp": "Leave a field empty to remove that property.",
+    "title": "Title",
+    "author": "Author",
+    "subject": "Subject",
+    "keywords": "Keywords",
+    "reading": "Reading properties…",
+    "readFailed": "Could not read the properties. Select a valid PDF without a password.",
+    "warning": "Old XMP metadata is removed to avoid conflicting values; PDF/A compliance may be affected and a digital signature invalidated.",
+    "action": "Save and download",
+    "working": "Saving properties…",
+    "success": "Properties have been saved in {{fileName}}."
   },
   "common": {
     "loading": "Loading…",
@@ -299,6 +320,7 @@
     "mergeFailed": "Merging failed.",
     "compressionFailed": "Compression failed.",
     "cleanFailed": "Cleaning the PDF failed.",
+    "metadataFailed": "Editing the PDF properties failed.",
     "pageOperationFailed": "Page processing failed.",
     "reorderFailed": "Reordering failed.",
     "rotationFailed": "Rotation failed.",

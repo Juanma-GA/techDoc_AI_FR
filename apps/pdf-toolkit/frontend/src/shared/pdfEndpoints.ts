@@ -3,6 +3,7 @@ export type PDFEndpoint =
   | "images-to-pdf"
   | "compress"
   | "clean"
+  | "edit-metadata"
   | "protect"
   | "change-password"
   | "extract"

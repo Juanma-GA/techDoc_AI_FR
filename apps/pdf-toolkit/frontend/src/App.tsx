@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
 import {
   Combine,
   Eraser,
+  FilePenLine,
   FilePlus2,
   Grip,
   Image,
@@ -48,6 +49,10 @@ const ReorderTool = lazy(() =>
   import("./features/reorder/ReorderTool").then((module) => ({ default: module.ReorderTool })),
 );
 
+const MetadataTool = lazy(() =>
+  import("./features/metadata/MetadataTool").then((module) => ({ default: module.MetadataTool })),
+);
+
 const tools = [
   { id: "merge", icon: Combine },
   { id: "extract", icon: Scissors },
@@ -57,6 +62,7 @@ const tools = [
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
   { id: "clean", icon: Eraser },
+  { id: "metadata", icon: FilePenLine },
   { id: "protect", icon: LockKeyhole },
   { id: "rotate", icon: RotateCw },
   { id: "signature", icon: PenTool },
@@ -268,6 +274,11 @@ export function App() {
               ) : null}
               {activeTool === "compress" ? <CompressTool /> : null}
               {activeTool === "clean" ? <CleanTool /> : null}
+              {activeTool === "metadata" ? (
+                <Suspense fallback={<Spinner aria-label={t("common.loading")} />}>
+                  <MetadataTool />
+                </Suspense>
+              ) : null}
               {activeTool === "protect" ? <ProtectTool /> : null}
               {activeTool === "rotate" ? <RotateTool /> : null}
               {activeTool === "signature" ? <SignatureTool /> : null}

@@ -52,6 +52,9 @@ type fakeProcessor struct {
 	compressCall bool
 	cleanCall    bool
 	cleanErr     error
+	metadata     PDFMetadata
+	metadataCall bool
+	metadataErr  error
 }
 
 func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) error {
@@ -66,6 +69,11 @@ func (p *fakeProcessor) Compress(context.Context, string, string) error {
 func (p *fakeProcessor) Clean(context.Context, string, string) error {
 	p.cleanCall = true
 	return p.cleanErr
+}
+func (p *fakeProcessor) EditMetadata(_ context.Context, _, _ string, metadata PDFMetadata) error {
+	p.metadataCall = true
+	p.metadata = metadata
+	return p.metadataErr
 }
 func (p *fakeProcessor) Protect(context.Context, string, string, PDFProtectionOptions) error {
 	return nil

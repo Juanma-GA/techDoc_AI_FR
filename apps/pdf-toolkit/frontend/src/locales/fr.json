@@ -65,6 +65,11 @@
       "title": "Nettoyer un PDF",
       "description": "Supprimez les métadonnées et les annotations de votre PDF."
     },
+    "metadata": {
+      "tab": "Métadonnées",
+      "title": "Modifier les métadonnées",
+      "description": "Modifiez le titre, l’auteur, le sujet et les mots-clés de votre document PDF."
+    },
     "protect": {
       "tab": "Protéger PDF",
       "title": "Protéger un PDF",
@@ -101,6 +106,22 @@
       "loading": "Chargement du PDF de démonstration…",
       "loadError": "Impossible de charger le PDF de démonstration."
     }
+  },
+  "metadata": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Les propriétés existantes seront préremplies.",
+    "stepProperties": "Modifier les propriétés",
+    "fieldsHelp": "Laissez un champ vide pour supprimer cette propriété.",
+    "title": "Titre",
+    "author": "Auteur",
+    "subject": "Sujet",
+    "keywords": "Mots-clés",
+    "reading": "Lecture des propriétés…",
+    "readFailed": "Impossible de lire les propriétés. Sélectionnez un PDF valide sans mot de passe.",
+    "warning": "Les anciennes métadonnées XMP sont retirées pour éviter des valeurs contradictoires ; la conformité PDF/A peut être affectée et une signature numérique invalidée.",
+    "action": "Enregistrer et télécharger",
+    "working": "Enregistrement des propriétés…",
+    "success": "Les propriétés ont été enregistrées dans {{fileName}}."
   },
   "common": {
     "loading": "Chargement…",
@@ -299,6 +320,7 @@
     "mergeFailed": "La fusion a échoué.",
     "compressionFailed": "La compression a échoué.",
     "cleanFailed": "Le nettoyage du PDF a échoué.",
+    "metadataFailed": "La modification des propriétés du PDF a échoué.",
     "pageOperationFailed": "Le traitement des pages a échoué.",
     "reorderFailed": "La réorganisation a échoué.",
     "rotationFailed": "La rotation a échoué.",
