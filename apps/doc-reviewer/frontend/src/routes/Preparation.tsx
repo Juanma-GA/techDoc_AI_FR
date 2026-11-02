@@ -15,14 +15,14 @@ import type { Document } from "../types/domain";
 export function Preparation() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const documents = useDocuments();
+  const documents = useDocuments("preparation");
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
   const targetUnits = useFiltersStore((state) => state.targetUnits);
 
   const handleUpload = (file: File): void => {
     upload.mutate(
-      { file, target: effectiveTarget(targetUnits) },
+      { file, target: effectiveTarget(targetUnits), workspace: "preparation" },
       {
         onSuccess: (result) => {
           if ("id" in result) {

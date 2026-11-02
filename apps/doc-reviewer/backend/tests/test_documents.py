@@ -55,6 +55,30 @@ def test_list_and_get(client: TestClient, sample_pdf_bytes: bytes) -> None:
     assert get_resp.json()["id"] == doc["id"]
 
 
+def test_list_filters_documents_by_workspace(
+    client: TestClient, sample_pdf_bytes: bytes
+) -> None:
+    control = _upload(client, sample_pdf_bytes)
+    response = client.post(
+        "/api/v1/documents?target=none&workspace=preparation",
+        files={"file": ("prep.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert response.status_code == 201, response.text
+    preparation = response.json()
+    assert control["workspace"] == "control"
+    assert preparation["workspace"] == "preparation"
+
+    control_ids = [d["id"] for d in client.get("/api/v1/documents?workspace=control").json()]
+    prep_ids = [d["id"] for d in client.get("/api/v1/documents?workspace=preparation").json()]
+    all_ids = [d["id"] for d in client.get("/api/v1/documents").json()]
+    assert control["id"] in control_ids and preparation["id"] not in control_ids
+    assert preparation["id"] in prep_ids and control["id"] not in prep_ids
+    assert {control["id"], preparation["id"]} <= set(all_ids)
+
+    invalid = client.get("/api/v1/documents?workspace=other")
+    assert invalid.status_code == 422
+
+
 def test_patch_document_context_validates_language(client: TestClient, sample_pdf_bytes: bytes) -> None:
     doc = _upload(client, sample_pdf_bytes)
     response = client.patch(

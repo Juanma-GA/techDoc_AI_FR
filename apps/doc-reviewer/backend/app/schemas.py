@@ -28,6 +28,7 @@ class DocumentOut(BaseModel):
     standard_version_id: Optional[uuid.UUID] = None
     standard_version_ids: list[uuid.UUID] = Field(default_factory=list)
     status: str
+    workspace: Literal["control", "preparation"] = "control"
     current_version: int
     has_applied_edits: bool = False
     # Format source fourni par l'utilisateur, puis format interne choisi automatiquement.

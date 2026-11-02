@@ -45,6 +45,8 @@ router = APIRouter(tags=["documents"])
 
 _MAX_BATCH_SIZE = 20
 
+DocumentWorkspace = Literal["control", "preparation"]
+
 
 def _legacy_metadata_value(value: Any) -> str | None:
     if value is None:
@@ -122,6 +124,7 @@ def _persist_pdf(
     original_data: Optional[bytes] = None,
     client_mapping: ClientMapping | None = None,
     is_demo: bool = False,
+    workspace: str = "control",
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -181,6 +184,7 @@ def _persist_pdf(
         quality=report.state,
         client_metadata=dict(context_defaults),
         is_demo=is_demo,
+        workspace=workspace,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -240,6 +244,7 @@ def _persist_docx(
     engine_override: Optional[str] = None,
     client_mapping: ClientMapping | None = None,
     is_demo: bool = False,
+    workspace: str = "control",
 ) -> Document:
     """Persist a DOCX working document while retaining the detected source.
 
@@ -320,6 +325,7 @@ def _persist_docx(
         quality="analyzable",
         client_metadata=dict(context_defaults),
         is_demo=is_demo,
+        workspace=workspace,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -348,6 +354,7 @@ def upload_document(
         default=None,
         description="Comma-separated UUIDs of standard versions to apply at analyse",
     ),
+    workspace: DocumentWorkspace = Query(default="control"),
     db: Session = Depends(get_db),
 ) -> Document:
     client_configuration = get_request_client_configuration(request, db)
@@ -377,6 +384,7 @@ def upload_document(
             engine_override=prepared.convert_engine,
             client_mapping=client_configuration.mapping,
             is_demo=demo_mode,
+            workspace=workspace,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -387,6 +395,7 @@ def upload_document(
         original_data=prepared.original_bytes,
         client_mapping=client_configuration.mapping,
         is_demo=demo_mode,
+        workspace=workspace,
     )
 
 
@@ -397,6 +406,7 @@ def upload_documents_batch(
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
     standard_version_ids: Optional[str] = Query(default=None),
+    workspace: DocumentWorkspace = Query(default="control"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Upload many files at once — `.pdf/.doc/.docx` and `.zip` archives. Zips are
@@ -458,6 +468,7 @@ def upload_documents_batch(
                         engine_override=prepared.convert_engine,
                         client_mapping=client_configuration.mapping,
                         is_demo=demo_mode,
+                        workspace=workspace,
                     )
                 else:
                     doc = _persist_pdf(
@@ -469,6 +480,7 @@ def upload_documents_batch(
                         original_data=prepared.original_bytes,
                         client_mapping=client_configuration.mapping,
                         is_demo=demo_mode,
+                        workspace=workspace,
                     )
                 created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
             except AppError as exc:
@@ -506,12 +518,14 @@ def _has_signature(doc: fitz.Document) -> bool:
 
 
 @router.get("/documents", response_model=list[DocumentOut])
-def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(
-        db.scalars(
-            documents_in_current_mode(db).order_by(Document.created_at.desc())
-        )
-    )
+def list_documents(
+    workspace: Optional[DocumentWorkspace] = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[Document]:
+    query = documents_in_current_mode(db)
+    if workspace is not None:
+        query = query.where(Document.workspace == workspace)
+    return list(db.scalars(query.order_by(Document.created_at.desc())))
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)

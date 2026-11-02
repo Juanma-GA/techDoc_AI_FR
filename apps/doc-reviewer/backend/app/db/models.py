@@ -104,6 +104,11 @@ class Document(Base):
     status: Mapped[str] = mapped_column(
         String(30), default="uploaded", server_default="uploaded", index=True
     )
+    # Onglet d'origine du document ("control" | "preparation") : chaque onglet
+    # ne liste que les documents qui y ont ete importes.
+    workspace: Mapped[str] = mapped_column(
+        String(20), default="control", server_default="control", nullable=False, index=True
+    )
     current_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Format source fourni par l'utilisateur; le routage se fait via
     # `working_format` et non via ce champ.

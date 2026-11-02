@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../lib/api";
-import type { Document } from "../types/domain";
+import type { Document, DocumentWorkspace } from "../types/domain";
 
 export type BatchUploadResult = {
   created: Document[];
@@ -12,12 +12,14 @@ export type BatchUploadResult = {
 type UploadDocumentVariables = {
   file: File;
   target: "metric" | "imperial" | "auto" | "none";
+  workspace?: DocumentWorkspace;
 };
 
-export function useDocuments() {
+export function useDocuments(workspace?: DocumentWorkspace) {
   return useQuery({
-    queryKey: ["documents"],
-    queryFn: () => api.get<Document[]>("/documents"),
+    queryKey: workspace ? ["documents", workspace] : ["documents"],
+    queryFn: () =>
+      api.get<Document[]>(workspace ? `/documents?workspace=${workspace}` : "/documents"),
   });
 }
 
@@ -61,8 +63,8 @@ export function useUploadDocument() {
     // (requete non annulee par un changement de route SPA), seul l'etat
     // local du composant se perdait sans ca.
     mutationKey: ["upload-document"],
-    mutationFn: ({ file, target }: UploadDocumentVariables) => {
-      const params = new URLSearchParams({ target });
+    mutationFn: ({ file, target, workspace = "control" }: UploadDocumentVariables) => {
+      const params = new URLSearchParams({ target, workspace });
       const fd = new FormData();
       // Les .zip passent par /documents/batch ; un fichier unique passe par
       // /documents, qui choisit automatiquement son format de travail.
