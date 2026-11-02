@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
+import { useCallback, useId, useState, type FormEvent } from "react";
 import { ChevronDown, ChevronRight, FileArchive, FileText, SlidersHorizontal, Split, X } from "lucide-react";
-import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Input, Select, Spinner, Textarea } from "@internal/ui";
@@ -16,6 +14,8 @@ import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { ExportProgress } from "../shared/ExportProgress";
 import { AdvancedSplit } from "./AdvancedSplit";
+import { bookmarkGroups } from "./bookmarkSplit";
+import { useSplitDocument } from "./useSplitDocument";
 import {
   chunkRows,
   maxSplitGroups,
@@ -26,39 +26,6 @@ import {
 } from "./splitModel";
 import "./split.css";
 
-GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-
-/** Reads the page count of the selected PDF in the browser (no upload). */
-function usePageCount(file: File | null) {
-  const [pageCount, setPageCount] = useState(0);
-  useEffect(() => {
-    setPageCount(0);
-    if (!file) return;
-    let active = true;
-    let task: ReturnType<typeof getDocument> | null = null;
-    void file
-      .arrayBuffer()
-      .then((buffer) => {
-        if (!active) return null;
-        task = getDocument({ data: new Uint8Array(buffer) });
-        return task.promise;
-      })
-      .then((documentProxy) => {
-        if (!documentProxy) return;
-        if (active) setPageCount(documentProxy.numPages);
-        void documentProxy.destroy();
-      })
-      .catch(() => {
-        if (active) setPageCount(0);
-      });
-    return () => {
-      active = false;
-      if (task) void task.destroy();
-    };
-  }, [file]);
-  return pageCount;
-}
-
 export function SplitTool() {
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
@@ -67,11 +34,13 @@ export function SplitTool() {
   const modeId = useId();
   const rangesId = useId();
   const folderId = useId();
+  const bookmarkLevelId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
   const [folder, setFolder] = useState("split");
   const [chunkSize, setChunkSize] = useState("1");
   const [simpleMode, setSimpleMode] = useState("chunks");
+  const [bookmarkLevel, setBookmarkLevel] = useState(1);
   const [rangesText, setRangesText] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [working, setWorking] = useState(false);
@@ -82,18 +51,24 @@ export function SplitTool() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [successFileName, setSuccessFileName] = useState("");
-  const pageCount = usePageCount(file);
+  const document = useSplitDocument(file);
+  const { pageCount } = document;
+  const levels = [...new Set(document.bookmarks.map((bookmark) => bookmark.level))].sort((a, b) => a - b);
+  const selectedBookmarkLevel = levels.includes(bookmarkLevel) ? bookmarkLevel : levels[0] ?? 1;
+  const bookmarkRows = bookmarkGroups(document.bookmarks, selectedBookmarkLevel, pageCount);
 
   const size = Number(chunkSize);
   const validSize = Number.isSafeInteger(size) && size >= 1;
   const customRanges = parseSplitRanges(rangesText, pageCount);
   const rangesInvalid = simpleMode === "ranges" && pageCount > 0 && rangesText.trim() !== "" && !customRanges;
-  const documentCount = simpleMode === "ranges"
+  const documentCount = simpleMode === "bookmarks" ? bookmarkRows.length : simpleMode === "ranges"
     ? customRanges?.length ?? 0
     : pageCount > 0 && validSize ? Math.ceil(pageCount / size) : 0;
   const folderName = sanitizeBaseName(folder) || "split";
   const archiveName = `${folderName}.zip`;
-  const canSubmit = Boolean(file) && documentCount > 0 && documentCount <= maxSplitGroups;
+  const canSubmit = Boolean(file) && !document.loading &&
+    !(simpleMode === "bookmarks" && document.error) &&
+    documentCount > 0 && documentCount <= maxSplitGroups;
 
   const selectFile = useCallback((incoming: File | null) => {
     setFile(incoming);
@@ -101,6 +76,7 @@ export function SplitTool() {
     setFolder(incoming ? sourceBaseName(incoming.name) || "split" : "split");
     setError("");
     setSuccess(false);
+    setBookmarkLevel(1);
   }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -110,7 +86,8 @@ export function SplitTool() {
       return;
     }
     if (!canSubmit) {
-      setError(t(simpleMode === "ranges" ? "split.rangesInvalid" : "split.simpleInvalid"));
+      setError(t(simpleMode === "bookmarks" ? "split.bookmarksEmpty" :
+        simpleMode === "ranges" ? "split.rangesInvalid" : "split.simpleInvalid"));
       return;
     }
     const nameError = validateExportFileName(archiveName);
@@ -119,12 +96,15 @@ export function SplitTool() {
       return;
     }
     const destinationChoice = chooseSplitDestination(archiveName, t);
-    const rows = simpleMode === "ranges"
+    const rows = simpleMode === "bookmarks" ? bookmarkRows : simpleMode === "ranges"
       ? (customRanges ?? []).map((pages) => ({ pages }))
       : chunkRows(pageCount, size);
     const width = Math.max(2, String(rows.length).length);
     const names = uniqueFileNames(
-      rows.map((_, index) => `${folderName}_${String(index + 1).padStart(width, "0")}`),
+      rows.map((row, index) => simpleMode === "bookmarks" && "title" in row &&
+        typeof row.title === "string" && row.title.trim()
+        ? row.title
+        : `${folderName}_${String(index + 1).padStart(width, "0")}`),
     );
     const data = new FormData();
     data.append("file", file, file.name);
@@ -189,6 +169,9 @@ export function SplitTool() {
             </div>
           ) : null}
           <p className="privacy-hint">{t("split.privacy")}</p>
+          {document.error === "split.documentFailed" ? (
+            <p className="feedback feedback-error" role="alert">{t(document.error)}</p>
+          ) : null}
         </Card>
 
         <Card className="panel">
@@ -207,6 +190,7 @@ export function SplitTool() {
             options={[
               { value: "chunks", label: t("split.chunkLabel") },
               { value: "ranges", label: t("split.rangesLabel") },
+              { value: "bookmarks", label: t("split.bookmarksMode") },
             ]}
             onChange={(event) => {
               setSimpleMode(event.currentTarget.value);
@@ -232,7 +216,7 @@ export function SplitTool() {
             }}
           />
             </>
-          ) : (
+          ) : simpleMode === "ranges" ? (
             <>
               <label className="field-label" htmlFor={rangesId}>{t("split.rangesLabel")}</label>
               <Textarea
@@ -252,8 +236,39 @@ export function SplitTool() {
               <p id={`${rangesId}-help`} className="input-help">{t("split.rangesHelp")}</p>
               {rangesInvalid ? <p className="warning-note" role="alert">{t("split.rangesInvalid")}</p> : null}
             </>
+          ) : (
+            <>
+              <label className="field-label" htmlFor={bookmarkLevelId}>{t("split.bookmarkLevel")}</label>
+              <Select
+                id={bookmarkLevelId}
+                value={String(selectedBookmarkLevel)}
+                disabled={working || document.loading || levels.length === 0}
+                aria-describedby={`${bookmarkLevelId}-help`}
+                options={levels.map((level) => ({
+                  value: String(level), label: t("split.bookmarkLevelOption", { level }),
+                }))}
+                onChange={(event) => {
+                  setBookmarkLevel(Number(event.currentTarget.value));
+                  setError("");
+                  setSuccess(false);
+                }}
+              />
+              <p className="input-help" id={`${bookmarkLevelId}-help`}>{t("split.bookmarksHelp")}</p>
+              {document.loading ? <p role="status">{t("split.bookmarksLoading")}</p> : null}
+              {document.error === "split.bookmarksFailed" ? (
+                <p className="feedback feedback-error" role="alert">{t(document.error)}</p>
+              ) : file && !document.loading && !document.error && levels.length === 0 ? (
+                <p className="warning-note" role="status">{t("split.bookmarksEmpty")}</p>
+              ) : null}
+              {document.skipped > 0 ? (
+                <p className="warning-note" role="status">{t("split.bookmarksSkipped", { count: document.skipped })}</p>
+              ) : null}
+              {documentCount > maxSplitGroups ? (
+                <p className="warning-note" role="alert">{t("split.tooManyRows", { max: maxSplitGroups })}</p>
+              ) : null}
+            </>
           )}
-          <p className="input-help">{t("split.simpleHelp")}</p>
+          <p className="input-help">{t(simpleMode === "bookmarks" ? "split.bookmarksNames" : "split.simpleHelp")}</p>
           <label className="field-label" htmlFor={folderId}>
             {t("split.folderLabel")}
           </label>
