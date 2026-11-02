@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, FileText, MessageSquare, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, Input, Spinner, Textarea } from "@internal/ui";
@@ -13,14 +13,16 @@ import {
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { ExportProgress } from "../shared/ExportProgress";
+import { CommentBoxControls } from "./CommentBoxControls";
+import { CommentPagePreview } from "./CommentPagePreview";
+import { centeredCommentBox, type CommentBox } from "./commentBox";
 import { useCommentPdf } from "./useCommentPdf";
 import "./comments.css";
 
 type PDFComment = {
   id: number;
   page: number;
-  x: number;
-  y: number;
+  box: CommentBox;
   content: string;
 };
 
@@ -35,7 +37,7 @@ export function CommentsTool() {
   const nextCommentId = useRef(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [comments, setComments] = useState<PDFComment[]>([]);
-  const [draftPosition, setDraftPosition] = useState<{ page: number; x: number; y: number } | null>(null);
+  const [draftPosition, setDraftPosition] = useState<{ page: number; box: CommentBox } | null>(null);
   const [draftContent, setDraftContent] = useState("");
   const [outputName, setOutputName] = useState("commented.pdf");
   const [error, setError] = useState("");
@@ -53,23 +55,15 @@ export function CommentsTool() {
     if (draftPosition) textareaRef.current?.focus();
   }, [draftPosition]);
 
-  const placeComment = (x: number, y: number) => {
+  const createDraft = (box: CommentBox) => {
     if (!ready) return;
     if (comments.length >= maxComments) {
       setError(t("comments.maximumReached"));
       return;
     }
-    setDraftPosition({ page: pageNumber, x, y });
+    setDraftPosition({ page: pageNumber, box });
     setDraftContent("");
     setError("");
-  };
-
-  const handlePageClick = (event: MouseEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    const x = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height));
-    placeComment(x, y);
   };
 
   const saveDraft = () => {
@@ -128,8 +122,8 @@ export function CommentsTool() {
       const destinationChoice = await chooseExportDestination(filename, t);
       if (destinationChoice === null) return;
       const positionedComments = await Promise.all(comments.map(async (comment) => {
-        const [x, y] = await preview.convertPosition(comment.page, comment.x, comment.y);
-        return { page: comment.page, x, y, content: comment.content };
+        const coordinates = await preview.convertBox(comment.page, comment.box);
+        return { page: comment.page, ...coordinates, content: comment.content };
       }));
       const data = new FormData();
       data.append("file", file, file.name);
@@ -243,42 +237,26 @@ export function CommentsTool() {
                 <ChevronRight size={17} aria-hidden="true" />
               </Button>
             </div>
-            <p className="input-help">{t("comments.clickInstructions")}</p>
-            <div
-              className={`comments-pdf-page${ready ? " is-ready" : ""}`}
-              style={{ aspectRatio: `${preview.pageSize.width} / ${preview.pageSize.height}` }}
-              onClick={handlePageClick}
-            >
-              <canvas ref={preview.canvasRef} aria-label={t("comments.pagePreview", { page: pageNumber })} />
-              {currentPageComments.map((comment, index) => (
-                <span
-                  key={comment.id}
-                  className="comments-pin"
-                  style={{ left: `${comment.x * 100}%`, top: `${comment.y * 100}%` }}
-                  aria-hidden="true"
-                >
-                  {index + 1}
-                </span>
-              ))}
-              {draftPosition?.page === pageNumber ? (
-                <span
-                  className="comments-pin is-draft"
-                  style={{ left: `${draftPosition.x * 100}%`, top: `${draftPosition.y * 100}%` }}
-                  aria-hidden="true"
-                >
-                  <Plus size={13} />
-                </span>
-              ) : null}
-            </div>
+            <p className="input-help">{t("comments.dragInstructions")}</p>
+            <CommentPagePreview
+              canvasRef={preview.canvasRef}
+              pageNumber={pageNumber}
+              pageSize={preview.pageSize}
+              ready={ready}
+              disabled={working}
+              comments={currentPageComments}
+              draftBox={draftPosition?.page === pageNumber ? draftPosition.box : null}
+              onBoxSelected={createDraft}
+            />
             <Button
               type="button"
               variant="secondary"
               className="comments-center-button"
               disabled={!ready || working || comments.length >= maxComments}
-              onClick={() => placeComment(0.5, 0.5)}
+              onClick={() => createDraft(centeredCommentBox)}
             >
               <MessageSquare size={16} aria-hidden="true" />
-              {t("comments.placeAtCenter")}
+              {t("comments.createCenterBox")}
             </Button>
           </>
         ) : null}
@@ -297,6 +275,12 @@ export function CommentsTool() {
             <label className="field-label" htmlFor={`${id}-content`}>
               {t("comments.commentLabel", { page: draftPosition.page })}
             </label>
+            <CommentBoxControls
+              box={draftPosition.box}
+              disabled={working}
+              onChange={(box) => setDraftPosition((current) =>
+                current ? { ...current, box } : current)}
+            />
             <Textarea
               ref={textareaRef}
               id={`${id}-content`}

@@ -18,7 +18,7 @@ import (
 	"pdf-toolkit/services"
 )
 
-func TestAddCommentsCreatesTextAnnotationsOnSelectedPages(t *testing.T) {
+func TestAddCommentsCreatesHighlightsOnSelectedPages(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "input.pdf")
 	output := filepath.Join(tempDir, "commented.pdf")
@@ -27,7 +27,7 @@ func TestAddCommentsCreatesTextAnnotationsOnSelectedPages(t *testing.T) {
 	}
 
 	comments := []services.PDFComment{
-		{Page: 2, X: 120, Y: 240, Content: "À vérifier"},
+		{Page: 2, X1: 120, Y1: 240, X2: 160, Y2: 280, Content: "À vérifier"},
 	}
 	if err := NewPDFCPU().AddComments(context.Background(), input, output, comments); err != nil {
 		t.Fatalf("AddComments() error = %v", err)
@@ -50,15 +50,16 @@ func TestAddCommentsCreatesTextAnnotationsOnSelectedPages(t *testing.T) {
 	if count != 1 || len(annotations[2]) != 1 || len(annotations[1]) != 0 {
 		t.Fatalf("annotations = %d, pages = %v, want one annotation on page 2", count, annotations)
 	}
-	textAnnotations, ok := annotations[2][model.AnnText]
-	if !ok || len(textAnnotations.Map) != 1 {
-		t.Fatalf("page 2 text annotations = %+v, want one", textAnnotations)
+	highlights, ok := annotations[2][model.AnnHighLight]
+	if !ok || len(highlights.Map) != 1 {
+		t.Fatalf("page 2 highlight annotations = %+v, want one", highlights)
 	}
-	for _, annotation := range textAnnotations.Map {
+	for _, annotation := range highlights.Map {
 		rect := annotation.Rectangle()
-		if annotation.Content() != comments[0].Content ||
-			rect.LL.X != 111 || rect.LL.Y != 231 || rect.UR.X != 129 || rect.UR.Y != 249 {
-			t.Fatalf("annotation = %q at %+v, want comment at x=120 y=240", annotation.Content(), rect)
+		if annotation.Type() != model.AnnHighLight ||
+			annotation.Content() != comments[0].Content ||
+			rect.LL.X != 120 || rect.LL.Y != 240 || rect.UR.X != 160 || rect.UR.Y != 280 {
+			t.Fatalf("annotation = %q at %+v, want highlight from (120,240) to (160,280)", annotation.Content(), rect)
 		}
 	}
 }

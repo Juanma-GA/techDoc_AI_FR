@@ -25,7 +25,7 @@ func (p *routeProcessor) AddComments(
 func TestCommentsRouteAddsPDFAnnotationsAndCleansWorkspace(t *testing.T) {
 	processor := &routeProcessor{pageCount: 3}
 	comments := []services.PDFComment{
-		{Page: 2, X: 123, Y: 456, Content: "À vérifier"},
+		{Page: 2, X1: 123, Y1: 456, X2: 180, Y2: 500, Content: "À vérifier"},
 	}
 	rawComments, err := json.Marshal(comments)
 	if err != nil {

@@ -7,15 +7,14 @@ import {
 } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
+import type { CommentBox } from "./commentBox";
+
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export type CommentPreviewStatus = "empty" | "loading" | "ready" | "failed" | "no-pages";
 
-type PageViewport = ReturnType<PDFPageProxy["getViewport"]>;
-
 export function useCommentPdf(file: File | null, pageNumber: number) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const renderedPageRef = useRef<{ page: PDFPageProxy; viewport: PageViewport } | null>(null);
   const [documentProxy, setDocumentProxy] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [pageSize, setPageSize] = useState({ width: 1, height: 1 });
@@ -25,7 +24,6 @@ export function useCommentPdf(file: File | null, pageNumber: number) {
     setDocumentProxy(null);
     setPageCount(0);
     setPageSize({ width: 1, height: 1 });
-    renderedPageRef.current = null;
     setStatus(file ? "loading" : "empty");
     if (!file) return;
 
@@ -72,7 +70,6 @@ export function useCommentPdf(file: File | null, pageNumber: number) {
     let active = true;
     let renderTask: ReturnType<PDFPageProxy["render"]> | null = null;
     setStatus("loading");
-    renderedPageRef.current = null;
 
     const renderPage = async () => {
       const page = await documentProxy.getPage(pageNumber);
@@ -89,7 +86,6 @@ export function useCommentPdf(file: File | null, pageNumber: number) {
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         if (active) {
-          renderedPageRef.current = { page, viewport: naturalViewport };
           setStatus("ready");
         }
       } finally {
@@ -106,16 +102,24 @@ export function useCommentPdf(file: File | null, pageNumber: number) {
     };
   }, [documentProxy, pageNumber]);
 
-  const convertPosition = useCallback(async (pageNumber: number, x: number, y: number) => {
+  const convertBox = useCallback(async (pageNumber: number, box: CommentBox) => {
     if (!documentProxy) throw new Error("PDF document is not ready");
     const page = await documentProxy.getPage(pageNumber);
     try {
       const viewport = page.getViewport({ scale: 1 });
-      return viewport.convertToPdfPoint(x * viewport.width, y * viewport.height);
+      const [x1, y1] = viewport.convertToPdfPoint(
+        box.x * viewport.width,
+        box.y * viewport.height,
+      );
+      const [x2, y2] = viewport.convertToPdfPoint(
+        (box.x + box.width) * viewport.width,
+        (box.y + box.height) * viewport.height,
+      );
+      return { x1, y1, x2, y2 };
     } finally {
       page.cleanup();
     }
   }, [documentProxy]);
 
-  return { canvasRef, convertPosition, pageCount, pageSize, status };
+  return { canvasRef, convertBox, pageCount, pageSize, status };
 }

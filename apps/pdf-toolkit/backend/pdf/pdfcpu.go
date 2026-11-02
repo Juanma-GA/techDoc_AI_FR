@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -115,30 +116,32 @@ func (p *PDFCPU) AddComments(
 	}
 	annotations := make(map[int][]model.AnnotationRenderer, len(comments))
 	for index, comment := range comments {
-		const markerSize = 18.0
-		annotation := model.NewTextAnnotation(
-			*types.NewRectangle(
-				comment.X-markerSize/2,
-				comment.Y-markerSize/2,
-				comment.X+markerSize/2,
-				comment.Y+markerSize/2,
-			),
+		rect := types.NewRectangle(
+			math.Min(comment.X1, comment.X2),
+			math.Min(comment.Y1, comment.Y2),
+			math.Max(comment.X1, comment.X2),
+			math.Max(comment.Y1, comment.Y2),
+		)
+		quad := types.QuadPoints{*types.NewQuadLiteralForRect(rect)}
+		opacity := 0.35
+		highlightColor := color.SimpleColor{R: 1, G: 0.9, B: 0}
+		annotation := model.NewHighlightAnnotation(
+			*rect,
 			0,
 			comment.Content,
 			fmt.Sprintf("pdf-toolkit-comment-%d", index+1),
 			"",
 			0,
-			&color.Gray,
+			&highlightColor,
+			0,
+			0,
+			0,
 			"",
 			nil,
-			nil,
+			&opacity,
 			"",
-			"",
-			0,
-			0,
-			0,
-			false,
 			"Comment",
+			quad,
 		)
 		annotations[comment.Page] = append(annotations[comment.Page], annotation)
 	}
