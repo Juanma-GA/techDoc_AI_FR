@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Badge } from "@internal/ui";
 
 import type { DmValidationViolation } from "../lib/wizardTypes";
 
@@ -8,8 +9,8 @@ type Props = {
   violations: DmValidationViolation[];
 };
 
-function severityClass(severity: DmValidationViolation["severity"]): string {
-  return severity === "info" ? "info" : "warn";
+function severityVariant(severity: DmValidationViolation["severity"]): "info" | "warning" {
+  return severity === "info" ? "info" : "warning";
 }
 
 export function BrexViolationsPanel({ hasProfile, isComplete, violations }: Props) {
@@ -18,42 +19,44 @@ export function BrexViolationsPanel({ hasProfile, isComplete, violations }: Prop
   if (!hasProfile || !isComplete || !actualViolations.length) return null;
 
   const hasWarnings = actualViolations.some((violation) => violation.severity !== "info");
-  const badgeClass = hasWarnings ? "warn" : "info";
+  const badgeVariant = hasWarnings ? "warning" : "info";
 
   return (
-    <section className="validation-violations" aria-label={t("migration.generate.brexCheckTitle")}>
-      <h3 className="label">{t("migration.generate.brexCheckTitle")}</h3>
+    <section className="s1k-validation-violations" aria-label={t("migration.generate.brexCheckTitle")}>
+      <h3 className="text-label font-mono uppercase text-fg-dim">
+        {t("migration.generate.brexCheckTitle")}
+      </h3>
       <details>
         <summary>
-          <span className={`badge ${badgeClass}`}>
+          <Badge variant={badgeVariant}>
             {t("migration.generate.brexViolations", { count: actualViolations.length })}
-          </span>
+          </Badge>
         </summary>
-        <div className="validation-violations">
+        <div className="s1k-validation-violations">
           {actualViolations.map((violation, index) => (
             <article
-              className="validation-violation"
+              className="s1k-validation-violation"
               key={`${violation.rule}-${violation.brex_rule_id ?? index}`}
             >
-              <div className="validation-violation-meta">
-                <span className={`badge ${severityClass(violation.severity)}`}>
+              <div className="s1k-validation-violation-meta">
+                <Badge variant={severityVariant(violation.severity)}>
                   {t(`migration.generate.brexSeverity.${violation.severity}`)}
-                </span>
-                <span className="badge info">{violation.rule}</span>
+                </Badge>
+                <Badge variant="info">{violation.rule}</Badge>
                 {violation.brex_rule_id ? (
-                  <code style={{ overflowWrap: "anywhere" }}>
+                  <code className="break-all">
                     {t("migration.generate.brexRuleId")}: {violation.brex_rule_id}
                   </code>
                 ) : null}
                 {violation.brex_severity_level ? (
-                  <span className="label">
+                  <span className="text-label font-mono uppercase text-fg-dim">
                     {t("migration.generate.brexSeverityLevel")}: {violation.brex_severity_level}
                   </span>
                 ) : null}
               </div>
               <p>{violation.message}</p>
               {violation.path && violation.path !== "/" ? (
-                <code className="validation-error-path" style={{ overflowWrap: "anywhere" }}>
+                <code className="s1k-validation-error-path break-all">
                   {violation.path}
                 </code>
               ) : null}

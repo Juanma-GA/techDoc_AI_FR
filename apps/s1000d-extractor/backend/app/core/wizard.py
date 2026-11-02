@@ -399,6 +399,8 @@ def update(db: Session, doc: Document, params: dict) -> dict:
             ws.push_history(doc)
             if op == "hide_zones":
                 ws.hide_zones(doc, params.get("zones") or ["header", "footer"])
+            elif op == "split_level":
+                _resplit(db, doc, params["split_level"])
             elif op:
                 ws.apply_split_op(doc, params)
             else:

@@ -18,11 +18,11 @@ describe("shared SSE reader", () => {
     await readSse(response([
       "event: sess", "ion\r", '\ndata: {"document_id":\r\n',
       'data: "synthetic"}\r\n\r', "\nevent: progress\r\ndata:",
-      ' {"pct":50}\r\n\r\nevent: done\r\ndata: {"ok":true}',
+      ' {"step":"parse","pct":50}\r\n\r\nevent: done\r\ndata: {"ok":true}',
     ]), handler);
     expect(handler.mock.calls).toEqual([
       ["session", { document_id: "synthetic" }],
-      ["progress", { pct: 50 }],
+      ["progress", { step: "parse", pct: 50 }],
       ["done", { ok: true }],
     ]);
   });
@@ -35,9 +35,10 @@ describe("shared SSE reader", () => {
 
   it("rejects malformed payloads instead of reporting an empty success", async () => {
     await expect(readSse(response(["event: done\ndata: broken\n\n"]), vi.fn())).rejects.toThrow();
-    await expect(readSse(response(["event: done\ndata: []\n\n"]), vi.fn())).rejects.toThrow(
-      "Invalid SSE event payload",
-    );
+    await expect(readSse(response(["event: done\ndata: []\n\n"]), vi.fn())).rejects.toThrow();
+    await expect(readSse(response([
+      'event: progress\ndata: {"step":"parse","pct":101}\n\n',
+    ]), vi.fn())).rejects.toThrow();
   });
 
   it("cancels a quiet stream when aborted", async () => {

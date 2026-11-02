@@ -1,9 +1,41 @@
 import { ApiRequestError, responseId } from "./client";
-export type SseEventHandler = (event: string, data: Record<string, unknown>) => void;
+import { z } from "zod";
 
-function isEventData(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+const sessionDataSchema = z.record(z.unknown()).superRefine((data, context) => {
+  if (typeof data.document_id !== "string" || !data.document_id) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["document_id"], message: "Invalid session event." });
+  }
+});
+const progressDataSchema = z.record(z.unknown()).superRefine((data, context) => {
+  if (typeof data.step !== "string" || !data.step) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["step"], message: "Invalid progress step." });
+  }
+  if (
+    typeof data.pct !== "number" ||
+    !Number.isInteger(data.pct) ||
+    data.pct < 0 ||
+    data.pct > 100
+  ) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["pct"], message: "Invalid progress percentage." });
+  }
+});
+const errorDataSchema = z.record(z.unknown()).superRefine((data, context) => {
+  if (typeof data.code !== "string" || !data.code) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["code"], message: "Invalid stream error code." });
+  }
+  if (typeof data.message !== "string" || !data.message) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["message"], message: "Invalid stream error message." });
+  }
+});
+
+export const sseEventSchema = z.discriminatedUnion("event", [
+  z.object({ event: z.literal("session"), data: sessionDataSchema }),
+  z.object({ event: z.literal("progress"), data: progressDataSchema }),
+  z.object({ event: z.literal("done"), data: z.record(z.unknown()) }),
+  z.object({ event: z.literal("error"), data: errorDataSchema }),
+]);
+
+export type SseEventHandler = (event: string, data: Record<string, unknown>) => void;
 
 async function closeReader(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: AbortSignal) {
   try {
@@ -30,8 +62,8 @@ export async function readSse(
   const dispatch = () => {
     if (data.length) {
       const parsed: unknown = JSON.parse(data.join("\n"));
-      if (!isEventData(parsed)) throw new Error("Invalid SSE event payload.");
-      onEvent(event, parsed);
+      const validated = sseEventSchema.parse({ event, data: parsed });
+      onEvent(validated.event, validated.data);
     }
 
     data = [];

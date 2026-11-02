@@ -38,7 +38,12 @@ from app.core.wizard_zip_export import (
 )
 from app.db.models import Document
 from app.db.session import get_db, open_session
-from app.schemas import WizardValidateIn
+from app.schemas import (
+    WizardAdvanceIn,
+    WizardStartIn,
+    WizardUpdateIn,
+    WizardValidateIn,
+)
 
 router = APIRouter(prefix="/documents", tags=["wizard"])
 
@@ -49,23 +54,6 @@ def _dm_filename(dm: dict) -> str:
     if candidate and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", candidate):
         return f"{candidate}.xml"
     return f"{dm['dm_id']}.xml"
-
-
-def _start_options(params: dict) -> tuple[bool, int | None, int | None]:
-    cut_pdf = params.get("cut_pdf", True)
-    start_page = params.get("start_page")
-    end_page = params.get("end_page")
-    if not isinstance(cut_pdf, bool):
-        raise AppError("PDF_CUT_INVALID", "Le champ cut_pdf doit etre booleen.", 422)
-    if start_page is not None and (
-        isinstance(start_page, bool) or not isinstance(start_page, int) or start_page < 1
-    ):
-        raise AppError("PDF_PAGE_INVALID", "Le champ start_page doit etre un entier positif.", 422)
-    if end_page is not None and (
-        isinstance(end_page, bool) or not isinstance(end_page, int) or end_page < 1
-    ):
-        raise AppError("PDF_PAGE_INVALID", "Le champ end_page doit etre un entier positif.", 422)
-    return cut_pdf, start_page, end_page
 
 
 def _require(db: Session, doc_id: str) -> Document:
@@ -91,16 +79,15 @@ def _image_paths(doc_id: str, *, root: Path | None = None) -> list[Path]:
 @router.post("/{doc_id}/wizard/start", response_model=WizardStateOut, response_model_exclude_unset=True)
 def wizard_start(
     doc_id: str,
-    params: dict = Body(default={}),
+    params: WizardStartIn = Body(default=WizardStartIn()),
     db: Session = Depends(get_db),
 ) -> dict:
-    cut_pdf, start_page, end_page = _start_options(params)
     return wizard.start(
         db,
         _require(db, doc_id),
-        cut_pdf=cut_pdf,
-        start_page=start_page,
-        end_page=end_page,
+        cut_pdf=params.cut_pdf,
+        start_page=params.start_page,
+        end_page=params.end_page,
     )
 
 
@@ -108,22 +95,21 @@ def wizard_start(
 async def wizard_start_stream(
     doc_id: str,
     request: Request,
-    params: dict = Body(default={}),
+    params: WizardStartIn = Body(default=WizardStartIn()),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
     """Demarre l'assistant en streamant la progression (parse / ocr / infer /
     split / classify) ; l'evenement `done` porte l'etat initial (etape split)."""
     doc = _require(db, doc_id)
     demo_mode = is_demo_mode(db)
-    cut_pdf, start_page, end_page = _start_options(params)
     doc_id = doc.id
 
     def work(progress: Progress) -> dict:
         with open_session(demo_mode) as session:
             document = _require(session, doc_id)
             return wizard.start(
-                session, document, progress_cb=progress, cut_pdf=cut_pdf,
-                start_page=start_page, end_page=end_page,
+                session, document, progress_cb=progress, cut_pdf=params.cut_pdf,
+                start_page=params.start_page, end_page=params.end_page,
             )
 
     return stream_threaded_job(
@@ -150,13 +136,17 @@ def wizard_state(doc_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/{doc_id}/wizard/update", response_model=WizardStateOut, response_model_exclude_unset=True)
-def wizard_update(doc_id: str, params: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
-    return wizard.update(db, _require(db, doc_id), params)
+def wizard_update(doc_id: str, params: WizardUpdateIn, db: Session = Depends(get_db)) -> dict:
+    return wizard.update(db, _require(db, doc_id), params.model_dump(exclude_none=True))
 
 
 @router.post("/{doc_id}/wizard/advance", response_model=WizardStateOut, response_model_exclude_unset=True)
-def wizard_advance(doc_id: str, params: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
-    return wizard.advance(db, _require(db, doc_id), params)
+def wizard_advance(
+    doc_id: str,
+    params: WizardAdvanceIn = Body(default=WizardAdvanceIn()),
+    db: Session = Depends(get_db),
+) -> dict:
+    return wizard.advance(db, _require(db, doc_id), params.model_dump(exclude_none=True))
 
 
 @router.post("/{doc_id}/wizard/back", response_model=WizardStateOut, response_model_exclude_unset=True)

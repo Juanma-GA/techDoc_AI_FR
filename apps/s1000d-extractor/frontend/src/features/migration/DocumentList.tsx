@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Spinner } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { documentsApi } from "../../lib/api";
+import { formatApiError } from "../../lib/migrationUtils";
 import type { MigrationInputs } from "./useMigrationInputs";
 import type { MigrationWizard } from "./useMigrationWizard";
-import { ConfirmAction } from "./ConfirmAction";
+import { ConfirmButton } from "../../components/ConfirmButton";
 
 const variants = {
   extracted: "success", incomplete: "danger", extract_failed: "danger", wizard: "info", uploaded: "default",
@@ -32,7 +33,7 @@ export function DocumentList({ inputs, wizard }: { inputs: MigrationInputs; wiza
         <Select aria-label={t("migration.ui.sort")} value={sort} onChange={(event) => setSort(event.target.value)}
           options={["recent", "oldest", "name"].map((value) => ({ value, label: t(`migration.ui.sort_${value}`) }))} />
       </div>
-      {query.error ? <p role="alert" className="text-danger">{query.error.message}</p> : null}
+      {query.error ? <p role="alert" className="text-danger">{formatApiError(t, query.error)}</p> : null}
       {query.isLoading ? <Spinner aria-label={t("common.loading")} /> : null}
       {docs.length ? docs.map((doc) => <div key={doc.id}
         className="flex flex-wrap items-center justify-between gap-3 border-b border-md py-3 [content-visibility:auto]">
@@ -45,7 +46,7 @@ export function DocumentList({ inputs, wizard }: { inputs: MigrationInputs; wiza
         <div className="flex gap-2">
           <Button type="button" variant="secondary" size="sm" disabled={wizard.busy}
             onClick={() => void wizard.open(doc.id)}>{t("migration.docs.open")}</Button>
-          <ConfirmAction label={t("migration.docs.delete")} disabled={wizard.busy}
+          <ConfirmButton label={t("migration.docs.delete")} size="sm" disabled={wizard.busy}
             onConfirm={() => void wizard.remove(doc.id)} />
         </div>
       </div>) : !query.isLoading && !query.error ? <p className="text-fg-dim">{t("migration.docs.empty")}</p> : null}

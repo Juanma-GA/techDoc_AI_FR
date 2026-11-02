@@ -239,7 +239,7 @@ for (const layout of [
       const boxes = [...element.children].map((child) => child.getBoundingClientRect());
       return boxes.slice(1).map((box, index) => box.top - boxes[index]!.bottom);
     });
-    expect(gaps).toHaveLength(3);
+    expect(gaps).toHaveLength(1);
     for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(16);
     await openRules(page, layout.language);
     const panel = page.getByTestId("preliminary-rules-panel");

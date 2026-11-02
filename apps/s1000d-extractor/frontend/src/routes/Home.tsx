@@ -1,54 +1,40 @@
 import { useQuery } from "@tanstack/react-query";
+import { Alert, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@internal/ui";
+import { useTranslation } from "react-i18next";
 
 import { healthApi, type HealthDto } from "../lib/api";
 
-// Contenu FR (le preview source est FR-only).
 export function Home() {
+  const { t } = useTranslation();
   const { data: health } = useQuery<HealthDto>({
     queryKey: ["health"],
     queryFn: healthApi.read,
   });
 
   return (
-    <>
-      <div className="page-header">
-        <h1>Accueil</h1>
-        <p>Migration de documentation legacy vers S1000D.</p>
-      </div>
-
-      <div className="card">
-        <h2 className="card-title">Migration legacy vers S1000D</h2>
-        <p>
-          Cet outil extrait un <strong>squelette structurel S1000D</strong> à partir
-          d'un PDF natif ou d'un fichier Word, pour amorcer la conversion de
-          documentation ancienne.
-        </p>
-        <p>
-          Principe : le type d'élément S1000D dépend du <strong>contexte</strong> (une
-          liste à puces devient <code>randomList</code> en zone descriptive,{" "}
-          <code>proceduralStep</code> en procédure), pas de la forme. L'outil classe le
-          contexte, propose le mapping et signale les cas ambigus pour revue humaine.
-        </p>
-        <div className="banner warn">
-          <strong>Best-effort.</strong> La sortie reste un squelette. Le BREX utilisateur
-          est fourni séparément et ses règles prises en charge sont appliquées ; le DMC du
-          DM, l'applicabilité, SNS et ICN ne sont pas récupérables d'un PDF et restent à
-          confirmer par un humain.
-        </div>
-        <div className="banner">
-          Statut backend :{" "}
-          {health ? (
-            <span className="badge ok">{health.status}</span>
-          ) : (
-            <span className="badge warn">INCONNU</span>
-          )}
-          {health ? (
-            <>
-              {" · "}version : <code>{health.version}</code>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </>
+    <div className="space-y-4">
+      <PageHeader title={t("home.title")} description={t("home.subtitle")} />
+      <Card>
+        <CardHeader><CardTitle>{t("home.cardTitle")}</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p>{t("home.description")}</p>
+          <p>{t("home.principle")}</p>
+          <Alert variant="warning" title={t("home.bestEffortTitle")}>
+            {t("home.bestEffort")}
+          </Alert>
+          <Alert variant="info" icon={null}>
+            <span>{t("home.backendStatus")} </span>
+            <Badge variant={health ? "success" : "warning"}>
+              {health ? health.status : t("home.unknown")}
+            </Badge>
+            {health ? (
+              <span className="ml-2">
+                {t("home.version")} <code>{health.version}</code>
+              </span>
+            ) : null}
+          </Alert>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

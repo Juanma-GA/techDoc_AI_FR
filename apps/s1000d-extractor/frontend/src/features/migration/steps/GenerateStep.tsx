@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { BrexAnalysisSummary } from "../../../components/BrexAnalysisSummary";
 import { WizardZipDownloadButton } from "../../../components/WizardZipDownloadButton";
 import { WizardStepBackButton } from "../../../components/WizardStepBackButton";
-import { getCommonMissingFields } from "../../../lib/migrationUtils";
+import { formatApiError, getCommonMissingFields } from "../../../lib/migrationUtils";
 import { resourcesApi, wizardApi, type WizardDm, type WizardState } from "../../../lib/api";
 import type { MigrationWizard } from "../useMigrationWizard";
 import { ImageGallery } from "../ImageGallery";
@@ -56,7 +56,7 @@ export function GenerateStep({ state, wizard, docId, profileId }: {
       </details> : null}
       {visible.map((dm) => <GeneratedDmRow key={dm.dm_id} dm={dm} docId={docId}
         commonFields={commonSet} hasBrex={state.has_brex_profile === true} />)}
-      {images.error ? <p role="alert" className="text-danger">{images.error.message}</p> : null}
+      {images.error ? <p role="alert" className="text-danger">{formatApiError(t, images.error)}</p> : null}
       {images.isLoading ? <Spinner aria-label={t("common.loading")} /> : null}
       <ImageGallery docId={docId} names={images.data ?? []} />
     </CardContent>

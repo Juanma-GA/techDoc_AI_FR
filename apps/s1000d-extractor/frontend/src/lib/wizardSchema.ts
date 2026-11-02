@@ -47,12 +47,13 @@ const snippet = z.object({
 }).passthrough();
 const preview = z.object({ head: z.array(snippet), tail: z.array(snippet), total: z.number() });
 const step = z.enum(["dmrl", "split", "type", "structure", "preliminary", "generate"]);
+const dmType = z.enum(["descriptive", "procedural", "ipd"]);
 export const wizardStateSchema: z.ZodType<WizardState, z.ZodTypeDef, unknown> = z.object({
-  step, split_level: z.string(), steps: z.array(step).optional(),
+  step, split_level: z.enum(["chapter", "section", "subsection"]), steps: z.array(step).optional(),
   dmrl_dm_count: z.number().optional(), can_undo: z.boolean().optional(),
   has_brex_profile: z.boolean().optional(), illustration_errors: z.number().optional(),
   dms: z.array(z.object({
-    dm_id: z.string(), title: z.string(), dm_type: z.string(), node_count: z.number(),
+    dm_id: z.string(), title: z.string(), dm_type: dmType, node_count: z.number(),
     dmc: z.string().optional(), is_orphan: z.boolean().optional(),
     tree: treeSchema.nullish().transform((value) => value ?? undefined),
     preview: preview.nullish().transform((value) => value ?? undefined),

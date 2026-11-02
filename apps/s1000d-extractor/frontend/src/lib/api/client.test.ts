@@ -57,7 +57,7 @@ describe("common API transport", () => {
     )));
     await expect(startWizardStream("synthetic", vi.fn())).rejects.toBeInstanceOf(ApiRequestError);
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
-      'event: progress\ndata: {"pct":20}\n\n',
+      'event: progress\ndata: {"step":"parse","pct":20}\n\n',
       { headers: { "Content-Type": "text/event-stream" } },
     )));
     await expect(startWizardStream("synthetic", vi.fn())).rejects.toMatchObject({ code: "INCOMPLETE_STREAM" });

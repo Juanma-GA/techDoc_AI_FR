@@ -1,4 +1,65 @@
 {
+  "home": {
+    "title": "Home",
+    "subtitle": "Migrate legacy documentation to S1000D.",
+    "cardTitle": "Legacy to S1000D migration",
+    "description": "This tool extracts an S1000D structural skeleton from a native PDF or Word file to start converting legacy documentation.",
+    "principle": "The S1000D element type depends on context, not shape. The tool classifies context, proposes mappings and flags ambiguous cases for human review.",
+    "bestEffortTitle": "Indicative output",
+    "bestEffort": "The output remains a skeleton. The user BREX is supplied separately and supported rules are applied; the DM DMC, applicability, SNS and ICN must still be confirmed by a person.",
+    "backendStatus": "Backend status:",
+    "unknown": "UNKNOWN",
+    "version": "version:"
+  },
+  "architecture": {
+    "title": "Architecture",
+    "subtitle": "Generic pipeline, generation workflow and step details.",
+    "layersTitle": "Generic pipeline (3 independent layers)",
+    "documentChangeTitle": "WHAT VARIES BY DOCUMENT",
+    "documentChangeText": "Input format (PDF layout, Word styles) is absorbed by a canonical logical model (IR). PDF and Word are normalized to the same IR, with no per-document configuration.",
+    "projectChangeTitle": "WHAT VARIES BY PROJECT",
+    "projectChangeText": "The S1000D version (4.1 / 4.2 and its local XSDs) and user BREX provide project constraints. BREX guides and validates DMs without replacing the mapping engine.",
+    "workflowTitle": "User workflow — guided generation",
+    "workflowIntro": "Each step is gated: heuristics make proposals, and a person reviews and corrects them before continuing.",
+    "workflow": [
+      "Settings → demo mode and prefill rules.",
+      "Upload → PDF/Word + S1000D version (4.1/4.2) + optional BREX profile → Generate.",
+      "Split → choose a level (chapter/section/subsection) and review detected Data Modules.",
+      "Types → correct each DM type (descriptive / procedural / IPD).",
+      "Structure → review each DM tree and resolve ambiguous nodes (para ↔ proceduralStep).",
+      "Generate → S1000D XML per DM and violations; download individual DMs or a ZIP."
+    ],
+    "pipelineTitle": "Under the hood (step pipeline)",
+    "pipeline": [
+      "Parse → PyMuPDF (PDF) / python-docx (Word); scanned PDFs require local OCR.",
+      "Canonical IR → common logical tree (sections / lists / admonitions / figures / tables).",
+      "Split (step 1) → one Data Module per section, chapter or subsection.",
+      "DM typing (step 2) → descriptive / procedural / IPD (deterministic heuristics).",
+      "Resolve (step 3) → S1000D element by context and shape; multiple candidates when ambiguous.",
+      "Serialize and validate (step 4) → XML per DM (lxml), XSD and supported BREX rules."
+    ],
+    "outputWarning": "Output is a set of DMs, each an indicative skeleton: the DM DMC, applicability, SNS and ICN still need human confirmation. brexDmRef points to the selected BREX; unsupported rules are reported separately."
+  },
+  "errors": {
+    "VALIDATION_ERROR": "The request is invalid.",
+    "VALIDATION_BAD_OVERRIDES": "Validation versions must be provided as a valid list.",
+    "VALIDATION_TOO_MANY_FILES": "This batch contains too many files.",
+    "FILE_TOO_LARGE": "This batch exceeds the maximum allowed size.",
+    "PDF_PAGE_INVALID": "The PDF page range is invalid.",
+    "PDF_CUT_VALIDATION_REQUIRED": "Confirm the PDF page range before continuing.",
+    "DOC_NOT_FOUND": "Document not found.",
+    "WIZARD_NOT_STARTED": "Start the conversion for this document first.",
+    "DMRL_TYPE_REVIEW_REQUIRED": "Choose a type for each Data Module before continuing.",
+    "INVALID_STREAM": "The response stream is invalid.",
+    "INVALID_RESPONSE": "The server response is invalid.",
+    "NETWORK_ERROR": "The server could not be reached.",
+    "HTTP_ERROR": "The request could not be completed.",
+    "INTERNAL_ERROR": "An internal error occurred.",
+    "START_FAILED": "Document analysis failed.",
+    "INCOMPLETE_STREAM": "The stream ended before analysis was complete.",
+    "BREX_NOT_FOUND": "BREX profile not found.",
+    "BREX_ISSUE_MISMATCH": "The BREX profile version does not match the document."
+  },
   "preliminary": {
     "title": "Review the procedural DM",
     "progress": "Procedure {{current}} of {{total}}",
@@ -129,6 +190,8 @@
     "back": "← Back",
     "none": "—",
     "confirmAgain": "Click again to confirm",
+    "close": "Close",
+    "pageShort": "p.",
     "loading": "Loading",
     "retry": "Retry"
   },
@@ -150,7 +213,9 @@
     "confirm": "Click again to confirm",
     "nothingToDelete": "(nothing to delete)",
     "resetSuccess": "Reset OK ({{items}}).",
-    "resetError": "Reset failed: {{message}}"
+    "resetError": "Reset failed: {{message}}",
+    "resetSuccessTitle": "Reset complete",
+    "resetErrorTitle": "Reset failed"
   },
   "settings": {
     "title": "Settings",
@@ -200,6 +265,22 @@
   "migration": {
     "title": "S1000D conversion",
     "subtitle": "Guided generation of S1000D Data Modules.",
+    "zoneFlags": {
+      "header": "header",
+      "footer": "footer",
+      "chapter": "chapter",
+      "cover": "cover page",
+      "toc": "table of contents",
+      "flagHelp": "Zone may need review",
+      "reviewHelp": "This content may be layout noise",
+      "review": "review",
+      "link": "link",
+      "table": "table"
+    },
+    "preview": {
+      "empty": "No previewable content.",
+      "hidden": "{{count}} intermediate block(s)"
+    },
     "upload": {
       "title": "Upload a document",
       "file": "PDF or Word document",
@@ -232,6 +313,8 @@
         "endPage": "To page",
         "candidate": "Page {{page}} — score {{score}}",
         "invalidRange": "The start page must be before or equal to the end page.",
+        "invalidPage": "Enter a valid page number.",
+        "pageTooLarge": "The page must be between 1 and {{total}}.",
         "validate": "Validate the range and start analysis",
         "previewAlt": "Preview of page {{page}}"
       }

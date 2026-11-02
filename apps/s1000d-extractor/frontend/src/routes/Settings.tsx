@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { PageHeader } from "@internal/ui";
 
 import { DemoModeSettings } from "../components/DemoModeSettings";
 import { PreliminaryRulesSettings } from "../components/business/PreliminaryRulesSettings";
@@ -8,10 +9,7 @@ export function Settings() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>{t("settings.title")}</h1>
-        <p>{t("settings.subtitle")}</p>
-      </div>
+      <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
 
       <div className="space-y-6" data-testid="settings-sections">
         <DemoModeSettings />

@@ -192,3 +192,41 @@ def test_validates_declared_legacy_encoding() -> None:
     result = validate_dm(xml.encode("iso-8859-1"), filename="legacy-encoding.xml")
 
     assert result["status"] == "valid"
+
+
+def test_validation_rejects_malformed_issue_overrides_with_stable_code(client) -> None:
+    response = client.post(
+        "/api/v1/validation/dms",
+        files=[("files", ("manual.xml", b"<dm/>", "application/xml"))],
+        data={"issue_overrides": "{"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_BAD_OVERRIDES"
+
+
+def test_validation_enforces_file_count_and_total_size(client, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.api import validation as validation_api
+
+    monkeypatch.setattr(validation_api, "settings", SimpleNamespace(
+        max_validation_files=1,
+        max_upload_size_bytes=3,
+    ))
+    too_many = client.post(
+        "/api/v1/validation/dms",
+        files=[
+            ("files", ("one.xml", b"<dm/>", "application/xml")),
+            ("files", ("two.xml", b"<dm/>", "application/xml")),
+        ],
+    )
+    assert too_many.status_code == 413
+    assert too_many.json()["code"] == "VALIDATION_TOO_MANY_FILES"
+
+    too_large = client.post(
+        "/api/v1/validation/dms",
+        files=[("files", ("large.xml", b"<dm/>", "application/xml"))],
+    )
+    assert too_large.status_code == 413
+    assert too_large.json()["code"] == "FILE_TOO_LARGE"

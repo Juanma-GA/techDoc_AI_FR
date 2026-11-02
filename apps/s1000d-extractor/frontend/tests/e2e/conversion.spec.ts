@@ -4,16 +4,45 @@ const fr: typeof import("../../src/locales/fr.json") = JSON.parse(
   readFileSync(new URL("../../src/locales/fr.json", import.meta.url), "utf8"),
 );
 
-async function syntheticConversion(page: Page, generated = false) {
+function contrastRatio(foreground: string, background: string): number {
+  const channels = (color: string) => {
+    const values = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+    if (!values || values.length !== 3) throw new Error(`Unsupported computed color: ${color}`);
+    return values.map((value) => {
+      const channel = value / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+  };
+  const luminance = (color: string) => {
+    const [red, green, blue] = channels(color);
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+  };
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+async function syntheticConversion(page: Page, generated = false, unresolvedTypes = false) {
   const counts = { uploads: 0, downloads: 0, streams: 0, validations: 0, xml: 0, documents: generated ? 1 : 0 };
   const doc = { id: "synthetic-doc", filename: "synthetic.pdf", source_format: "pdf",
     status: generated ? "extracted" : "wizard", created_at: "2026-10-30T12:00:00Z" };
   const state = {
-    step: generated ? "generate" : "split", split_level: "section",
-    steps: ["split", "type", "structure", "generate"], has_brex_profile: false,
+    step: unresolvedTypes ? "dmrl" : generated ? "generate" : "split", split_level: "section",
+    steps: unresolvedTypes ? ["dmrl", "split", "generate"] : ["split", "type", "structure", "generate"],
+    has_brex_profile: false,
     resources: { dmrl_count: 0, has_cir: false, has_brex_rules: false, has_dm_header: false },
     dms: [{ dm_id: "synthetic-dm", title: "Synthetic section", dm_type: "descriptive", node_count: 1,
       has_xml: generated, xsd_valid: true, missing_fields: [], xsd_violations: [], brex_violations: [] }],
+    ...(unresolvedTypes ? {
+      dmrl_dm_count: 1,
+      dmrl: [{
+        index: 0, arbo: "1", dmc: "DMC-SYNTHETIC", title: "Synthetic section",
+        dm_type: "", dmrl_type: "", info_code: "999", info_code_schema: "unknown",
+        info_code_dm_type: "", type_conflict: true, type_issue: "unsupported_schema",
+        icn: "", is_pm_title: false, matched: true, match_rank: "exact", page: 1,
+        matched_text: "Synthetic section",
+      }],
+    } : {}),
   };
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   await page.route("**/api/v1/**", async (route) => {
@@ -59,6 +88,44 @@ async function syntheticConversion(page: Page, generated = false) {
   });
   return counts;
 }
+
+test("keeps the DMRL type picker legible and conflict notice padded in both themes", async ({ page }) => {
+  await syntheticConversion(page, false, true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/migration/synthetic-doc");
+  const typeSelect = page.locator(".s1k-dm-type-select").first();
+  await expect(typeSelect).toBeVisible();
+  const notice = page.locator('div[role="alert"]').filter({ has: page.locator("details.space-y-3") });
+  await expect(notice).toBeVisible();
+
+  for (const theme of ["dark", "light"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.classList.toggle("dark", value === "dark");
+    }, theme);
+    const selectStyles = await typeSelect.evaluate((select) => ({
+      scheme: getComputedStyle(select).colorScheme,
+      foreground: getComputedStyle(select).color,
+      optionForeground: getComputedStyle(select.options[0]!).color,
+      optionBackground: getComputedStyle(select.options[0]!).backgroundColor,
+    }));
+    expect(selectStyles.scheme).toBe(theme);
+    expect(contrastRatio(selectStyles.optionForeground, selectStyles.optionBackground))
+      .toBeGreaterThanOrEqual(4.5);
+
+    const noticeStyles = await notice.evaluate((element) => ({
+      paddingLeft: getComputedStyle(element).paddingLeft,
+      paddingRight: getComputedStyle(element).paddingRight,
+      lineHeight: getComputedStyle(element.querySelector("summary")!).lineHeight,
+      listSpacing: getComputedStyle(element.querySelector("ul")!).marginTop,
+    }));
+    expect(Number.parseFloat(noticeStyles.paddingLeft)).toBeGreaterThanOrEqual(16);
+    expect(noticeStyles.paddingLeft).toBe(noticeStyles.paddingRight);
+    expect(Number.parseFloat(noticeStyles.lineHeight)).toBeGreaterThanOrEqual(20);
+    expect(Number.parseFloat(noticeStyles.listSpacing)).toBeGreaterThan(0);
+    await typeSelect.screenshot({ path: `test-results/dmrl-type-picker-${theme}.png` });
+    await notice.screenshot({ path: `test-results/dmrl-type-notice-${theme}.png` });
+  }
+});
 
 test("keeps inputs across navigation, reuses the upload and restores metadata without downloading", async ({ page }) => {
   const counts = await syntheticConversion(page);
@@ -118,7 +185,7 @@ test("imports 45 XML files in batches of 20 with at most two concurrent requests
     })) } });
   });
   await page.goto("/validation");
-  await page.locator('.validation-import input[type="file"]').first().setInputFiles(
+  await page.getByTestId("validation-import").locator('input[type="file"]').first().setInputFiles(
     Array.from({ length: 45 }, (_, index) => ({
       name: `synthetic-${index}.xml`, mimeType: "application/xml", buffer: Buffer.from("<dmodule/>"),
     })),

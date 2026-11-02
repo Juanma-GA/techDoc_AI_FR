@@ -42,14 +42,15 @@ test("validation empty states align and the left panel accepts dropped XML", asy
   }));
   await page.goto("/validation");
 
-  const leftEmpty = page.locator(".validation-empty-list");
-  const rightEmpty = page.locator(".validation-empty-detail");
+  const leftEmpty = page.getByTestId("validation-empty-list");
+  const rightEmpty = page.getByTestId("validation-empty-detail");
   const [leftBox, rightBox] = await Promise.all([leftEmpty.boundingBox(), rightEmpty.boundingBox()]);
   expect(leftBox).not.toBeNull();
   expect(rightBox).not.toBeNull();
-  expect(Math.abs(
-    (leftBox!.y + leftBox!.height / 2) - (rightBox!.y + rightBox!.height / 2),
-  )).toBeLessThan(3);
+  expect(
+    Math.abs((leftBox!.y + leftBox!.height / 2) - (rightBox!.y + rightBox!.height / 2)),
+    `empty-state centers differ: ${JSON.stringify({ leftBox, rightBox })}`,
+  ).toBeLessThan(3);
 
   const dataTransfer = await page.evaluateHandle(() => {
     const transfer = new DataTransfer();
@@ -95,7 +96,7 @@ test("validation displays the result for an imported XML DM", async ({ page }) =
     }),
   }));
   await page.goto("/validation");
-  await page.locator('.validation-import input[type="file"][accept*=".xml"]').first().setInputFiles([
+  await page.getByTestId("validation-import").locator('input[type="file"][accept*=".xml"]').first().setInputFiles([
     { name: "valid.xml", mimeType: "application/xml", buffer: Buffer.from("<dmodule />") },
     { name: "invalid.xml", mimeType: "application/xml", buffer: Buffer.from("<dmodule />") },
   ]);

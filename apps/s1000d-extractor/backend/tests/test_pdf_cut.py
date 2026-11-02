@@ -326,3 +326,27 @@ def test_pdf_cut_can_preview_and_confirm_page(client, pdf_bytes_headers, monkeyp
 
     started = client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": True})
     assert started.status_code == 200
+
+
+def test_pdf_cut_confirm_accepts_legacy_page_alias(client, pdf_bytes_headers) -> None:
+    doc_id = _upload(client, pdf_bytes_headers)
+
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+        json={"page": 2, "end_page": 3},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["page"] == 2
+    assert response.json()["start_page"] == 2
+
+
+def test_invalid_pdf_page_fields_use_stable_request_validation_code(client) -> None:
+    for path, payload in (
+        ("/api/v1/documents/unknown/pdf-cut/confirm", {"page": 0}),
+        ("/api/v1/documents/unknown/wizard/start", {"start_page": 0}),
+    ):
+        response = client.post(path, json=payload)
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { PageHeader } from "@internal/ui";
 import { PdfCutStartSelector } from "../components/PdfCutStartSelector";
 import { UploadCard } from "../features/migration/UploadCard";
 import { DocumentList } from "../features/migration/DocumentList";
@@ -17,9 +18,7 @@ export function Migration() {
     if (wizard.wiz?.step) anchor.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }, [wizard.wiz?.step]);
   return <div className="space-y-5">
-    <header className="page-header">
-      <h1>{t("migration.title")}</h1><p>{t("migration.subtitle")}</p>
-    </header>
+    <PageHeader title={t("migration.title")} description={t("migration.subtitle")} />
     <UploadCard inputs={inputs} wizard={wizard} />
     {wizard.pdfCut ? <PdfCutStartSelector
       docId={wizard.pdfCut.docId} detection={wizard.pdfCut.detection}

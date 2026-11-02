@@ -89,8 +89,8 @@ def link_dmrl(
             link = DmDocumentLink(
                 id=str(uuid4()),
                 doc_id=doc_id,
-                dmrl_line_id=link_spec.get("dmrl_line_id"),
-                dm_code=link_spec.get("dm_code", ""),
+                dmrl_line_id=link_spec.dmrl_line_id,
+                dm_code=link_spec.dm_code,
                 auto_linked=False,
                 created_at=datetime.now(timezone.utc),
             )

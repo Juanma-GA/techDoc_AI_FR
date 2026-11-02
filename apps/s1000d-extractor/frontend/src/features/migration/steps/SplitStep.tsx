@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Select } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { DmPreview } from "../../../components/DmPreview";
+import { ConfirmButton } from "../../../components/ConfirmButton";
 import { WizardStepBackButton } from "../../../components/WizardStepBackButton";
-import { ConfirmAction } from "../ConfirmAction";
 import type { MigrationWizard } from "../useMigrationWizard";
 import type { WizardState } from "../../../lib/api";
 
@@ -34,7 +34,9 @@ export function SplitStep({ state, wizard }: { state: WizardState; wizard: Migra
             ]} />
           </label>
           <Button type="button" variant="secondary" disabled={wizard.busy}
-            onClick={() => void update({ split_level: level })}>{t("migration.split.reanalyze")}</Button>
+            onClick={() => void update({ op: "split_level", split_level: level })}>
+            {t("migration.split.reanalyze")}
+          </Button>
           <Button type="button" variant="secondary" disabled={wizard.busy} onClick={() => {
             if (selected.size < 2) setMessage(t("migration.split.needTwo"));
             else { setMessage(null); void update({ op: "merge", ids: [...selected] }); }
@@ -56,7 +58,7 @@ export function SplitStep({ state, wizard }: { state: WizardState; wizard: Migra
                 if (checked) next.add(dm.dm_id); else next.delete(dm.dm_id);
                 return next;
               })} />
-            <Input className="grow" aria-label={t("migration.ui.dmTitle", { title: dm.title })}
+            <Input className="min-w-0 flex-1" aria-label={t("migration.ui.dmTitle", { title: dm.title })}
               value={titleEdits[dm.dm_id] ?? (dm.is_orphan ? t("migration.dm.orphan") : dm.title)}
               onChange={(event) => setTitleEdits((previous) => ({ ...previous, [dm.dm_id]: event.target.value }))} />
             <Badge variant="info">{t(`dmType.${dm.dm_type}`)}</Badge>
@@ -67,7 +69,7 @@ export function SplitStep({ state, wizard }: { state: WizardState; wizard: Migra
             </Button>
             <Button type="button" variant="ghost" size="sm" disabled={wizard.busy}
               onClick={() => void update({ op: "split", id: dm.dm_id })}>{t("migration.split.split")}</Button>
-            <ConfirmAction label={t("migration.split.exclude")} disabled={wizard.busy}
+            <ConfirmButton label={t("migration.split.exclude")} size="sm" disabled={wizard.busy}
               onConfirm={() => void update({ op: "exclude", id: dm.dm_id })} />
           </div>
           <DmPreview preview={dm.preview} />

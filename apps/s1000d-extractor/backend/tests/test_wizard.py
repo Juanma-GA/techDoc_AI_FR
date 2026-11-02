@@ -65,7 +65,7 @@ def test_wizard_full_flow(client, pdf_bytes, complete_preliminary) -> None:
     # re-decouper par chapitre -> 2 DMs (Description + Removal Procedure)
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/update",
-        json={"split_level": "chapter"},
+        json={"op": "split_level", "split_level": "chapter"},
     ).json()
     assert len(st["dms"]) == 2
 
@@ -316,7 +316,8 @@ def test_dm_xml_recomputes_stale_template_warning_from_current_tree() -> None:
 def _split_state(client, doc_id):
     client.post(f"/api/v1/documents/{doc_id}/wizard/start")
     return client.post(
-        f"/api/v1/documents/{doc_id}/wizard/update", json={"split_level": "chapter"}
+        f"/api/v1/documents/{doc_id}/wizard/update",
+        json={"op": "split_level", "split_level": "chapter"},
     ).json()
 
 

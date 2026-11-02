@@ -12,6 +12,7 @@ from app.core import pdf_cut
 from app.core.errors import AppError
 from app.db.models import Document
 from app.db.session import get_db
+from app.schemas import PdfCutConfirmIn, PdfCutDetectIn
 
 router = APIRouter(prefix="/documents", tags=["pdf-cut"])
 
@@ -26,14 +27,11 @@ def _require(db: Session, doc_id: str) -> Document:
 @router.post("/{doc_id}/pdf-cut/detect", response_model=PdfCutDetectionOut)
 def detect_pdf_start(
     doc_id: str,
-    params: dict = Body(default={}),
+    params: PdfCutDetectIn = Body(default=PdfCutDetectIn()),
     db: Session = Depends(get_db),
 ) -> dict:
     doc = _require(db, doc_id)
-    title = params.get("title")
-    if title is not None and not isinstance(title, str):
-        raise AppError("PDF_DM_TITLE_INVALID", "Le titre selectionne doit etre du texte.", 422)
-    candidates = pdf_cut.detect_start_pages(doc, title)
+    candidates = pdf_cut.detect_start_pages(doc, params.title)
     total_pages = pdf_cut.total_pages(doc)
     return {
         "validation_required": settings.pdf_cut_requires_validation,
@@ -56,21 +54,15 @@ def preview_pdf_page(doc_id: str, page_number: int, db: Session = Depends(get_db
 @router.post("/{doc_id}/pdf-cut/confirm", response_model=PdfCutConfirmedOut)
 def confirm_pdf_start(
     doc_id: str,
-    params: dict = Body(default={}),
+    params: PdfCutConfirmIn,
     db: Session = Depends(get_db),
 ) -> dict:
     doc = _require(db, doc_id)
-    start_page = params.get("start_page", params.get("page"))
-    end_page = params.get("end_page")
-    if isinstance(start_page, bool) or not isinstance(start_page, int):
-        raise AppError("PDF_PAGE_INVALID", "Le champ start_page doit etre un entier.", 422)
-    if end_page is not None and (isinstance(end_page, bool) or not isinstance(end_page, int)):
-        raise AppError("PDF_PAGE_INVALID", "Le champ end_page doit etre un entier.", 422)
-    pdf_cut.cut_from_page(doc, start_page, end_page)
+    pdf_cut.cut_from_page(doc, params.start_page, params.end_page)
     db.commit()
     return {
-        "page": start_page,
-        "start_page": start_page,
+        "page": params.start_page,
+        "start_page": params.start_page,
         "end_page": doc.pdf_cut_end_page,
         "page_count": doc.page_count,
         "status": "ready",

@@ -18,7 +18,7 @@ export const WizNode = memo(function WizNode({ dmId, node, override, onOverride 
       ? <Badge>{t("migration.structure.level", { level: node.level })}</Badge> : null}
     <PageFlag page={node.page} /><ZoneFlag zone={node.zone} /><ReviewFlag zone={node.zone} />
     <TableFlag kind={node.kind} /><RefFlag refs={node.refs} />
-    {node.text ? <span className="min-w-0 grow truncate" title={node.text}>{node.text}</span> : null}
+    {node.text ? <span className="min-w-0 flex-1 truncate" title={node.text}>{node.text}</span> : null}
     {node.candidates.length > 1 ? node.candidates.map((candidate) =>
       <Button key={candidate.element} type="button" size="sm"
         variant={override === candidate.element ? "primary" : "ghost"}

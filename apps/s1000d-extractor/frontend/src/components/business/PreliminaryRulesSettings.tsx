@@ -4,7 +4,8 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ApiRequestError } from "../../lib/api";
+import { ApiRequestError } from "../../lib/api/client";
+import { formatApiError } from "../../lib/migrationUtils";
 import {
   createRuleDraft, draftToGroups, parseExpressions, preliminaryRulesApi, preliminaryRulesQueryKey,
   removesExpressions, validRuleLists,
@@ -43,7 +44,7 @@ export function PreliminaryRulesSettings() {
         {query.isPending ? <p role="status">{t("settingsRules.loading")}</p> : null}
         {query.isError ? (
           <div role="alert" className="space-y-2 text-danger">
-            <p>{t("settingsRules.loadFailed")}: {query.error.message}</p>
+            <p>{t("settingsRules.loadFailed")}: {formatApiError(t, query.error)}</p>
             <Button variant="secondary" disabled={query.isFetching} onClick={() => void query.refetch()}>
               {t("preliminary.retry")}
             </Button>
@@ -92,7 +93,10 @@ function RulesEditor({ initial, onDirtyChange }: {
     },
     onError: (error: Error) => {
       const code = error instanceof ApiRequestError ? error.code : "";
-      setFeedback({ error: true, message: t(`settingsRules.errors.${code}`, { defaultValue: error.message }) });
+      setFeedback({
+        error: true,
+        message: t(`settingsRules.errors.${code}`, { defaultValue: formatApiError(t, error) }),
+      });
     },
   });
   const busy = save.isPending || reloading;
@@ -124,7 +128,7 @@ function RulesEditor({ initial, onDirtyChange }: {
       setSaved(next);
       setDraft(createRuleDraft(next.groups));
     } catch (error) {
-      setFeedback({ error: true, message: error instanceof Error ? error.message : String(error) });
+      setFeedback({ error: true, message: formatApiError(t, error) });
     } finally {
       setReloading(false);
     }

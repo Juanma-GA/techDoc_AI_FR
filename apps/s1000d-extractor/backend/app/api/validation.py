@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api_models import DmValidationBatchOut
 from app.config import settings
@@ -25,11 +25,19 @@ def validate_dms(
     try:
         overrides = json.loads(issue_overrides)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=422, detail="issue_overrides doit être un tableau JSON.") from exc
+        raise AppError(
+            "VALIDATION_BAD_OVERRIDES",
+            "Les versions de validation doivent former un tableau JSON.",
+            422,
+        ) from exc
     if not isinstance(overrides, list) or any(
         value is not None and not isinstance(value, str) for value in overrides
     ):
-        raise HTTPException(status_code=422, detail="issue_overrides doit être un tableau de versions.")
+        raise AppError(
+            "VALIDATION_BAD_OVERRIDES",
+            "Les versions de validation doivent former un tableau de textes.",
+            422,
+        )
 
     results = []
     remaining = settings.max_upload_size_bytes

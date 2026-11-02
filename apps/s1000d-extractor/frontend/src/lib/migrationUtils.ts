@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
-import { ApiRequestError, type MigrationInputKind, type WizardDm } from "./api";
+import type { MigrationInputKind, WizardDm } from "./api";
+import { ApiRequestError } from "./api/client";
 
 export function isRestorableMigrationInput(
   kind: MigrationInputKind,

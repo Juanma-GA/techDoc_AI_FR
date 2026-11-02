@@ -37,6 +37,37 @@ function makeRow(overrides: Partial<DmrlRow>): DmrlRow {
 }
 
 describe("DMRL review", () => {
+  it("uses themed native type choices and padded conflict notices", () => {
+    const notice = renderToStaticMarkup(
+      createElement(DmrlTypeConflictNotice, {
+        rows: [makeRow({
+          dm_type: "descriptive",
+          type_conflict: true,
+          type_issue: "unsupported_schema",
+        })],
+      }),
+    );
+    expect(notice).toContain("p-4 sm:p-5");
+    expect(notice).toContain("space-y-2 pl-5 leading-6");
+
+    const review = renderToStaticMarkup(
+      createElement(DmrlReview, {
+        rows: [makeRow({
+          index: 1,
+          type_conflict: true,
+          type_issue: "unsupported_schema",
+        })],
+        dmCount: 1,
+        busy: false,
+        edits: {},
+        onTitleChange: vi.fn(),
+        onUpdate: vi.fn(),
+        onAdvance: vi.fn(),
+      }),
+    );
+    expect(review).toContain("s1k-dm-type-select");
+  });
+
   it("allows the resolved warning details to be folded and unfolded", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -167,7 +198,7 @@ describe("DMRL review", () => {
     const validateButton = markup.match(
       /<button\b[^>]*>migration\.dmrl\.validate<\/button>/,
     )?.[0] ?? "";
-    expect(validateButton).not.toContain("disabled");
+    expect(validateButton).not.toMatch(/\sdisabled(?:\s|>)/);
     expect(markup).toContain('href="#dmrl-type-1"');
     expect(markup).toContain('id="dmrl-type-1"');
   });
@@ -197,6 +228,7 @@ describe("DMRL review", () => {
       }),
     );
     const pendingSelect = pendingMarkup.match(/<select\b[^>]*>/)?.[0] ?? "";
+    expect(pendingSelect).toContain("s1k-dm-type-select");
     expect(pendingSelect).toContain('disabled=""');
     expect(pendingMarkup).toContain('role="alert"');
     expect(pendingMarkup).toContain('open=""');
@@ -217,6 +249,6 @@ describe("DMRL review", () => {
     const resolvedButton = resolvedMarkup.match(
       /<button\b[^>]*>migration\.dmrl\.validate<\/button>/,
     )?.[0] ?? "";
-    expect(resolvedButton).not.toContain("disabled");
+    expect(resolvedButton).not.toMatch(/\sdisabled(?:\s|>)/);
   });
 });

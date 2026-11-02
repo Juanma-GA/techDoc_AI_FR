@@ -1,10 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Button, FileDropzone, Input, Select } from "@internal/ui";
 import { useTranslation } from "react-i18next";
-import { FileDropzone } from "@internal/ui";
 import { FileText } from "lucide-react";
 
 import { brexApi, type S1000dIssue } from "../lib/api";
+import { formatApiError } from "../lib/migrationUtils";
 import { BrexRulesPreview } from "./BrexRulesPreview";
 import { BrexProfileDeleteAction } from "./BrexProfileDeleteAction";
 
@@ -25,10 +29,22 @@ export function BrexProfileControl({
 }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [file, setFile] = useState<File | null>(null);
-  const [profileName, setProfileName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const schema = useMemo(() => z.object({
+    file: z.instanceof(File).nullable().superRefine((file, context) => {
+      if (!file) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t("migration.brex.noFile") });
+      } else if (!/\.xml$/i.test(file.name)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t("migration.ui.invalidFile") });
+      }
+    }),
+    profileName: z.string().trim().min(1, t("migration.brex.noName")),
+  }), [t]);
+  const { control, register, handleSubmit, setValue, formState } = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: { file: null, profileName: "" },
+  });
 
   const profilesQuery = useQuery({
     queryKey: ["s1000d-brex"],
@@ -57,105 +73,117 @@ export function BrexProfileControl({
     onReadyChange(ready);
   }, [onReadyChange, ready]);
 
-  const uploadProfile = async () => {
-    if (!file) {
+  const uploadProfile = handleSubmit(async ({ file: selectedFile, profileName: name }) => {
+    if (!selectedFile) {
       setUploadError(t("migration.brex.noFile"));
-      return;
-    }
-    if (!profileName.trim()) {
-      setUploadError(t("migration.brex.noName"));
       return;
     }
     setUploading(true);
     setUploadError(null);
     try {
-      const created = await brexApi.upload(file, profileName.trim(), issue);
+      const created = await brexApi.upload(selectedFile, name, issue);
       await queryClient.invalidateQueries({ queryKey: ["s1000d-brex"] });
       onChange(created.id);
-      setFile(null);
-      setProfileName("");
+      setValue("file", null);
+      setValue("profileName", "");
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : String(error));
+      setUploadError(formatApiError(t, error));
     } finally {
       setUploading(false);
     }
-  };
+  });
 
   return (
-    <div className="brex-profile-control form">
-      <div className="label">{t("migration.brex.addProfileTitle")}</div>
-      <div className="space-y-2">
-        <span className="block text-label font-mono uppercase text-fg-dim">
-          {t("migration.brex.file")}
-        </span>
-        <FileDropzone
-          accept=".xml"
-          multiple={false}
-          disabled={disabled || uploading}
-          className="p-4"
-          label={t("migration.upload.dropLabel")}
-          description="XML"
-          onFiles={(files) => {
-            const selectedFile = files[0];
-            if (!selectedFile) return;
-            if (!/\.xml$/i.test(selectedFile.name)) {
-              setFile(null);
-              setProfileName("");
-              setUploadError(t("migration.ui.invalidFile"));
-              return;
-            }
-            setFile(selectedFile);
-            setProfileName(selectedFile.name.replace(/\.[^.]+$/, ""));
-            setUploadError(null);
-          }}
-        />
-        {file ? (
-          <div className="flex items-center gap-2 rounded-sm border bg-bg-2 px-3 py-1.5" role="status">
-            <FileText size={16} className="shrink-0 text-fg-dim" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-sm" title={file.name}>
-              {file.name}
+    <div className="brex-profile-control space-y-3">
+      <div className="text-label font-mono uppercase text-fg-dim">
+        {t("migration.brex.addProfileTitle")}
+      </div>
+      <form className="space-y-3" noValidate onSubmit={uploadProfile}>
+        <div className="space-y-2">
+          <span className="block text-label font-mono uppercase text-fg-dim">
+            {t("migration.brex.file")}
+          </span>
+          <Controller control={control} name="file" render={({ field }) =>
+            <>
+              <FileDropzone
+                accept=".xml"
+                multiple={false}
+                disabled={disabled || uploading}
+                className="p-4"
+                label={t("migration.upload.dropLabel")}
+                description="XML"
+                onFiles={(files) => {
+                  const selectedFile = files[0];
+                  if (!selectedFile) return;
+                  if (!/\.xml$/i.test(selectedFile.name)) {
+                    field.onChange(null);
+                    setValue("profileName", "");
+                    setUploadError(t("migration.ui.invalidFile"));
+                    return;
+                  }
+                  field.onChange(selectedFile);
+                  field.onBlur();
+                  setUploadError(null);
+                  setValue("profileName", selectedFile.name.replace(/\.[^.]+$/, ""));
+                }}
+              />
+              {field.value?.name ? (
+                <div className="flex items-center gap-2 rounded-sm border bg-bg-2 px-3 py-1.5" role="status">
+                  <FileText size={16} className="shrink-0 text-fg-dim" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-sm" title={field.value.name}>
+                    {field.value.name}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          } />
+          {formState.errors.file ? <span role="alert" className="block text-sm text-danger">
+            {formState.errors.file.message}
+          </span> : null}
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-0 flex-1 space-y-2">
+            <span className="block text-label font-mono uppercase text-fg-dim">
+              {t("migration.brex.profileName")}
             </span>
-          </div>
-        ) : null}
-      </div>
-      <div className="row">
-        <label className="grow">
-          <div className="label">{t("migration.brex.profileName")}</div>
-          <input
-            className="input"
-            type="text"
-            value={profileName}
-            disabled={disabled || uploading}
-            onChange={(event) => setProfileName(event.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="btn secondary"
-          disabled={disabled || uploading || !file || !profileName.trim()}
-          onClick={() => void uploadProfile()}
-        >
-          {uploading ? t("migration.brex.uploading") : t("migration.brex.add")}
-        </button>
-      </div>
-      {uploadError ? <div className="error" role="alert">{uploadError}</div> : null}
+            <Input
+              type="text"
+              {...register("profileName")}
+              disabled={disabled || uploading}
+            />
+            {formState.errors.profileName ? <span role="alert" className="block text-sm text-danger">
+              {formState.errors.profileName.message}
+            </span> : null}
+          </label>
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            disabled={disabled || uploading || formState.isSubmitting}
+          >
+            {uploading ? t("migration.brex.uploading") : t("migration.brex.add")}
+          </Button>
+        </div>
+        {uploadError ? <div className="text-sm text-danger" role="alert">{uploadError}</div> : null}
+      </form>
 
-      <div className="row">
-        <label className="grow">
-          <div className="label">{t("migration.upload.brex")}</div>
-          <select
-            className="input"
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-0 flex-1 space-y-2">
+          <span className="block text-label font-mono uppercase text-fg-dim">
+            {t("migration.upload.brex")}
+          </span>
+          <Select
             value={value ?? ""}
             disabled={disabled || profilesQuery.isLoading}
             onChange={(event) => onChange(event.target.value || null)}
-          >
-            <option value="">{t("migration.brex.none")}</option>
-            {(profilesQuery.data ?? []).map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name} — {t("migration.upload.issueValue", { issue: profile.s1000d_issue })}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: t("migration.brex.none") },
+              ...(profilesQuery.data ?? []).map((profile) => ({
+                value: profile.id,
+                label: `${profile.name} — ${t("migration.upload.issueValue", { issue: profile.s1000d_issue })}`,
+              })),
+            ]}
+          />
         </label>
         {selectedProfile ? (
           <BrexProfileDeleteAction
@@ -170,22 +198,20 @@ export function BrexProfileControl({
       </div>
 
       {profilesQuery.isLoading ? (
-        <div className="label" role="status">{t("migration.brex.loading")}</div>
+        <div className="text-sm text-fg-dim" role="status">{t("migration.brex.loading")}</div>
       ) : null}
       {profilesQuery.isError ? (
-        <div className="error" role="alert">
+        <div className="text-sm text-danger" role="alert">
           {t("migration.brex.listError", {
-            message: profilesQuery.error instanceof Error
-              ? profilesQuery.error.message
-              : String(profilesQuery.error),
+            message: formatApiError(t, profilesQuery.error),
           })}
         </div>
       ) : null}
       {profileMissing ? (
-        <div className="error" role="alert">{t("migration.brex.profileMissing")}</div>
+        <div className="text-sm text-danger" role="alert">{t("migration.brex.profileMissing")}</div>
       ) : null}
       {issueMismatch && selectedProfile ? (
-        <div className="error" role="alert">
+        <div className="text-sm text-danger" role="alert">
           {t("migration.brex.issueMismatch", {
             brexIssue: selectedProfile.s1000d_issue,
             dmIssue: issue,
@@ -194,14 +220,12 @@ export function BrexProfileControl({
       ) : null}
 
       {value && detailQuery.isLoading ? (
-        <div className="label" role="status">{t("migration.brex.loadingRules")}</div>
+        <div className="text-sm text-fg-dim" role="status">{t("migration.brex.loadingRules")}</div>
       ) : null}
       {value && detailQuery.isError ? (
-        <div className="error" role="alert">
+        <div className="text-sm text-danger" role="alert">
           {t("migration.brex.rulesError", {
-            message: detailQuery.error instanceof Error
-              ? detailQuery.error.message
-              : String(detailQuery.error),
+            message: formatApiError(t, detailQuery.error),
           })}
         </div>
       ) : null}

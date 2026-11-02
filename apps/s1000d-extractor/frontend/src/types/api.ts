@@ -1150,6 +1150,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** DmrlLinkIn */
+        DmrlLinkIn: {
+            /** Dmrl Line Id */
+            dmrl_line_id?: string | null;
+            /** Dm Code */
+            dm_code: string;
+        };
         /** DmrlRowOut */
         DmrlRowOut: {
             /** Index */
@@ -1312,9 +1319,7 @@ export interface components {
              */
             mode?: string;
             /** Dmrl Links */
-            dmrl_links?: {
-                [key: string]: unknown;
-            }[];
+            dmrl_links?: components["schemas"]["DmrlLinkIn"][];
         };
         /** LinkDmrlOut */
         LinkDmrlOut: {
@@ -1348,6 +1353,15 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** OverrideIn */
+        OverrideIn: {
+            /** Dm Id */
+            dm_id: string;
+            /** Node Id */
+            node_id: string;
+            /** Element */
+            element: string;
+        };
         /** PageAnchorsOut */
         PageAnchorsOut: {
             /** Width */
@@ -1379,6 +1393,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** PdfCutConfirmIn */
+        PdfCutConfirmIn: {
+            /** Start Page */
+            start_page: number;
+            /** End Page */
+            end_page?: number | null;
+        };
         /** PdfCutConfirmedOut */
         PdfCutConfirmedOut: {
             /** Page */
@@ -1393,6 +1414,11 @@ export interface components {
             status: string;
         } & {
             [key: string]: unknown;
+        };
+        /** PdfCutDetectIn */
+        PdfCutDetectIn: {
+            /** Title */
+            title?: string | null;
         };
         /** PdfCutDetectionOut */
         PdfCutDetectionOut: {
@@ -1742,6 +1768,17 @@ export interface components {
              */
             path?: string;
         };
+        /** WizardAdvanceIn */
+        WizardAdvanceIn: {
+            /** Types */
+            types?: {
+                [key: string]: "descriptive" | "procedural" | "ipd";
+            } | null;
+            /** Overrides */
+            overrides?: components["schemas"]["OverrideIn"][] | null;
+            /** Split Level */
+            split_level?: ("chapter" | "section" | "subsection") | null;
+        };
         /** WizardDmOut */
         WizardDmOut: {
             /** Dm Id */
@@ -1787,6 +1824,52 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** WizardExcludeIn */
+        WizardExcludeIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "exclude";
+            /** Id */
+            id?: string | null;
+            /** Index */
+            index?: number | null;
+        };
+        /** WizardHideZonesIn */
+        WizardHideZonesIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "hide_zones";
+            /** Zones */
+            zones: ("header" | "footer")[];
+        };
+        /** WizardMergeIn */
+        WizardMergeIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "merge";
+            /** Ids */
+            ids: string[];
+        };
+        /** WizardRenameIn */
+        WizardRenameIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "rename";
+            /** Id */
+            id?: string | null;
+            /** Index */
+            index?: number | null;
+            /** Title */
+            title: string;
+        };
         /** WizardResourcesOut */
         WizardResourcesOut: {
             /** Dmrl Count */
@@ -1801,6 +1884,56 @@ export interface components {
             errors?: string[];
         } & {
             [key: string]: unknown;
+        };
+        /** WizardSetTypeIn */
+        WizardSetTypeIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "set_type";
+            /** Index */
+            index: number;
+            /**
+             * Dm Type
+             * @enum {string}
+             */
+            dm_type: "descriptive" | "procedural" | "ipd";
+        };
+        /** WizardSplitIn */
+        WizardSplitIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "split";
+            /** Id */
+            id: string;
+        };
+        /** WizardSplitLevelIn */
+        WizardSplitLevelIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "split_level";
+            /**
+             * Split Level
+             * @enum {string}
+             */
+            split_level: "chapter" | "section" | "subsection";
+        };
+        /** WizardStartIn */
+        WizardStartIn: {
+            /**
+             * Cut Pdf
+             * @default true
+             */
+            cut_pdf?: boolean;
+            /** Start Page */
+            start_page?: number | null;
+            /** End Page */
+            end_page?: number | null;
         };
         /** WizardStateOut */
         WizardStateOut: {
@@ -1841,6 +1974,14 @@ export interface components {
             preliminary?: components["schemas"]["PreliminaryStateOut"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** WizardUndoIn */
+        WizardUndoIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "undo";
         };
         /** WizardValidateIn */
         WizardValidateIn: {
@@ -2632,9 +2773,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["PdfCutDetectIn"];
             };
         };
         responses: {
@@ -2699,11 +2838,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["PdfCutConfirmIn"];
             };
         };
         responses: {
@@ -2969,9 +3106,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["WizardStartIn"];
             };
         };
         responses: {
@@ -3006,9 +3141,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["WizardStartIn"];
             };
         };
         responses: {
@@ -3072,11 +3205,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["WizardRenameIn"] | components["schemas"]["WizardExcludeIn"] | components["schemas"]["WizardMergeIn"] | components["schemas"]["WizardSplitIn"] | components["schemas"]["WizardHideZonesIn"] | components["schemas"]["WizardUndoIn"] | components["schemas"]["WizardSplitLevelIn"] | components["schemas"]["WizardSetTypeIn"];
             };
         };
         responses: {
@@ -3111,9 +3242,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["WizardAdvanceIn"];
             };
         };
         responses: {

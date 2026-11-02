@@ -19,7 +19,8 @@ export function TypeStep({ state, wizard }: { state: WizardState; wizard: Migrat
       {state.dms.map((dm) => <label key={dm.dm_id}
         className="flex flex-wrap items-center justify-between gap-3 border-b border-md py-3">
         <span>{dm.is_orphan ? t("migration.dm.orphan") : dm.title}</span>
-        <Select value={edits[dm.dm_id] ?? dm.dm_type} options={DM_TYPES.map((value) => ({
+        <Select className="s1k-dm-type-select"
+          value={edits[dm.dm_id] ?? dm.dm_type} options={DM_TYPES.map((value) => ({
           value, label: t(`dmType.${value}`),
         }))} onChange={(event) => setEdits((previous) => ({ ...previous, [dm.dm_id]: event.target.value }))} />
       </label>)}

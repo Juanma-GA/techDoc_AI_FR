@@ -16,9 +16,10 @@ import { IllustrationWarning } from "../features/migration/WizardNotices";
 import { StartProgress } from "../features/migration/StartProgress";
 
 describe("conversion loading bar", () => {
-  it("uses the original thin blue bar with accessible progress", () => {
+  it("uses a tokenized bar with accessible progress", () => {
     const markup = renderToStaticMarkup(<StartProgress progress={{ pct: 42, label: "Analysis" }} />);
-    expect(markup).toContain('class="progress"');
+    expect(markup).toContain("bg-bg-3");
+    expect(markup).toContain("bg-brand");
     expect(markup).toContain('role="progressbar"');
     expect(markup).toContain('aria-label="Analysis"');
     expect(markup).toContain('aria-valuenow="42"');

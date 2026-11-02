@@ -65,7 +65,7 @@ describe("BREX profile delete action", () => {
     await act(async () => {
       button?.click();
     });
-    expect(button?.textContent).toBe("data.confirm");
+    expect(button?.textContent).toBe("common.confirmAgain");
     expect(brexApi.delete).not.toHaveBeenCalled();
 
     await act(async () => {

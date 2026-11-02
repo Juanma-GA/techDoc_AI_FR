@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { settingsApi, type SettingsDto } from "./lib/api";
+import { formatApiError } from "./lib/migrationUtils";
 const Data = lazy(() => import("./routes/Data").then((module) => ({ default: module.Data })));
 const Migration = lazy(() => import("./routes/Migration").then((module) => ({ default: module.Migration })));
 const Settings = lazy(() => import("./routes/Settings").then((module) => ({ default: module.Settings })));
@@ -39,7 +40,6 @@ export function App() {
 
   return (
     <AppShell
-      className="dw"
       mainClassName="relative"
       title={t("app.title")}
       brandTitle={t("app.description")}
@@ -82,7 +82,7 @@ export function App() {
         isReady={settingsQuery.isSuccess}
       >
         {settingsQuery.error ? <div role="alert" className="space-y-2 text-danger">
-          <p>{settingsQuery.error.message}</p>
+          <p>{formatApiError(t, settingsQuery.error)}</p>
           <Button type="button" variant="secondary" onClick={() => void settingsQuery.refetch()}>
             {t("common.retry")}
           </Button>

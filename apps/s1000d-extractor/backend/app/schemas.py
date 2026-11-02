@@ -2,7 +2,140 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated, Literal
+
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    model_validator,
+)
+
+DmType = Literal["descriptive", "procedural", "ipd"]
+SplitLevel = Literal["chapter", "section", "subsection"]
+
+
+class WizardStartIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cut_pdf: bool = True
+    start_page: PositiveInt | None = None
+    end_page: PositiveInt | None = None
+
+
+class OverrideIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dm_id: str = Field(..., min_length=1)
+    node_id: str = Field(..., min_length=1)
+    element: str = Field(..., min_length=1)
+
+
+class WizardAdvanceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    types: dict[str, DmType] | None = None
+    overrides: list[OverrideIn] | None = None
+    split_level: SplitLevel | None = None
+
+
+class WizardRenameIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["rename"]
+    id: str | None = Field(default=None, min_length=1)
+    index: int | None = Field(default=None, ge=0)
+    title: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def require_one_target(self) -> WizardRenameIn:
+        if (self.id is None) == (self.index is None):
+            raise ValueError("Provide either id or index.")
+        return self
+
+
+class WizardExcludeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["exclude"]
+    id: str | None = Field(default=None, min_length=1)
+    index: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def require_one_target(self) -> WizardExcludeIn:
+        if (self.id is None) == (self.index is None):
+            raise ValueError("Provide either id or index.")
+        return self
+
+
+class WizardMergeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["merge"]
+    ids: list[str] = Field(..., min_length=2)
+
+
+class WizardSplitIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["split"]
+    id: str = Field(..., min_length=1)
+
+
+class WizardHideZonesIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["hide_zones"]
+    zones: list[Literal["header", "footer"]]
+
+
+class WizardUndoIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["undo"]
+
+
+class WizardSplitLevelIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["split_level"]
+    split_level: SplitLevel
+
+
+class WizardSetTypeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["set_type"]
+    index: int = Field(..., ge=0)
+    dm_type: DmType
+
+
+WizardUpdateIn = Annotated[
+    WizardRenameIn
+    | WizardExcludeIn
+    | WizardMergeIn
+    | WizardSplitIn
+    | WizardHideZonesIn
+    | WizardUndoIn
+    | WizardSplitLevelIn
+    | WizardSetTypeIn,
+    Field(discriminator="op"),
+]
+
+
+class PdfCutDetectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+
+
+class PdfCutConfirmIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_page: PositiveInt = Field(validation_alias=AliasChoices("start_page", "page"))
+    end_page: PositiveInt | None = None
 
 
 class HealthResponse(BaseModel):
@@ -167,11 +300,20 @@ class DmVersionContentOut(BaseModel):
     created_at: str
 
 
+class DmrlLinkIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dmrl_line_id: str | None = None
+    dm_code: str = Field(..., min_length=1)
+
+
 class LinkDmrlIn(BaseModel):
     """Request to link DMRL to Data Modules (auto or manual)."""
 
-    mode: str = "auto"  # "auto" | "manual"
-    dmrl_links: list[dict] = Field(default_factory=list)  # [{"dmrl_line_id": "...", "dm_code": "..."}]
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str = "auto"
+    dmrl_links: list[DmrlLinkIn] = Field(default_factory=list)
 
 
 class SaveDmVersionIn(BaseModel):

@@ -5,6 +5,23 @@ import { z } from "zod";
 import type { WizardState } from "../wizardTypes";
 import { readApiSse } from "./sse";
 
+type WizardZipOptions = {
+  maxDimension?: number;
+  format?: "original" | "jpeg" | "png";
+};
+
+function wizardZipPath(docId: string, options: WizardZipOptions): string {
+  const params = new URLSearchParams();
+  if (options.maxDimension !== undefined) {
+    params.set("max_dimension", String(options.maxDimension));
+  }
+  if (options.format && options.format !== "original") {
+    params.set("image_format", options.format);
+  }
+  const query = params.toString();
+  return `/documents/${docId}/wizard/zip${query ? `?${query}` : ""}`;
+}
+
 export const wizardApi = {
   thumbnailUrl: (docId: string, name: string, size = 192) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}/thumb?size=${size}`,
@@ -27,23 +44,10 @@ export const wizardApi = {
     return apiBlob(`/documents/${encodeURIComponent(docId)}/wizard/dm/${encodeURIComponent(dmId)}/xml`,
       `${dmId}.xml`);
   },
-  zipUrl: (
-    docId: string,
-    options: {
-      maxDimension?: number;
-      format?: "original" | "jpeg" | "png";
-    } = {},
-  ) => {
-    const params = new URLSearchParams();
-    if (options.maxDimension !== undefined) {
-      params.set("max_dimension", String(options.maxDimension));
-    }
-    if (options.format && options.format !== "original") {
-      params.set("image_format", options.format);
-    }
-    const query = params.toString();
-    return `${API_BASE}/documents/${docId}/wizard/zip${query ? `?${query}` : ""}`;
-  },
+  zipUrl: (docId: string, options: WizardZipOptions = {}) =>
+    `${API_BASE}${wizardZipPath(docId, options)}`,
+  downloadZip: (docId: string, options: WizardZipOptions = {}) =>
+    apiBlob(wizardZipPath(docId, options), `${docId}_dms.zip`),
   images: (docId: string) => apiValidated(`/documents/${docId}/wizard/images`, (value) => z.array(z.string()).parse(value)),
   imageUrl: (docId: string, name: string) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,

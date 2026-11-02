@@ -1,4 +1,65 @@
 {
+  "home": {
+    "title": "Accueil",
+    "subtitle": "Migration de documentation legacy vers S1000D.",
+    "cardTitle": "Migration legacy vers S1000D",
+    "description": "Cet outil extrait un squelette structurel S1000D à partir d’un PDF natif ou d’un fichier Word pour amorcer la conversion de documentation ancienne.",
+    "principle": "Le type d’élément S1000D dépend du contexte, pas de la forme. L’outil classe le contexte, propose le mapping et signale les cas ambigus pour revue humaine.",
+    "bestEffortTitle": "Résultat indicatif",
+    "bestEffort": "La sortie reste un squelette. Le BREX utilisateur est fourni séparément et ses règles prises en charge sont appliquées ; le DMC du DM, l’applicabilité, le SNS et l’ICN restent à confirmer par un humain.",
+    "backendStatus": "Statut du backend :",
+    "unknown": "INCONNU",
+    "version": "version :"
+  },
+  "architecture": {
+    "title": "Architecture",
+    "subtitle": "Pipeline générique, workflow de génération et détail par étape.",
+    "layersTitle": "Pipeline générique (3 couches indépendantes)",
+    "documentChangeTitle": "CE QUI VARIE PAR DOCUMENT",
+    "documentChangeText": "La forme d’entrée (mise en page PDF, styles Word) est absorbée par un modèle logique canonique (IR). PDF et Word sont normalisés dans le même IR, sans configuration par document.",
+    "projectChangeTitle": "CE QUI VARIE PAR PROJET",
+    "projectChangeText": "La version S1000D (4.1 / 4.2 et ses schémas XSD locaux) et le BREX utilisateur fournissent les contraintes du projet. Le BREX guide et vérifie les DMs sans remplacer le moteur de mapping.",
+    "workflowTitle": "Workflow utilisateur — génération guidée",
+    "workflowIntro": "Les étapes sont bloquantes : les heuristiques proposent, l’humain vérifie et corrige avant de continuer.",
+    "workflow": [
+      "Paramètres → mode démo et règles de préremplissage.",
+      "Charger → PDF/Word + version S1000D (4.1/4.2) + profil BREX optionnel → Générer.",
+      "Découpage → choisir le niveau (chapitre/section/sous-section) et revoir les Data Modules détectés.",
+      "Types → corriger le type de chaque DM (descriptif / procédural / IPD).",
+      "Structure → arbre par DM et arbitrage des nœuds ambigus (para ↔ proceduralStep).",
+      "Génération → XML S1000D par DM et violations ; téléchargement par DM ou ZIP."
+    ],
+    "pipelineTitle": "Sous le capot (pipeline par étape)",
+    "pipeline": [
+      "Analyse → PyMuPDF (PDF) / python-docx (Word) ; un PDF scanné nécessite l’OCR local.",
+      "IR canonique → arbre logique commun (sections / listes / avertissements / figures / tableaux).",
+      "Découpage (étape 1) → un Data Module par section, chapitre ou sous-section.",
+      "Typage par DM (étape 2) → descriptif / procédural / IPD (heuristiques déterministes).",
+      "Résolution (étape 3) → élément S1000D selon le contexte et la forme ; plusieurs candidats si ambigu.",
+      "Sérialisation et validation (étape 4) → XML par DM (lxml), XSD et règles BREX prises en charge."
+    ],
+    "outputWarning": "La sortie est un ensemble de DMs, chacun un squelette indicatif : le DMC du DM, l’applicabilité, le SNS et l’ICN restent à confirmer. brexDmRef pointe vers le BREX sélectionné ; les règles non prises en charge sont signalées séparément."
+  },
+  "errors": {
+    "VALIDATION_ERROR": "La requête est invalide.",
+    "VALIDATION_BAD_OVERRIDES": "Les versions de validation doivent être une liste valide.",
+    "VALIDATION_TOO_MANY_FILES": "Le lot contient trop de fichiers.",
+    "FILE_TOO_LARGE": "Le lot dépasse la taille maximale autorisée.",
+    "PDF_PAGE_INVALID": "La plage de pages PDF est invalide.",
+    "PDF_CUT_VALIDATION_REQUIRED": "Confirmez la plage de pages PDF avant de continuer.",
+    "DOC_NOT_FOUND": "Document introuvable.",
+    "WIZARD_NOT_STARTED": "Lancez d’abord la conversion de ce document.",
+    "DMRL_TYPE_REVIEW_REQUIRED": "Choisissez le type de chaque Data Module avant de continuer.",
+    "INVALID_STREAM": "Le flux de réponse est invalide.",
+    "INVALID_RESPONSE": "La réponse du serveur est invalide.",
+    "NETWORK_ERROR": "Le serveur est injoignable.",
+    "HTTP_ERROR": "La requête n’a pas abouti.",
+    "INTERNAL_ERROR": "Une erreur interne est survenue.",
+    "START_FAILED": "L’analyse du document a échoué.",
+    "INCOMPLETE_STREAM": "Le flux s’est terminé avant la fin de l’analyse.",
+    "BREX_NOT_FOUND": "Profil BREX introuvable.",
+    "BREX_ISSUE_MISMATCH": "La version du profil BREX ne correspond pas au document."
+  },
   "preliminary": {
     "title": "Revoir le DM de procédure",
     "progress": "Procédure {{current}} sur {{total}}",
@@ -129,6 +190,8 @@
     "back": "← Retour",
     "none": "—",
     "confirmAgain": "Cliquer encore pour confirmer",
+    "close": "Fermer",
+    "pageShort": "p.",
     "loading": "Chargement",
     "retry": "Réessayer"
   },
@@ -150,7 +213,9 @@
     "confirm": "Cliquer encore pour confirmer",
     "nothingToDelete": "(rien à supprimer)",
     "resetSuccess": "Réinitialisation OK ({{items}}).",
-    "resetError": "Échec de la réinitialisation : {{message}}"
+    "resetError": "Échec de la réinitialisation : {{message}}",
+    "resetSuccessTitle": "Réinitialisation terminée",
+    "resetErrorTitle": "Échec de la réinitialisation"
   },
   "settings": {
     "title": "Paramètres",
@@ -200,6 +265,22 @@
   "migration": {
     "title": "Conversion S1000D",
     "subtitle": "Génération guidée de Data Modules S1000D.",
+    "zoneFlags": {
+      "header": "entête",
+      "footer": "pied",
+      "chapter": "chapitre",
+      "cover": "page de garde",
+      "toc": "sommaire",
+      "flagHelp": "Zone probablement à vérifier",
+      "reviewHelp": "Ce contenu peut être du bruit de mise en page",
+      "review": "à vérifier",
+      "link": "lien",
+      "table": "tableau"
+    },
+    "preview": {
+      "empty": "Aucun contenu prévisualisable.",
+      "hidden": "{{count}} bloc(s) intermédiaire(s)"
+    },
     "upload": {
       "title": "Charger un document",
       "file": "Document PDF ou Word",
@@ -232,6 +313,8 @@
         "endPage": "À la page",
         "candidate": "Page {{page}} — score {{score}}",
         "invalidRange": "La page de début doit être antérieure ou égale à la page de fin.",
+        "invalidPage": "Indiquez un numéro de page valide.",
+        "pageTooLarge": "La page doit être comprise entre 1 et {{total}}.",
         "validate": "Valider la plage et lancer l'analyse",
         "previewAlt": "Aperçu de la page {{page}}"
       }
