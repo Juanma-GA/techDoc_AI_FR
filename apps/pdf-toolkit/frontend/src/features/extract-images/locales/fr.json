@@ -8,11 +8,12 @@
   },
   "extractImages": {
     "stepFile": "Choisir le PDF",
-    "stepFileDescription": "Les images intégrées seront extraites sans convertir les pages.",
+    "stepFileDescription": "Le PDF doit contenir du texte extractible ; les scans sans OCR sont refusés.",
     "stepOutput": "Extraire et prévisualiser",
     "stepOutputDescription": "Les images sont affichées avant tout téléchargement. Aucun ZIP n’est téléchargé automatiquement.",
     "outputDescription": "Nom de l’archive ZIP facultative",
     "action": "Extraire et afficher les images",
+    "checkingPdf": "Vérification de la lisibilité du PDF…",
     "working": "Extraction des images…",
     "extractedSuccess": "Images extraites. Téléchargez-les séparément ou choisissez l’archive ZIP.",
     "downloadArchive": "Télécharger l’archive ZIP",
@@ -24,6 +25,8 @@
     "downloadImage": "Télécharger {{name}}",
     "previewUnavailable": "Aperçu indisponible pour ce format",
     "noImagesFound": "Aucune image intégrée n’a été trouvée dans ce PDF.",
+    "unreadablePdf": "Ce PDF est illisible, protégé ou invalide et ne peut pas être traité.",
+    "noTextLayer": "Aucun texte lisible n’a été détecté. Ce PDF semble être un scan sans OCR.",
     "failed": "L’extraction des images a échoué.",
     "invalidArchive": "Le serveur n’a pas renvoyé une archive d’images valide.",
     "emptyArchive": "L’archive d’images reçue est vide."

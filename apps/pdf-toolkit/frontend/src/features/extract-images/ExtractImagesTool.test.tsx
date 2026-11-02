@@ -12,6 +12,7 @@ import { ExtractImagesTool } from "./ExtractImagesTool";
 
 const mocks = vi.hoisted(() => ({
   chooseDestination: vi.fn(),
+  checkReadablePdf: vi.fn(),
   extract: vi.fn(),
   saveBlob: vi.fn(),
   unpack: vi.fn(),
@@ -43,6 +44,9 @@ vi.mock("../../shared/api", () => ({
 }));
 vi.mock("./extractImagesApi", () => ({
   extractImagesFromPDF: mocks.extract,
+}));
+vi.mock("./checkReadablePdf", () => ({
+  checkReadablePdf: mocks.checkReadablePdf,
 }));
 vi.mock("./unpackImageArchive", () => ({
   unpackImageArchive: mocks.unpack,
@@ -85,6 +89,7 @@ async function setup(language: "fr" | "en" = "fr") {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.chooseDestination.mockResolvedValue(undefined);
+  mocks.checkReadablePdf.mockResolvedValue(undefined);
   mocks.extract.mockResolvedValue(new Blob(["zip"], { type: "application/zip" }));
   mocks.saveBlob.mockResolvedValue("extracted-images.zip");
   mocks.unpack.mockResolvedValue([
@@ -144,6 +149,20 @@ describe("ExtractImagesTool", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("No embedded images");
     expect(screen.queryByRole("button", { name: "Télécharger l’archive ZIP" })).toBeNull();
+    expect(mocks.chooseDestination).not.toHaveBeenCalled();
+    expect(mocks.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["unreadablePdf", "Ce PDF est illisible, protégé ou invalide et ne peut pas être traité."],
+    ["noTextLayer", "Aucun texte lisible n’a été détecté. Ce PDF semble être un scan sans OCR."],
+  ] as const)("rejects unreadable PDFs before calling the backend (%s)", async (_case, message) => {
+    const form = await setup();
+    mocks.checkReadablePdf.mockRejectedValue(new Error(message));
+    fireEvent.click(form.action);
+
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(mocks.extract).not.toHaveBeenCalled();
     expect(mocks.chooseDestination).not.toHaveBeenCalled();
     expect(mocks.saveBlob).not.toHaveBeenCalled();
   });

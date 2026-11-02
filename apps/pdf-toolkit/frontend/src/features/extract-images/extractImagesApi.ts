@@ -71,7 +71,7 @@ export function extractImagesFromPDF(
         throw new Error(t("extractImages.invalidArchive"));
       }
       if (request.status < 200 || request.status >= 300) {
-        throw new Error(await responseError(response, t));
+        throw new Error(await responseError(response, t, request.status));
       }
       if (!(request.getResponseHeader("content-type") ?? "").includes("application/zip")) {
         throw new Error(t("extractImages.invalidArchive"));
@@ -85,12 +85,14 @@ export function extractImagesFromPDF(
   });
 }
 
-async function responseError(response: Blob, t: TFunction): Promise<string> {
+async function responseError(response: Blob, t: TFunction, status: number): Promise<string> {
   let payload: unknown;
   try {
     payload = JSON.parse(await response.text());
   } catch {
-    return t("extractImages.failed");
+    return isInvalidPdfStatus(status)
+      ? t("extractImages.unreadablePdf")
+      : t("extractImages.failed");
   }
   if (
     typeof payload === "object" &&
@@ -100,7 +102,12 @@ async function responseError(response: Blob, t: TFunction): Promise<string> {
   ) {
     return t("extractImages.noImagesFound");
   }
+  if (isInvalidPdfStatus(status)) return t("extractImages.unreadablePdf");
   return t("extractImages.failed");
+}
+
+function isInvalidPdfStatus(status: number): boolean {
+  return status === 415 || status === 422;
 }
 
 function progressPercentage(loaded: number, total: number): number {

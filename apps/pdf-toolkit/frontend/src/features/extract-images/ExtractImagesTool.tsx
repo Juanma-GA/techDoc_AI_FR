@@ -13,6 +13,7 @@ import {
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { ExportProgress } from "../shared/ExportProgress";
+import { checkReadablePdf } from "./checkReadablePdf";
 import { extractImagesFromPDF } from "./extractImagesApi";
 import { unpackImageArchive, type ExtractedImage } from "./unpackImageArchive";
 import "./extract-images.css";
@@ -29,6 +30,7 @@ export function ExtractImagesTool() {
   const [error, setError] = useState("");
   const [downloadError, setDownloadError] = useState("");
   const [working, setWorking] = useState(false);
+  const [checkingPdf, setCheckingPdf] = useState(false);
   const [savingArchive, setSavingArchive] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgressState>({
     phase: "preparing",
@@ -65,12 +67,24 @@ export function ExtractImagesTool() {
     let extractedImages: ExtractedImage[] = [];
     clearImages();
     setWorking(true);
+    setCheckingPdf(true);
     setExportProgress({ phase: "preparing", percentage: null });
     setError("");
     setDownloadError("");
     setSuccessFileName("");
 
     try {
+      await checkReadablePdf(
+        file,
+        {
+          unreadablePdf: t("extractImages.unreadablePdf"),
+          noTextLayer: t("extractImages.noTextLayer"),
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      setCheckingPdf(false);
+
       const archive = await extractImagesFromPDF(file, t, setExportProgress, controller.signal);
       if (controller.signal.aborted) return;
 
@@ -90,6 +104,7 @@ export function ExtractImagesTool() {
         setError(formatOperationError(reason, t, "extractImages.failed"));
       }
     } finally {
+      setCheckingPdf(false);
       if (controllerRef.current === controller) {
         controllerRef.current = null;
         setWorking(false);
@@ -184,14 +199,18 @@ export function ExtractImagesTool() {
             <p>{t("extractImages.stepOutputDescription")}</p>
           </div>
         </div>
-        {working ? <ExportProgress progress={exportProgress} /> : null}
+        {working && !checkingPdf ? <ExportProgress progress={exportProgress} /> : null}
         <Button
           type="submit"
           disabled={working || savingArchive || !file}
           className="action-button"
         >
           {working ? <Spinner aria-label={t("common.loading")} /> : <ImageIcon size={18} />}
-          {working ? t("extractImages.working") : t("extractImages.action")}
+          {checkingPdf
+            ? t("extractImages.checkingPdf")
+            : working
+              ? t("extractImages.working")
+              : t("extractImages.action")}
         </Button>
         <div className="feedback-slot">
           {error ? (
