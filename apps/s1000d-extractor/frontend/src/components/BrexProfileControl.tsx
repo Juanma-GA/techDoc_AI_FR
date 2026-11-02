@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button, FileDropzone, Input, Select } from "@internal/ui";
+import { Button, FileDropzone, Input, SelectMenu } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { FileText } from "lucide-react";
 
@@ -172,10 +172,11 @@ export function BrexProfileControl({
           <span className="block text-label font-mono uppercase text-fg-dim">
             {t("migration.upload.brex")}
           </span>
-          <Select
+          <SelectMenu
+            label={t("migration.upload.brex")}
             value={value ?? ""}
             disabled={disabled || profilesQuery.isLoading}
-            onChange={(event) => onChange(event.target.value || null)}
+            onValueChange={(selectedId) => onChange(selectedId || null)}
             options={[
               { value: "", label: t("migration.brex.none") },
               ...(profilesQuery.data ?? []).map((profile) => ({

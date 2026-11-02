@@ -1,4 +1,4 @@
-import { Button, Input, Select, Textarea } from "@internal/ui";
+import { Button, Input, SelectMenu, Textarea } from "@internal/ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -82,16 +82,16 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
         </Button>
         <label className="block space-y-1">
           <span>{t("preliminary.destination")}</span>
-          <Select
-            aria-label={t("preliminary.destination")}
+          <SelectMenu
+            label={t("preliminary.destination")}
             value={passage.decision ?? ""}
             disabled={disabled}
             options={[
               { value: "", label: pendingLabel },
               ...reviewDestinations.map((value) => ({ value, label: t(`preliminary.category.${value}`) })),
             ]}
-            onChange={(event) => {
-              const value = reviewDestinations.find((key) => key === event.target.value) ?? null;
+            onValueChange={(selectedValue) => {
+              const value = reviewDestinations.find((key) => key === selectedValue) ?? null;
               void decide(value);
             }}
           />

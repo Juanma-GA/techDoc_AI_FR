@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Select } from "@internal/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  Input,
+  SelectMenu,
+} from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { DmPreview } from "../../../components/DmPreview";
 import { ConfirmButton } from "../../../components/ConfirmButton";
@@ -27,7 +37,7 @@ export function SplitStep({ state, wizard }: { state: WizardState; wizard: Migra
         <summary>{t("migration.split.review", { count: state.dms.length })}</summary>
         <div className="flex flex-wrap items-end gap-3 py-3">
           <label><span className="block">{t("migration.split.level")}</span>
-            <Select value={level} onChange={(event) => setLevel(event.target.value)} options={[
+            <SelectMenu label={t("migration.split.level")} value={level} onValueChange={setLevel} options={[
               { value: "chapter", label: t("migration.split.levelChapter") },
               { value: "section", label: t("migration.split.levelSection") },
               { value: "subsection", label: t("migration.split.levelSubsection") },

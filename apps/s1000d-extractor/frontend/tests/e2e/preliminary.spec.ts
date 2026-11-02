@@ -1,7 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import type { PreliminaryState, ReviewAction } from "../../src/lib/preliminaryTypes";
 import type { RequirementRules } from "../../src/lib/preliminaryRules";
+
+async function chooseOption(trigger: Locator, label: string) {
+  await trigger.click();
+  await trigger.page().getByRole("option", { name: label, exact: true }).last().click();
+}
 
 function syntheticState(sourceFormat = "docx"): PreliminaryState {
   return {
@@ -132,8 +137,9 @@ test("classifies, scrolls continuously, and restores after reopening without adv
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Revoir le DM de procédure" })).toBeVisible();
   const first = page.locator("article").first();
-  await first.getByLabel("Décision de classement").selectOption("safety");
-  await expect(first.getByLabel("Décision de classement")).toHaveValue("safety");
+  const decision = first.getByRole("button", { name: "Décision de classement" });
+  await chooseOption(decision, "Sécurité");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   const reader = page.getByTestId("procedure-reader");
   await expect(reader.locator("[data-passage]").first()).toHaveText(/Synthetic source passage 0/);
   await reader.hover();
@@ -144,7 +150,8 @@ test("classifies, scrolls continuously, and restores after reopening without adv
   await page.reload();
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   await expect.poll(() => reader.evaluate((element) => element.scrollTop)).toBeCloseTo(position, 0);
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect(page.locator("article").first().locator('button[aria-haspopup="listbox"]'))
+    .toContainText("Sécurité");
   expect(server.writes.some((action) => action.op === "cursor")).toBe(true);
 });
 
@@ -152,8 +159,8 @@ test("saving rules in Settings flags an already-open review without discarding i
   const server = await mockApplication(page);
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await page.locator("article").first().getByLabel("Décision de classement").selectOption("safety");
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await chooseOption(page.locator("article").first().getByRole("button", { name: "Décision de classement" }), "Sécurité");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
   await page.getByRole("button", { name: "Afficher les règles", exact: true }).click();
   const form = page.getByRole("form", { name: "Règles de préremplissage des exigences" });
@@ -173,12 +180,12 @@ test("exposes a failed save and retries without claiming success", async ({ page
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   server.fail(true);
-  await page.locator("article").first().getByLabel("Décision de classement").selectOption("safety");
+  await chooseOption(page.locator("article").first().getByRole("button", { name: "Décision de classement" }), "Sécurité");
   await expect(page.getByRole("alert").filter({ hasText: "Synthetic save failure" })).toBeVisible();
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("");
+  expect(server.read().reviews.proc!.passages[0]!.decision).toBeNull();
   server.fail(false);
   await page.getByRole("button", { name: "Réessayer", exact: true }).click();
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
 });
 
 test("PDF pages load progressively with source highlighting in dark and light layouts", async ({ page }) => {
@@ -225,9 +232,10 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   const cards = page.locator("article");
-  await expect(cards.nth(0).locator("select option:checked")).toHaveText("Sécurité");
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Reste dans la procédure");
-  await expect(cards.nth(2).locator("select option:checked")).toHaveText("À trancher");
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toContainText("Sécurité");
+  await expect(cards.nth(1).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Reste dans la procédure");
+  await expect(cards.nth(2).getByRole("button", { name: "Décision de classement" })).toContainText("À trancher");
   expect(server.writes.filter((action) => action.op === "decide")).toHaveLength(0);
   expect(server.read().reviews.proc!.passages.every((passage) => passage.decision === null)).toBe(true);
   const complete = page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" });
@@ -235,23 +243,25 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   const collapseButton = cards.nth(0).getByRole("button", { name: "Replier le passage" });
   await expect(collapseButton).toHaveText("Page source 1");
   await expect(collapseButton.locator("svg")).toBeVisible();
-  const filter = page.getByLabel("Afficher les passages");
-  await filter.selectOption("safety");
+  const filter = page.getByRole("button", { name: "Afficher les passages" });
+  await chooseOption(filter, "Sécurité");
   await expect(cards).toHaveCount(1);
-  await filter.selectOption("all");
+  await chooseOption(filter, "Tous les passages");
   await expect(cards).toHaveCount(18);
   await cards.nth(0).getByRole("button", { name: "Accepter la proposition" }).click();
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   const expandButton = cards.nth(0).getByRole("button", { name: "Développer le passage" });
   await expect(expandButton).toHaveText("Page source 1");
   await expect(expandButton.locator("svg")).toBeVisible();
   await expect(expandButton)
     .toHaveAttribute("aria-expanded", "false");
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeHidden();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toBeHidden();
   await expect(cards.nth(0).getByText("Proposition : Sécurité")).toBeHidden();
   await expect(complete).toBeDisabled();
   await expandButton.click({ position: { x: 30, y: 16 } });
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeVisible();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toBeVisible();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Sécurité");
   await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
   const sourcePassage = cards.nth(0).getByRole("button", { name: "Voir la source — page 1" });
   await expect(sourcePassage).toBeVisible();
@@ -262,8 +272,8 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
   expect(server.read().reviews.proc!.passages[1]!.decision).toBeNull();
   await page.getByRole("button", { name: "EN", exact: true }).click();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Keep in procedure");
-  await expect(cards.nth(2).locator("select option:checked")).toHaveText("Decision needed");
+  await expect(cards.nth(1).locator('button[aria-haspopup="listbox"]')).toContainText("Keep in procedure");
+  await expect(cards.nth(2).locator('button[aria-haspopup="listbox"]')).toContainText("Decision needed");
 });
 
 test("splits source text at a selected word boundary", async ({ page }) => {
@@ -362,7 +372,8 @@ test("auto-advances after review, distinguishes empty from reviewed and resumes 
   const server = await mockApplication(page, "docx", true);
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await page.getByLabel("Procédure", { exact: true }).selectOption("empty");
+  const procedure = page.getByRole("button", { name: "Procédure", exact: true });
+  await chooseOption(procedure, "Synthetic empty");
   await expect(page.getByText("Procédure 2 sur 2", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Générer et valider le XML" })).toBeDisabled();
@@ -372,12 +383,12 @@ test("auto-advances after review, distinguishes empty from reviewed and resumes 
   await page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" }).click();
   await expect.poll(() => server.read().reviews.empty!.status).toBe("reviewed");
   await expect.poll(() => server.read().active_dm_id).toBe("proc");
-  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("proc");
+  await expect(procedure).toContainText("Synthetic removal");
   await page.getByRole("button", { name: "EN", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review the procedural DM" })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("proc");
+  await expect(page.getByRole("button", { name: "Procédure", exact: true })).toContainText("Synthetic removal");
 });
 
 test("skips every procedural review and starts generation directly", async ({ page }) => {
@@ -423,7 +434,8 @@ test("editorial structure is not classified and closing conditions have their ow
   await expect(reader.locator('[data-passage="heading"]')).toHaveText("3.2 Tools required");
   await expect(reader.locator('[data-passage="header"]').getByRole("cell")).toHaveText(["Tool", "Qty"]);
   await expect(page.getByText("3 passage(s) sans décision sur 18", { exact: true })).toBeVisible();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Conditions de clôture");
+  await expect(cards.nth(1).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Conditions de clôture");
   await expect(cards.nth(2).getByText(/Contenu de la procédure/)).toBeVisible();
   for (const index of [0, 1, 2]) {
     await cards.nth(index).getByRole("button", { name: "Accepter la proposition" }).click();

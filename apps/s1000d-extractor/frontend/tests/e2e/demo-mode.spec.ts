@@ -67,7 +67,7 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
   await page.getByRole("heading", { name: "Conversion S1000D", exact: true }).waitFor();
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
-  const issueSelect = page.getByRole("combobox", { name: "Version S1000D", exact: true });
+  const issueSelect = page.locator('input[type="hidden"][name="issue"]');
   await expect(issueSelect).toHaveValue("4.2");
   const documentInput = page.locator('input[type="file"][accept=".pdf,.docx"]');
   await expect(page.getByText(/normal-input\.pdf/)).toBeVisible();

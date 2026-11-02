@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, SelectMenu } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import { pdfCutApi, type PdfCutDetection } from "../lib/api";
@@ -83,10 +83,11 @@ export function PdfCutStartSelector({
                 <span className="block text-label font-mono uppercase text-fg-dim">
                   {t("migration.upload.pdfCut.firstDmTitle")}
                 </span>
-                <Select
+                <SelectMenu
+                  label={t("migration.upload.pdfCut.firstDmTitle")}
                   value={selectedTitle}
                   disabled={busy}
-                  onChange={(event) => onTitleChange(event.target.value)}
+                  onValueChange={onTitleChange}
                   options={detection.dmrl_titles.map((title) => ({ value: title, label: title }))}
                 />
               </label>

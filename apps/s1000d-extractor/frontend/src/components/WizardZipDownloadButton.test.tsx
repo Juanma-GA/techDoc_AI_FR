@@ -53,7 +53,7 @@ function mount(disabled = false) {
       }),
     );
   });
-  return container.querySelector("button");
+  return container.querySelector<HTMLButtonElement>("button[aria-busy]");
 }
 
 describe("wizard ZIP download button", () => {
@@ -142,17 +142,19 @@ describe("wizard ZIP download button", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const button = mount();
     const sizeInput = container?.querySelector<HTMLInputElement>('input[type="number"]');
-    const formatSelect = container?.querySelector<HTMLSelectElement>("select");
+    const formatSelect = container?.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
 
     await act(async () => {
       if (sizeInput && formatSelect) {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
           ?.set?.call(sizeInput, "640");
         sizeInput.dispatchEvent(new Event("input", { bubbles: true }));
-        formatSelect.value = "png";
-        formatSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        formatSelect.click();
       }
     });
+    const pngOption = [...document.body.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.includes("migration.generate.imageFormatPng"));
+    await act(async () => pngOption?.click());
     await act(async () => {
       button?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));

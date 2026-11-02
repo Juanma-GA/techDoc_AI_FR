@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Spinner } from "@internal/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  SelectMenu,
+  Spinner,
+} from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { documentsApi } from "../../lib/api";
 import { formatApiError } from "../../lib/migrationUtils";
@@ -30,8 +40,14 @@ export function DocumentList({ inputs, wizard }: { inputs: MigrationInputs; wiza
       <div className="grid gap-3 md:grid-cols-2">
         <Input aria-label={t("migration.ui.search")} placeholder={t("migration.ui.search")}
           value={search} onChange={(event) => setSearch(event.target.value)} />
-        <Select aria-label={t("migration.ui.sort")} value={sort} onChange={(event) => setSort(event.target.value)}
-          options={["recent", "oldest", "name"].map((value) => ({ value, label: t(`migration.ui.sort_${value}`) }))} />
+        <SelectMenu
+          label={t("migration.ui.sort")}
+          value={sort}
+          onValueChange={setSort}
+          options={["recent", "oldest", "name"].map((value) => ({
+            value, label: t(`migration.ui.sort_${value}`),
+          }))}
+        />
       </div>
       {query.error ? <p role="alert" className="text-danger">{formatApiError(t, query.error)}</p> : null}
       {query.isLoading ? <Spinner aria-label={t("common.loading")} /> : null}

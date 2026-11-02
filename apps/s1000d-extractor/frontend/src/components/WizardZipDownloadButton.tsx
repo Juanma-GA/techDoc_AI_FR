@@ -1,4 +1,4 @@
-import { Button, Input, Select } from "@internal/ui";
+import { Button, Input, SelectMenu } from "@internal/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -80,11 +80,11 @@ export function WizardZipDownloadButton({ docId, disabled, title }: Props) {
         <span className="text-label font-mono uppercase text-fg-dim">
           {t("migration.generate.imageFormat")}
         </span>
-        <Select
+        <SelectMenu
+          label={t("migration.generate.imageFormat")}
           value={imageFormat}
           aria-describedby="wizard-image-format-help"
-          onChange={(event) => {
-            const value = event.currentTarget.value;
+          onValueChange={(value) => {
             if (value === "original" || value === "jpeg" || value === "png") {
               setImageFormat(value);
             }

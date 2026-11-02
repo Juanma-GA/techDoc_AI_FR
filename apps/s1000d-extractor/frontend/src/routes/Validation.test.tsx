@@ -44,12 +44,17 @@ it("validates generated DMs on the server and downloads only for an issue overri
     expect(server).toHaveBeenCalledWith("synthetic", ["dm-1"]);
     expect(download).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
-    const select = container.querySelector("select");
-    expect(select).not.toBeNull();
+    const issueMenu = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+    expect(issueMenu).not.toBeNull();
     await act(async () => {
-      if (!select) throw new Error("Missing issue selector.");
-      select.value = "4.1";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      if (!issueMenu) throw new Error("Missing issue selector.");
+      issueMenu.click();
+    });
+    const issueOption = [...document.body.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === "4.1");
+    expect(issueOption).not.toBeUndefined();
+    await act(async () => {
+      issueOption?.click();
     });
     expect(download).toHaveBeenCalledWith("synthetic", "dm-1");
     expect(upload).toHaveBeenCalledWith([file], ["4.1"], ["synthetic.xml"]);
