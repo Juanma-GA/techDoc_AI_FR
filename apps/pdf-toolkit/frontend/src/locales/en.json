@@ -14,7 +14,14 @@
     "languageSwitcher": "Language",
     "tools": "PDF tools and settings",
     "collapse": "Collapse menu",
-    "expand": "Expand menu"
+    "expand": "Expand menu",
+    "categories": {
+      "pages": "Organize pages",
+      "modify": "Edit and optimize",
+      "convert": "Convert and extract",
+      "annotate": "Comment and sign",
+      "security": "Security"
+    }
   },
   "exportOptions": {
     "fileName": "Output filename",

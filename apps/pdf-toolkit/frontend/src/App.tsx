@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   Combine,
   Crop,
@@ -34,7 +34,6 @@ import {
   SidebarNavContent,
   Spinner,
   sidebarNavItemClass,
-  useMediaQuery,
   type DemoMode,
 } from "@internal/ui";
 import { DeleteTool } from "./features/delete/DeleteTool";
@@ -59,28 +58,57 @@ const MetadataTool = lazy(() =>
   import("./features/metadata/MetadataTool").then((module) => ({ default: module.MetadataTool })),
 );
 
-const tools = [
-  { id: "merge", icon: Combine },
-  { id: "extract", icon: Scissors },
-  { id: "extractImages", icon: Download },
-  { id: "split", icon: Split },
-  { id: "insert", icon: FilePlus2 },
-  { id: "delete", icon: Trash2 },
-  { id: "reorder", icon: Grip },
-  { id: "compress", icon: Minimize2 },
-  { id: "clean", icon: Eraser },
-  { id: "metadata", icon: FilePenLine },
-  { id: "protect", icon: LockKeyhole },
-  { id: "rotate", icon: RotateCw },
-  { id: "crop", icon: Crop },
-  { id: "comments", icon: MessageSquareText },
-  { id: "signature", icon: PenTool },
-  { id: "imagesToPdf", icon: ImagePlus },
-  { id: "pdfToImages", icon: Image },
-  { id: "settings", icon: SettingsIcon },
+const toolGroups = [
+  {
+    id: "pages",
+    labelKey: "nav.categories.pages",
+    tools: [
+      { id: "merge", icon: Combine },
+      { id: "split", icon: Split },
+      { id: "extract", icon: Scissors },
+      { id: "insert", icon: FilePlus2 },
+      { id: "delete", icon: Trash2 },
+      { id: "reorder", icon: Grip },
+    ],
+  },
+  {
+    id: "modify",
+    labelKey: "nav.categories.modify",
+    tools: [
+      { id: "crop", icon: Crop },
+      { id: "rotate", icon: RotateCw },
+      { id: "compress", icon: Minimize2 },
+      { id: "clean", icon: Eraser },
+      { id: "metadata", icon: FilePenLine },
+    ],
+  },
+  {
+    id: "convert",
+    labelKey: "nav.categories.convert",
+    tools: [
+      { id: "extractImages", icon: Download },
+      { id: "imagesToPdf", icon: ImagePlus },
+      { id: "pdfToImages", icon: Image },
+    ],
+  },
+  {
+    id: "annotate",
+    labelKey: "nav.categories.annotate",
+    tools: [
+      { id: "comments", icon: MessageSquareText },
+      { id: "signature", icon: PenTool },
+    ],
+  },
 ] as const;
 
-type ToolId = (typeof tools)[number]["id"];
+const securityTool = { id: "protect", icon: LockKeyhole } as const;
+const settingsTool = { id: "settings", icon: SettingsIcon } as const;
+
+type Tool =
+  | (typeof toolGroups)[number]["tools"][number]
+  | typeof securityTool
+  | typeof settingsTool;
+type ToolId = Tool["id"];
 const languages = ["fr", "en"] as const;
 
 declare global {
@@ -102,8 +130,24 @@ export function App() {
   const [demoPdfFile, setDemoPdfFile] = useState<File | null>(null);
   const [demoPdfLoading, setDemoPdfLoading] = useState(false);
   const [demoPdfError, setDemoPdfError] = useState(false);
-  const isCompact = useMediaQuery("(max-width: 760px)");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+
+  const renderToolButton = (tool: Tool) => {
+    const Icon = tool.icon;
+    return (
+      <button
+        key={tool.id}
+        id={`tool-nav-${tool.id}`}
+        type="button"
+        aria-current={activeTool === tool.id ? "page" : undefined}
+        title={t(`tools.${tool.id}.tab`)}
+        className={`${sidebarNavItemClass(activeTool === tool.id)}${tool.id === "settings" ? " pdf-nav-settings" : ""}`}
+        onClick={() => setActiveTool(tool.id)}
+      >
+        <SidebarNavContent icon={Icon} label={t(`tools.${tool.id}.tab`)} />
+      </button>
+    );
+  };
 
   useEffect(() => {
     const tauri = window.__TAURI__;
@@ -168,29 +212,6 @@ export function App() {
       .finally(() => setDemoPdfLoading(false));
   };
 
-  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tool: ToolId) => {
-    const currentIndex = tools.findIndex((item) => item.id === tool);
-    let nextIndex = currentIndex;
-
-    if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = tools.length - 1;
-    } else if (event.key === (isCompact ? "ArrowRight" : "ArrowDown")) {
-      nextIndex = (currentIndex + 1) % tools.length;
-    } else if (event.key === (isCompact ? "ArrowLeft" : "ArrowUp")) {
-      nextIndex = (currentIndex - 1 + tools.length) % tools.length;
-    } else {
-      return;
-    }
-
-    event.preventDefault();
-    const nextTool = tools[nextIndex]?.id;
-    if (!nextTool) throw new RangeError("Invalid tool navigation index");
-    setActiveTool(nextTool);
-    document.getElementById(`tool-tab-${nextTool}`)?.focus();
-  };
-
   return (
     <DemoModeProvider mode={demoMode} isReady>
       <DemoPdfFileProvider file={demoPdfFile}>
@@ -210,31 +231,27 @@ export function App() {
             ) : null
           }
           navigation={
-            <div
-              className="ui-tool-tabs"
-              role="tablist"
-              aria-label={t("nav.tools")}
-              aria-orientation={isCompact ? "horizontal" : "vertical"}
-            >
-              {tools.map(({ id, icon: Icon }) => (
-                <button
-                  key={id}
-                  id={`tool-tab-${id}`}
-                  type="button"
-                  role="tab"
-                  aria-controls="tool-panel"
-                  aria-selected={activeTool === id}
-                  tabIndex={activeTool === id ? 0 : -1}
-                  aria-label={t(`tools.${id}.tab`)}
-                  title={t(`tools.${id}.tab`)}
-                  className={sidebarNavItemClass(activeTool === id)}
-                  onClick={() => setActiveTool(id)}
-                  onKeyDown={(event) => handleTabKeyDown(event, id)}
-                >
-                  <SidebarNavContent icon={Icon} label={t(`tools.${id}.tab`)} />
-                </button>
+            <>
+              {toolGroups.map((group, index) => (
+                <div className="ui-nav-group" key={group.id}>
+                  <div
+                    className={`ui-nav-group-title pdf-nav-section-title${index === 0 ? " is-first" : ""}`}
+                  >
+                    {t(group.labelKey)}
+                  </div>
+                  <div className="pdf-nav-group-items">
+                    {group.tools.map(renderToolButton)}
+                  </div>
+                </div>
               ))}
-            </div>
+              <div className="ui-nav-group">
+                <div className="ui-nav-group-title pdf-nav-section-title">
+                  {t("nav.categories.security")}
+                </div>
+                {renderToolButton(securityTool)}
+              </div>
+              {renderToolButton(settingsTool)}
+            </>
           }
           languageSwitcher={
             <LanguageSwitcher
@@ -247,7 +264,7 @@ export function App() {
         >
           <div className="pdf-workspace">
             <header className="page-header">
-              <h1>{t(`tools.${activeTool}.title`)}</h1>
+              <h1 id="tool-panel-title">{t(`tools.${activeTool}.title`)}</h1>
               <p>{t(`tools.${activeTool}.description`)}</p>
               <div className="page-header-actions">
                 <div className="local-badge">
@@ -260,8 +277,8 @@ export function App() {
             <section
               id="tool-panel"
               className="tool-panel"
-              role="tabpanel"
-              aria-labelledby={`tool-tab-${activeTool}`}
+              role="region"
+              aria-labelledby="tool-panel-title"
               tabIndex={0}
             >
               {activeTool === "merge" ? <MergeTool /> : null}
