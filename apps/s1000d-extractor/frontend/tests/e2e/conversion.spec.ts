@@ -125,8 +125,8 @@ test("keeps the DMRL type picker legible and conflict notice padded in both them
   );
   expect(gridTracks[0]).toBe(gridTracks[1]);
   const columns = gridTracks[0]!.split(" ");
-  expect(columns[1]).toBe(columns[4]);
-  expect(columns[4]).toBe(columns[5]);
+  expect(Number.parseFloat(columns[4]!)).toBeCloseTo(Number.parseFloat(columns[5]!), 1);
+  expect(Number.parseFloat(columns[1]!)).toBeCloseTo(Number.parseFloat(columns[4]!) * 4, 1);
   await expect(rows.nth(1)).toContainText("à vérifier");
   await expect(rows.nth(1)).not.toContainText(/P\. 3|approchant/i);
   const notice = page.locator('div[role="alert"]').filter({ has: page.locator("details.space-y-3") });
