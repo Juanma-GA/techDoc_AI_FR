@@ -48,9 +48,10 @@ vi.mock("./extractImagesApi", () => ({
 vi.mock("./checkReadablePdf", () => ({
   checkReadablePdf: mocks.checkReadablePdf,
 }));
-vi.mock("./unpackImageArchive", () => ({
-  unpackImageArchive: mocks.unpack,
-}));
+vi.mock("./unpackImageArchive", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./unpackImageArchive")>();
+  return { ...original, unpackImageArchive: mocks.unpack };
+});
 
 async function setup(language: "fr" | "en" = "fr") {
   const i18n = createInstance();
@@ -98,12 +99,14 @@ beforeEach(() => {
       url: "blob:preview-1",
       size: 4,
       previewable: true,
+      contentHash: "png-hash",
     },
     {
       name: "page-0001-image-0002.jbig2",
       url: "blob:preview-2",
       size: 3,
       previewable: false,
+      contentHash: "jbig2-hash",
     },
   ]);
 });
@@ -151,6 +154,41 @@ describe("ExtractImagesTool", () => {
     expect(screen.queryByRole("button", { name: "Télécharger l’archive ZIP" })).toBeNull();
     expect(mocks.chooseDestination).not.toHaveBeenCalled();
     expect(mocks.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it("groups identical images once and shows their occurrence count", async () => {
+    const form = await setup();
+    mocks.unpack.mockResolvedValue([
+      {
+        name: "page-0001-logo.png",
+        url: "blob:logo-1",
+        size: 4,
+        previewable: true,
+        contentHash: "same-logo",
+      },
+      {
+        name: "page-0002-logo.png",
+        url: "blob:logo-2",
+        size: 4,
+        previewable: true,
+        contentHash: "same-logo",
+      },
+      {
+        name: "page-0002-product.jpg",
+        url: "blob:product",
+        size: 8,
+        previewable: true,
+        contentHash: "unique-product",
+      },
+    ]);
+    fireEvent.click(form.action);
+
+    expect(await screen.findByText("2 occurrences identiques")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Éléments récurrents (logos/icônes)" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Images uniques" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Télécharger page-0001-logo.png" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Télécharger page-0002-logo.png" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Télécharger page-0002-product.jpg" })).toBeTruthy();
   });
 
   it.each([

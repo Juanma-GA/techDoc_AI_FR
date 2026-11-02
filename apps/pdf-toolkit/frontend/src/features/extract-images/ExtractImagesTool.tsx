@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Download, FileText, Image as ImageIcon, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -15,7 +15,12 @@ import { formatFileSize } from "../../shared/files";
 import { ExportProgress } from "../shared/ExportProgress";
 import { checkReadablePdf } from "./checkReadablePdf";
 import { extractImagesFromPDF } from "./extractImagesApi";
-import { unpackImageArchive, type ExtractedImage } from "./unpackImageArchive";
+import {
+  groupImagesByContent,
+  unpackImageArchive,
+  type ExtractedImageGroup,
+  type ExtractedImage,
+} from "./unpackImageArchive";
 import "./extract-images.css";
 
 export function ExtractImagesTool() {
@@ -36,6 +41,9 @@ export function ExtractImagesTool() {
     phase: "preparing",
     percentage: null,
   });
+  const imageGroups = useMemo(() => groupImagesByContent(images), [images]);
+  const repeatedImageGroups = imageGroups.filter((group) => group.occurrences > 1);
+  const uniqueImageGroups = imageGroups.filter((group) => group.occurrences === 1);
   const controllerRef = useRef<AbortController | null>(null);
   const imageUrlsRef = useRef<ExtractedImage[]>([]);
 
@@ -140,6 +148,36 @@ export function ExtractImagesTool() {
       setSavingArchive(false);
     }
   };
+
+  const renderImageGroup = ({ image, occurrences }: ExtractedImageGroup) => (
+    <a
+      key={image.contentHash}
+      className="extract-images-download"
+      href={image.url}
+      download={image.name}
+      aria-label={t("extractImages.downloadImage", { name: image.name })}
+      title={t("extractImages.downloadImage", { name: image.name })}
+    >
+      <span className="extract-images-preview">
+        {image.previewable ? (
+          <img src={image.url} alt={image.name} loading="lazy" decoding="async" />
+        ) : (
+          <span className="extract-images-preview-unavailable">
+            <ImageIcon size={30} aria-hidden="true" />
+            <span>{t("extractImages.previewUnavailable")}</span>
+          </span>
+        )}
+      </span>
+      <span className="extract-images-name">{image.name}</span>
+      {occurrences > 1 ? (
+        <span className="extract-images-occurrences">
+          {t("extractImages.repeatedOccurrences", { count: occurrences })}
+        </span>
+      ) : (
+        <span className="extract-images-size">{formatFileSize(image.size, language)}</span>
+      )}
+    </a>
+  );
 
   return (
     <form className="workflow-grid" onSubmit={submit}>
@@ -289,33 +327,19 @@ export function ExtractImagesTool() {
                 </p>
               ) : null}
             </div>
-            <div className="extract-images-grid">
-              {images.map((image) => (
-                <a
-                  key={image.url}
-                  className="extract-images-download"
-                  href={image.url}
-                  download={image.name}
-                  aria-label={t("extractImages.downloadImage", { name: image.name })}
-                  title={t("extractImages.downloadImage", { name: image.name })}
-                >
-                  <span className="extract-images-preview">
-                    {image.previewable ? (
-                      <img src={image.url} alt={image.name} loading="lazy" decoding="async" />
-                    ) : (
-                      <span className="extract-images-preview-unavailable">
-                        <ImageIcon size={30} aria-hidden="true" />
-                        <span>{t("extractImages.previewUnavailable")}</span>
-                      </span>
-                    )}
-                  </span>
-                  <span className="extract-images-name">{image.name}</span>
-                  <span className="extract-images-size">
-                    {formatFileSize(image.size, language)}
-                  </span>
-                </a>
-              ))}
-            </div>
+            {repeatedImageGroups.length > 0 ? (
+              <section className="extract-images-category" aria-labelledby="extract-images-repeated-title">
+                <h3 id="extract-images-repeated-title">{t("extractImages.repeatedTitle")}</h3>
+                <p>{t("extractImages.repeatedDescription")}</p>
+                <div className="extract-images-grid">{repeatedImageGroups.map(renderImageGroup)}</div>
+              </section>
+            ) : null}
+            {uniqueImageGroups.length > 0 ? (
+              <section className="extract-images-category" aria-labelledby="extract-images-unique-title">
+                <h3 id="extract-images-unique-title">{t("extractImages.uniqueTitle")}</h3>
+                <div className="extract-images-grid">{uniqueImageGroups.map(renderImageGroup)}</div>
+              </section>
+            ) : null}
           </section>
         </Card>
       ) : null}

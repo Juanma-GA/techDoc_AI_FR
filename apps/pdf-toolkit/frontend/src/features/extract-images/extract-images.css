@@ -19,6 +19,22 @@
   font-size: 0.8rem;
 }
 
+.extract-images-category + .extract-images-category {
+  margin-top: 20px;
+}
+
+.extract-images-category h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.extract-images-category p {
+  margin: 0 0 10px;
+  color: var(--color-text-dim);
+  font-size: 0.75rem;
+}
+
 .extract-images-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
@@ -86,6 +102,12 @@
 }
 
 .extract-images-size {
+  color: var(--color-text-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+}
+
+.extract-images-occurrences {
   color: var(--color-text-dim);
   font-family: "JetBrains Mono", monospace;
   font-size: 0.65rem;

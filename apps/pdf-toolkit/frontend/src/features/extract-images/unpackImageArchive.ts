@@ -5,6 +5,12 @@ export type ExtractedImage = {
   url: string;
   size: number;
   previewable: boolean;
+  contentHash: string;
+};
+
+export type ExtractedImageGroup = {
+  image: ExtractedImage;
+  occurrences: number;
 };
 
 type ArchiveMessages = {
@@ -50,11 +56,16 @@ export async function unpackImageArchive(
 
       const blobData = Uint8Array.from(data);
       const url = URL.createObjectURL(new Blob([blobData.buffer], { type: mediaType }));
+      const digest = await crypto.subtle.digest("SHA-256", blobData.buffer);
+      const contentHash = Array.from(new Uint8Array(digest), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("");
       images.push({
         name,
         url,
         size: data.byteLength,
         previewable: previewableTypes.has(mediaType),
+        contentHash,
       });
     }
   } catch (reason: unknown) {
@@ -67,4 +78,17 @@ export async function unpackImageArchive(
     throw new Error(messages.emptyArchive);
   }
   return images;
+}
+
+export function groupImagesByContent(images: ExtractedImage[]): ExtractedImageGroup[] {
+  const groups = new Map<string, ExtractedImageGroup>();
+  for (const image of images) {
+    const group = groups.get(image.contentHash);
+    if (group) {
+      group.occurrences += 1;
+    } else {
+      groups.set(image.contentHash, { image, occurrences: 1 });
+    }
+  }
+  return [...groups.values()];
 }

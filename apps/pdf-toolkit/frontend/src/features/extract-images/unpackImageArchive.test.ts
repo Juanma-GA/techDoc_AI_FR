@@ -1,7 +1,7 @@
 import { zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { unpackImageArchive } from "./unpackImageArchive";
+import { groupImagesByContent, unpackImageArchive } from "./unpackImageArchive";
 
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
@@ -45,13 +45,39 @@ describe("unpackImageArchive", () => {
         url: "blob:extracted-1",
         size: 4,
         previewable: true,
+        contentHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
       },
       {
         name: "page-0001-image-0002.jbig2",
         url: "blob:extracted-2",
         size: 3,
         previewable: false,
+        contentHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
       },
+    ]);
+    expect(images[0]?.contentHash).not.toBe(images[1]?.contentHash);
+  });
+
+  it("groups byte-identical image entries and keeps different images separate", async () => {
+    const bytes = zipSync({
+      "page-0001-logo.png": new Uint8Array([1, 2, 3]),
+      "page-0002-logo.png": new Uint8Array([1, 2, 3]),
+      "page-0002-photo.png": new Uint8Array([3, 2, 1]),
+    });
+
+    const images = await unpackImageArchive(
+      new Blob([bytes], { type: "application/zip" }),
+      messages,
+    );
+
+    expect(
+      groupImagesByContent(images).map(({ image, occurrences }) => ({
+        name: image.name,
+        occurrences,
+      })),
+    ).toEqual([
+      { name: "page-0001-logo.png", occurrences: 2 },
+      { name: "page-0002-photo.png", occurrences: 1 },
     ]);
   });
 
