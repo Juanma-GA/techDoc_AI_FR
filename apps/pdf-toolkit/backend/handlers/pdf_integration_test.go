@@ -26,6 +26,7 @@ type routeProcessor struct {
 	protected   services.PDFProtectionOptions
 	metadata    services.PDFMetadata
 	metadataErr error
+	comments    []services.PDFComment
 }
 
 func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {

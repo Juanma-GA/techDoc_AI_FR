@@ -46,6 +46,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/split", h.Split)
 	router.GET("/split/progress/:jobID", h.SplitProgress)
 	router.POST("/signature", h.Signature)
+	router.POST("/comments", h.Comments)
 }
 
 func (h *PDFHandler) Health(c *gin.Context) {

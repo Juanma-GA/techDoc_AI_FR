@@ -70,6 +70,11 @@
       "title": "Edit PDF metadata",
       "description": "Edit your PDF document’s title, author, subject and keywords."
     },
+    "comments": {
+      "tab": "Comments",
+      "title": "Comment on a PDF",
+      "description": "Click a page to place a comment note at that location."
+    },
     "protect": {
       "tab": "Protect PDF",
       "title": "Protect a PDF",
@@ -122,6 +127,35 @@
     "action": "Save and download",
     "working": "Saving properties…",
     "success": "Properties have been saved in {{fileName}}."
+  },
+  "comments": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "Click the page to place a note.",
+    "stepComments": "Comments ({{count}})",
+    "stepCommentsDescription": "Notes are added as annotations that can be opened in a PDF reader.",
+    "previewEmpty": "Select a PDF to show its preview.",
+    "previewLoading": "Loading preview…",
+    "previewFailed": "Could not display this PDF. Check that it is valid and not password-protected.",
+    "pageNavigation": "Page navigation",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageOf": "Page {{page}} of {{count}}",
+    "pageNumber": "Page number",
+    "pagePreview": "Preview of page {{page}}; click to add a comment.",
+    "clickInstructions": "Click where the comment belongs, or choose the center of the page.",
+    "placeAtCenter": "Place at center",
+    "commentLabel": "Comment on page {{page}}",
+    "charactersRemaining": "{{count}} characters remaining",
+    "addComment": "Add comment",
+    "contentRequired": "Enter the comment text.",
+    "maximumReached": "The limit of 100 comments per PDF has been reached.",
+    "emptyList": "No comments yet. Click the preview to add one.",
+    "pageShort": "Page {{page}}",
+    "removeComment": "Remove comment on page {{page}}",
+    "selectFileAndAdd": "Select a PDF and add at least one comment.",
+    "export": "Save commented PDF",
+    "working": "Adding comments…",
+    "success": "Downloaded {{fileName}} with its comments."
   },
   "common": {
     "loading": "Loading…",
@@ -320,6 +354,7 @@
     "mergeFailed": "Merging failed.",
     "compressionFailed": "Compression failed.",
     "cleanFailed": "Cleaning the PDF failed.",
+    "commentsFailed": "Adding comments to the PDF failed.",
     "metadataFailed": "Editing the PDF properties failed.",
     "pageOperationFailed": "Page processing failed.",
     "reorderFailed": "Reordering failed.",

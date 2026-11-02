@@ -8,6 +8,7 @@ import {
   Image,
   ImagePlus,
   LockKeyhole,
+  MessageSquareText,
   Minimize2,
   PenTool,
   RotateCw,
@@ -21,6 +22,7 @@ import { useTranslation } from "react-i18next";
 
 import { CompressTool } from "./features/compress/CompressTool";
 import { CleanTool } from "./features/clean/CleanTool";
+import { CommentsTool } from "./features/comments/CommentsTool";
 import {
   AppShell,
   DemoModeBadge,
@@ -65,6 +67,7 @@ const tools = [
   { id: "metadata", icon: FilePenLine },
   { id: "protect", icon: LockKeyhole },
   { id: "rotate", icon: RotateCw },
+  { id: "comments", icon: MessageSquareText },
   { id: "signature", icon: PenTool },
   { id: "imagesToPdf", icon: ImagePlus },
   { id: "pdfToImages", icon: Image },
@@ -281,6 +284,7 @@ export function App() {
               ) : null}
               {activeTool === "protect" ? <ProtectTool /> : null}
               {activeTool === "rotate" ? <RotateTool /> : null}
+              {activeTool === "comments" ? <CommentsTool /> : null}
               {activeTool === "signature" ? <SignatureTool /> : null}
               {activeTool === "imagesToPdf" ? <ImagesToPdfTool /> : null}
               {activeTool === "pdfToImages" ? <PdfToImagesTool /> : null}

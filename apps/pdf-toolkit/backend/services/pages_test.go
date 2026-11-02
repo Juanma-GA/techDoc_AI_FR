@@ -55,6 +55,7 @@ type fakeProcessor struct {
 	metadata     PDFMetadata
 	metadataCall bool
 	metadataErr  error
+	comments     []PDFComment
 }
 
 func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) error {
@@ -108,6 +109,14 @@ func (p *fakeProcessor) Reorder(_ context.Context, _, _ string, pages []int) err
 func (p *fakeProcessor) Rotate(_ context.Context, _, _ string, pages []int, rotation int) error {
 	p.rotated = append([]int(nil), pages...)
 	p.rotation = rotation
+	return nil
+}
+func (p *fakeProcessor) AddComments(
+	_ context.Context,
+	_, _ string,
+	comments []PDFComment,
+) error {
+	p.comments = append([]PDFComment(nil), comments...)
 	return nil
 }
 

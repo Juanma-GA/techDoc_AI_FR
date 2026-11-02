@@ -10,7 +10,9 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 
 	"pdf-toolkit/services"
 )
@@ -101,6 +103,55 @@ func (p *PDFCPU) Clean(ctx context.Context, input, output string) error {
 		)
 	}
 	return nil
+}
+
+func (p *PDFCPU) AddComments(
+	ctx context.Context,
+	input, output string,
+	comments []services.PDFComment,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	annotations := make(map[int][]model.AnnotationRenderer, len(comments))
+	for index, comment := range comments {
+		const markerSize = 18.0
+		annotation := model.NewTextAnnotation(
+			*types.NewRectangle(
+				comment.X-markerSize/2,
+				comment.Y-markerSize/2,
+				comment.X+markerSize/2,
+				comment.Y+markerSize/2,
+			),
+			0,
+			comment.Content,
+			fmt.Sprintf("pdf-toolkit-comment-%d", index+1),
+			"",
+			0,
+			&color.Gray,
+			"",
+			nil,
+			nil,
+			"",
+			"",
+			0,
+			0,
+			0,
+			false,
+			"Comment",
+		)
+		annotations[comment.Page] = append(annotations[comment.Page], annotation)
+	}
+	if err := api.AddAnnotationsMapFile(
+		input,
+		output,
+		annotations,
+		model.NewDefaultConfiguration(),
+		false,
+	); err != nil {
+		return fmt.Errorf("pdfcpu add comments: %w", err)
+	}
+	return ctx.Err()
 }
 
 func (p *PDFCPU) PageCount(ctx context.Context, input string) (int, error) {

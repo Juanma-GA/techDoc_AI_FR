@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -10,11 +11,57 @@ import (
 	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 
 	"pdf-toolkit/services"
 )
+
+func TestAddCommentsCreatesTextAnnotationsOnSelectedPages(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "input.pdf")
+	output := filepath.Join(tempDir, "commented.pdf")
+	if err := os.WriteFile(input, testPDF(t, 3), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	comments := []services.PDFComment{
+		{Page: 2, X: 120, Y: 240, Content: "À vérifier"},
+	}
+	if err := NewPDFCPU().AddComments(context.Background(), input, output, comments); err != nil {
+		t.Fatalf("AddComments() error = %v", err)
+	}
+	assertPageCount(t, NewPDFCPU(), output, 3)
+
+	file, err := os.Open(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	annotations, annotationErr := api.Annotations(file, nil, nil)
+	closeErr := file.Close()
+	if annotationErr != nil || closeErr != nil {
+		t.Fatalf("read annotations: %v", errors.Join(annotationErr, closeErr))
+	}
+	count, _, err := pdfcpu.ListAnnotations(annotations)
+	if err != nil {
+		t.Fatalf("ListAnnotations() error = %v", err)
+	}
+	if count != 1 || len(annotations[2]) != 1 || len(annotations[1]) != 0 {
+		t.Fatalf("annotations = %d, pages = %v, want one annotation on page 2", count, annotations)
+	}
+	textAnnotations, ok := annotations[2][model.AnnText]
+	if !ok || len(textAnnotations.Map) != 1 {
+		t.Fatalf("page 2 text annotations = %+v, want one", textAnnotations)
+	}
+	for _, annotation := range textAnnotations.Map {
+		rect := annotation.Rectangle()
+		if annotation.Content() != comments[0].Content ||
+			rect.LL.X != 111 || rect.LL.Y != 231 || rect.UR.X != 129 || rect.UR.Y != 249 {
+			t.Fatalf("annotation = %q at %+v, want comment at x=120 y=240", annotation.Content(), rect)
+		}
+	}
+}
 
 func TestStampSignatureAffectsOnlySelectedPage(t *testing.T) {
 	tempDir := t.TempDir()

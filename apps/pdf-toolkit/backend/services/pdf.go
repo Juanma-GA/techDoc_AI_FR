@@ -33,6 +33,7 @@ type PDFProcessor interface {
 	Collect(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
 	StampSignature(ctx context.Context, input, image, output string, options SignatureStampOptions) error
+	AddComments(ctx context.Context, input, output string, comments []PDFComment) error
 }
 
 type PDFProtectionOptions struct {

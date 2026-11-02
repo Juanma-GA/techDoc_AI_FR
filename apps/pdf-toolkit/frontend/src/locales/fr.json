@@ -70,6 +70,11 @@
       "title": "Modifier les métadonnées",
       "description": "Modifiez le titre, l’auteur, le sujet et les mots-clés de votre document PDF."
     },
+    "comments": {
+      "tab": "Commentaires",
+      "title": "Commenter un PDF",
+      "description": "Cliquez sur une page pour placer une note de commentaire à cet endroit."
+    },
     "protect": {
       "tab": "Protéger PDF",
       "title": "Protéger un PDF",
@@ -161,6 +166,35 @@
     "working": "Fusion en cours…",
     "minimumFiles": "Ajoutez au moins deux fichiers PDF à fusionner.",
     "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "comments": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Cliquez sur la page pour placer une note.",
+    "stepComments": "Commentaires ({{count}})",
+    "stepCommentsDescription": "Les notes sont ajoutées au PDF comme annotations ouvrables dans un lecteur PDF.",
+    "previewEmpty": "Sélectionnez un PDF pour afficher son aperçu.",
+    "previewLoading": "Chargement de l’aperçu…",
+    "previewFailed": "Impossible d’afficher ce PDF. Vérifiez qu’il est valide et sans mot de passe.",
+    "pageNavigation": "Navigation dans les pages",
+    "previousPage": "Page précédente",
+    "nextPage": "Page suivante",
+    "pageOf": "Page {{page}} sur {{count}}",
+    "pageNumber": "Numéro de page",
+    "pagePreview": "Aperçu de la page {{page}} ; cliquez pour ajouter un commentaire.",
+    "clickInstructions": "Cliquez à l’endroit du commentaire, ou choisissez le centre de la page.",
+    "placeAtCenter": "Placer au centre",
+    "commentLabel": "Commentaire sur la page {{page}}",
+    "charactersRemaining": "{{count}} caractères restants",
+    "addComment": "Ajouter le commentaire",
+    "contentRequired": "Saisissez le texte du commentaire.",
+    "maximumReached": "La limite de 100 commentaires par PDF est atteinte.",
+    "emptyList": "Aucun commentaire. Cliquez sur l’aperçu pour en ajouter un.",
+    "pageShort": "Page {{page}}",
+    "removeComment": "Supprimer le commentaire de la page {{page}}",
+    "selectFileAndAdd": "Sélectionnez un PDF et ajoutez au moins un commentaire.",
+    "export": "Enregistrer le PDF commenté",
+    "working": "Ajout des commentaires…",
+    "success": "Le fichier {{fileName}} a été téléchargé avec ses commentaires."
   },
   "compress": {
     "stepFile": "Choisir le PDF",
@@ -320,6 +354,7 @@
     "mergeFailed": "La fusion a échoué.",
     "compressionFailed": "La compression a échoué.",
     "cleanFailed": "Le nettoyage du PDF a échoué.",
+    "commentsFailed": "L’ajout des commentaires au PDF a échoué.",
     "metadataFailed": "La modification des propriétés du PDF a échoué.",
     "pageOperationFailed": "Le traitement des pages a échoué.",
     "reorderFailed": "La réorganisation a échoué.",

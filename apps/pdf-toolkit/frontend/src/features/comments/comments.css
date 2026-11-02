@@ -1,0 +1,135 @@
+.workflow-grid.comments-workflow {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
+}
+
+.comments-preview-panel,
+.comments-action-panel {
+  min-width: 0;
+}
+
+.comments-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 8px;
+}
+
+.comments-page-label {
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+}
+
+.comments-page-input {
+  width: 76px;
+}
+
+.comments-pdf-page {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border-md);
+  border-radius: var(--radius-sm);
+  background: white;
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+.comments-pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.comments-pdf-page:not(.is-ready) {
+  cursor: progress;
+}
+
+.comments-pin {
+  position: absolute;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--color-brand-blue);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--color-text-base) 25%, transparent);
+}
+
+.comments-pin.is-draft {
+  background: var(--color-semantic-warning);
+  color: var(--color-text-base);
+}
+
+.comments-center-button {
+  margin-top: 10px;
+}
+
+.comments-draft {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.comments-list {
+  display: grid;
+  max-height: 340px;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.comments-list-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  padding: 5px 6px 5px 10px;
+}
+
+.comments-list-content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  color: var(--color-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.comments-list-content span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comments-list-page {
+  color: var(--color-text-dim);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.comments-export {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .workflow-grid.comments-workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
