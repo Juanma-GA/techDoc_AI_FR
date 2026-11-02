@@ -61,6 +61,21 @@ class PdfBookmark:
     page: int
 
 
+@dataclass(frozen=True)
+class PdfLink:
+    """A link annotation. `kind` is internal, external, named, none (no action) or other."""
+
+    bbox: tuple[float, float, float, float]
+    kind: str
+    target_page: int | None = None  # 1-indexed; None when an internal link has no valid target
+    uri: str | None = None
+    text: str = ""
+
+    @property
+    def broken(self) -> bool:
+        return self.kind == "none" or (self.kind == "internal" and self.target_page is None)
+
+
 @dataclass
 class ParsedPage:
     page: int  # 1-indexed
@@ -78,6 +93,7 @@ class ParsedPage:
     page_height: float = 0.0
     words: list[PdfWord] = field(default_factory=list)
     vector_primitives: list[PdfVectorPrimitive] = field(default_factory=list)
+    links: list[PdfLink] = field(default_factory=list)
 
 
 @dataclass
@@ -208,6 +224,7 @@ def parse_pdf(
                     page_height=float(page.rect.height),
                     words=words,
                     vector_primitives=vector_primitives,
+                    links=_page_links(page, doc.page_count),
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")
@@ -223,6 +240,43 @@ def parse_pdf(
         )
     finally:
         doc.close()
+
+
+def _page_links(page: fitz.Page, page_count: int) -> list[PdfLink]:
+    """Link annotations of a page; an unreadable link table yields no link."""
+    try:
+        raw_links = page.get_links()
+    except Exception:  # noqa: BLE001
+        return []
+    links: list[PdfLink] = []
+    for raw in raw_links:
+        rect = raw.get("from")
+        if rect is None:
+            continue
+        bbox = (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
+        code = raw.get("kind")
+        target_page: int | None = None
+        uri: str | None = None
+        if code == fitz.LINK_GOTO:
+            kind = "internal"
+            target = raw.get("page")
+            if isinstance(target, int) and 0 <= target < page_count:
+                target_page = target + 1
+        elif code == fitz.LINK_URI:
+            kind = "external"
+            uri = raw.get("uri")
+        elif code == fitz.LINK_NAMED:
+            kind = "named"
+        elif code == fitz.LINK_NONE:
+            kind = "none"
+        else:
+            kind = "other"
+        try:
+            text = " ".join((page.get_textbox(rect) or "").split())[:80]
+        except Exception:  # noqa: BLE001
+            text = ""
+        links.append(PdfLink(bbox=bbox, kind=kind, target_page=target_page, uri=uri, text=text))
+    return links
 
 
 def _has_digital_signature(doc: fitz.Document) -> bool:

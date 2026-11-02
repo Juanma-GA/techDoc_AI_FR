@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.ocr_providers import run_ocr
 from app.core.pdf_versioning import current_path
+from app.core.preparation_classification import reset_page_decisions
 from app.core.preparation_state import _find_page, _load_json, _load_validation_map
 from app.db.models import Document
 from app.db.preparation_models import DocumentPreparation
@@ -94,6 +95,7 @@ def run_page_ocr(
     }
     provider_results[str(page_number)] = serialized
     record.ocr_results_json = json.dumps(ocr_results, ensure_ascii=False)
+    reset_page_decisions(record)
     validated_by_provider = _load_validation_map(record)
     validated_pages = set(validated_by_provider.get(provider, []))
     validated_pages.discard(page_number)

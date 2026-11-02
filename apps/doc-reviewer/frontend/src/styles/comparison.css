@@ -1,0 +1,125 @@
+.comparison-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.comparison-workspace-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.comparison-page-control,
+.comparison-candidate-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.comparison-page-control > span {
+  min-width: 9rem;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.comparison-candidate-control .input {
+  width: auto;
+  min-width: min(15rem, 40vw);
+}
+
+.comparison-alignment-status {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  color: var(--fg-dim);
+  background: var(--card);
+  font-size: 0.85rem;
+}
+
+.comparison-split-view {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.comparison-switcher {
+  display: grid;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.comparison-switcher__layer {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.comparison-switcher__layer--outgoing {
+  z-index: 2;
+  animation: comparison-page-leave 360ms ease-in both;
+  pointer-events: none;
+}
+
+.comparison-switcher__layer--incoming {
+  z-index: 1;
+  animation: comparison-page-enter 360ms ease-out both;
+}
+
+@keyframes comparison-page-leave {
+  to {
+    transform: translateX(100%);
+    opacity: 0.3;
+  }
+}
+
+@keyframes comparison-page-enter {
+  from {
+    transform: translateX(-10%);
+    opacity: 0.75;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .comparison-split-view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .comparison-switcher {
+    overflow: visible;
+  }
+
+  .comparison-switcher__layer--outgoing {
+    display: none;
+  }
+
+  .comparison-candidate-control {
+    flex-wrap: wrap;
+  }
+
+  .comparison-candidate-control .input {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comparison-switcher__layer--outgoing,
+  .comparison-switcher__layer--incoming {
+    animation: none;
+  }
+}

@@ -1,8 +1,11 @@
 export const DEMO_PDF_FILENAME = "DEMO_CMM_PDF_anonyme.pdf";
+export const DEMO_REVISION_PDF_FILENAME = "DEMO_CMM_PDF_revision_anonyme.pdf";
 
-export async function loadDemoPdf(): Promise<File> {
+export async function loadDemoPdf(
+  filename: typeof DEMO_PDF_FILENAME | typeof DEMO_REVISION_PDF_FILENAME = DEMO_PDF_FILENAME,
+): Promise<File> {
   const response = await fetch(
-    `${import.meta.env.BASE_URL}demo/${DEMO_PDF_FILENAME}`,
+    `${import.meta.env.BASE_URL}demo/${filename}`,
   );
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
@@ -22,5 +25,9 @@ export async function loadDemoPdf(): Promise<File> {
     throw new Error("The PDF is empty");
   }
 
-  return new File([content], DEMO_PDF_FILENAME, { type: "application/pdf" });
+  return new File([content], filename, { type: "application/pdf" });
+}
+
+export async function loadDemoComparisonPdfs(): Promise<File[]> {
+  return Promise.all([loadDemoPdf(), loadDemoPdf(DEMO_REVISION_PDF_FILENAME)]);
 }

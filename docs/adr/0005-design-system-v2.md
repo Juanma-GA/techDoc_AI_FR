@@ -1,0 +1,46 @@
+# ADR 0005 — Design system v2 : tokens générés, canaux RGB, palette claire, polices partagées
+
+- **Status** — Accepted (2026-10-30)
+- **Scope** — `design-tokens/`, `packages/ui/`, `apps/_template/` et toutes les apps frontend du monorepo.
+- **Reference** — [`STANDARD_POC.md`](../../STANDARD_POC.md) §5, [supplément design system](../standards/design-system.md).
+
+---
+
+## Contexte
+
+Audit du framework UI (octobre 2026) :
+
+- `theme.css` était maintenu à la main en parallèle de `tokens.json`, avec des commentaires contradictoires (`.light` vs `:root` clair).
+- Le preset Tailwind exposait les couleurs en `var(--color-x)` contenant un hex : avec Tailwind 3.4, les modificateurs d'opacité (`bg-success/15`, `border-danger/40`, `bg-bg/70`) ne généraient **aucun CSS**. Badges, toasts, overlays et plusieurs composants d'apps étaient donc rendus sans fond.
+- Aucun token « texte sur fond de marque » : les boutons primaires et l'onglet actif utilisaient `text-fg`, quasi noir en mode clair.
+- Ombres, rayons et polices écrits en dur dans le CSS partagé ; une seule ombre (sombre) pour les deux thèmes.
+
+## Décision
+
+1. `tokens.json` est l'unique source ; `theme.css` est **généré** par `design-tokens/scripts/build-theme.mjs` et vérifié par `pnpm tokens:check` (test + `check_standard.sh`).
+2. Chaque token hex émet `--color-<nom>` (couleur complète, compatible) **et** `--color-<nom>-rgb` (canaux). Le preset consomme `rgb(var(--color-<nom>-rgb) / <alpha-value>)`, ce qui réactive les opacités Tailwind.
+3. Nouveaux tokens sémantiques : `brand.fg`, `brand.hover`, `brand.text`, `brand.soft`, `surface.sunken`, `focus.ring`, `nav.active-bg/fg`, `overlay`, ombres thémées (`shadow.card`, `shadow.popover`), échelles `radius`, `fontSize`, `motion`, et polices exposées en variables CSS avec des polices système de repli.
+4. **Palette claire v2** : fond d'app teinté (`#f5f7fb`) et cartes blanches, textes secondaires assombris, couleurs d'état en nuances 700, bordures teintées ardoise, ombre légère dédiée, onglet actif en teinte douce. Le mode sombre reste le défaut ; seul son `text.muted` est éclairci. Les ratios WCAG sont vérifiés par `design-tokens/tests/contrast.test.mjs`.
+5. **Polices partagées** : `@internal/design-tokens/base.css` (thème + polices `@fontsource` self-hosted + styles de document) est l'unique import de style d'une app. Les dépendances `@fontsource/*` vivent dans `@internal/design-tokens` ; les liens Google Fonts sont interdits.
+6. **Primitives `@internal/ui` complétées** pour éviter les réimplémentations locales : `PageHeader`, `FormField`, `CollapsibleSection`, `Alert`, `Tabs`, `Table`, `Tooltip`, `Skeleton`. Les composants existants utilisent les nouveaux tokens (`text-brand-fg`, `ring-focus`, `surface.sunken`, `shadow-popover`, `bg-overlay`) ; les classes inexistantes (`ring-brand-light`, `border-border`) sont corrigées.
+7. **Template de référence** : pages `PageHeader`, galerie `/design` en développement, test Playwright thèmes × langues × viewports avec vérification du chargement réel des polices ; le profil `llm` reçoit les mêmes clés et une page Paramètres en `CollapsibleSection`.
+8. **Garde-fous** : `scripts/check_standard.sh` ajoute 5 contrôles (theme.css généré, pas de CDN de polices, `var(--font-*)` uniquement, `base.css` + `color-scheme` dans chaque frontend, pas de surcharge `.ui-*`). Les apps existantes ont été migrées mécaniquement (liens Google Fonts et `@fontsource` locaux supprimés, polices en variables, ombre thémée). Pour la compatibilité, `bg.2` clair reste `#f8fafc` (les apps l'utilisent comme fond « en creux »).
+
+## Conséquences
+
+### Positives
+
+- Les opacités fonctionnent dans tous les composants partagés et les apps sans modification du markup.
+- Plus de dérive entre `tokens.json` et `theme.css`.
+- Les apps qui lisent `var(--color-*)` en CSS ne cassent pas : les noms et le format historiques sont conservés.
+
+### Négatives / Coûts
+
+- Un token ajouté doit être régénéré (`pnpm tokens:build`) ; oublier la régénération fait échouer `check_standard.sh`.
+- Les tokens définis avec une transparence (bordures, `brand.soft`, `overlay`) n'acceptent pas de modificateur d'opacité.
+
+## Alternatives étudiées et rejetées
+
+- **Remplacer les valeurs `--color-*` par des canaux RGB** : casse toutes les feuilles CSS d'apps qui utilisent `var(--color-*)` comme couleur.
+- **`color-mix()` dans le preset** : correct, mais support navigateur moins homogène dans les WebView desktop ciblées et sortie plus verbeuse.
+- **Migration vers Tailwind 4** : hors périmètre, impacte toutes les apps.

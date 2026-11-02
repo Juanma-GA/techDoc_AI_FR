@@ -22,7 +22,7 @@ export function LoadingOverlay({ visible, label = "Chargement…", className }: 
         className,
       )}
     >
-      <Loader2 className="animate-spin text-brand-blue-light" size={28} aria-hidden="true" />
+      <Loader2 className="animate-spin text-brand-text" size={28} aria-hidden="true" />
       <span className="font-mono text-fg-dim">{label}</span>
     </div>
   );

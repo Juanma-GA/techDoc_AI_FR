@@ -124,7 +124,11 @@ export function SignatureSourcePanel({
             <p>{t("signature.stepDrawDescription")}</p>
           </div>
         </div>
-        <SignaturePad disabled={disabled} onSave={onSaveSignature} onClear={onClearSignature} />
+        <SignaturePad
+          disabled={disabled || !pdfFile}
+          onSave={onSaveSignature}
+          onClear={onClearSignature}
+        />
         {signatureFile ? (
           <p className="feedback feedback-success" role="status">
             <PenTool size={15} aria-hidden="true" />

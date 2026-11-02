@@ -27,6 +27,7 @@ When live AACF content cannot be fetched, report `AACF NON VERIFIABLE`. Local do
 - [Profiles and app registry](standards/profiles-and-registry.md)
 - [Application README template](standards/app-readme-template.md)
 - [Demo mode and shared identity integration](standards/demo-mode-integration.md)
+- [Design system: tokens, fonts, shared UI and guardrails](standards/design-system.md)
 - [Backend stacks and optional Tauri desktop](standards/desktop-and-stacks.md)
 - [Portable skill contract](standards/portable-skill-contract.md)
 

@@ -172,15 +172,6 @@ importers:
 
   apps/_template/frontend:
     dependencies:
-      '@fontsource/inter':
-        specifier: ^5.1.0
-        version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.1.1
-        version: 5.3.0
-      '@fontsource/orbitron':
-        specifier: ^5.1.0
-        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
@@ -796,15 +787,6 @@ importers:
 
   apps/flowchart-generator/frontend:
     dependencies:
-      '@fontsource/inter':
-        specifier: ^5.1.0
-        version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.1.1
-        version: 5.3.0
-      '@fontsource/orbitron':
-        specifier: ^5.1.0
-        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
@@ -902,15 +884,6 @@ importers:
 
   apps/image-processor/frontend:
     dependencies:
-      '@fontsource/inter':
-        specifier: ^5.1.0
-        version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.1.1
-        version: 5.3.0
-      '@fontsource/orbitron':
-        specifier: ^5.1.0
-        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
@@ -1126,21 +1099,18 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@18.3.1)
-      '@fontsource/inter':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/orbitron':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@internal/design-tokens':
         specifier: workspace:*
         version: link:../../../design-tokens
       '@internal/ui':
         specifier: workspace:*
         version: link:../../../packages/ui
+      '@tauri-apps/api':
+        specifier: ^2.12.4
+        version: 2.12.4
+      '@tauri-apps/plugin-dialog':
+        specifier: ^2.8.3
+        version: 2.8.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1302,6 +1272,15 @@ importers:
 
   design-tokens:
     dependencies:
+      '@fontsource/inter':
+        specifier: ^5.1.0
+        version: 5.3.0
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.1.1
+        version: 5.3.0
+      '@fontsource/orbitron':
+        specifier: ^5.1.0
+        version: 5.3.0
       tailwindcss:
         specifier: ^3.4.0
         version: 3.4.19
@@ -2280,6 +2259,9 @@ packages:
   '@tanstack/virtual-core@3.17.0':
     resolution: {integrity: sha512-gOxY/hFkPh/XQYhnThBHzkbkX3Ed+z/iushyz+R+JAr213aXxUDgQoTgTdrDpBSRsjFM73P/KfUyWmaF9WHMkQ==}
 
+  '@tauri-apps/api@2.12.4':
+    resolution: {integrity: sha512-pVmfis+4zT8H0Qhp3xPZx9Ju7kpzvA6rr/PSJPyuwfvucTQ8sVt61NYU9KMkK703UFlYadFmjKA4HhybOtN0gg==}
+
   '@tauri-apps/cli-darwin-arm64@2.12.3':
     resolution: {integrity: sha512-xmVNoJOOKzKLj7GLHXmXLimRby9M42aBIJa0sB80N7o24eKV5JiVmToKTRLVH9yhL05GZ/B6rSSOmbzNFJwBAA==}
     engines: {node: '>= 10'}
@@ -2350,6 +2332,9 @@ packages:
     resolution: {integrity: sha512-f7/LsY74SVb1ChmOPw1ajOpxii0GSzDAgmWHRci8JUYuuai04rXsSbFobpmB0sP2DdlvMD/B5ZotEn8GOGMRUg==}
     engines: {node: '>= 10'}
     hasBin: true
+
+  '@tauri-apps/plugin-dialog@2.8.3':
+    resolution: {integrity: sha512-Hd/yBfk2R5v2MFrz/0VArSXeh8xKLLXGunqSiTtcHKn1zNZwaKujuA0VSwUvNfwC4hDoF1PveS+gBDNe3nHspw==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -5281,6 +5266,8 @@ snapshots:
 
   '@tanstack/virtual-core@3.17.0': {}
 
+  '@tauri-apps/api@2.12.4': {}
+
   '@tauri-apps/cli-darwin-arm64@2.12.3':
     optional: true
 
@@ -5327,6 +5314,10 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.12.3
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.3
       '@tauri-apps/cli-win32-x64-msvc': 2.12.3
+
+  '@tauri-apps/plugin-dialog@2.8.3':
+    dependencies:
+      '@tauri-apps/api': 2.12.4
 
   '@testing-library/dom@10.4.1':
     dependencies:

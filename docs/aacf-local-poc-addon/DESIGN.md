@@ -13,34 +13,45 @@ The workspace calls its current token set **Midnight Executive**. The values bel
 
 The source is `design-tokens/tokens.json`: `color.*` contains the dark values and `themes.light.color.*` the light overrides. Values are listed here for design review only.
 
-| Token | Dark | Light |
+| Token | Dark | Light (v2) |
 |---|---|---|
-| `bg.base` | `#0e1117` | `#ffffff` |
+| `bg.base` | `#0e1117` | `#f5f7fb` |
 | `bg.2` | `#131720` | `#f8fafc` |
-| `bg.3` | `#1a2035` | `#e2e8f0` |
+| `bg.3` | `#1a2035` | `#eaeef4` |
 | `card.base` | `#161c2b` | `#ffffff` |
 | `card.hover` | `#1d2540` | `#f1f5f9` |
 | `brand.blue` | `#2563eb` | `#2563eb` |
 | `brand.blue-light` | `#3b82f6` | `#3b82f6` |
-| `semantic.success` | `#10b981` | `#059669` |
-| `semantic.warning` | `#f59e0b` | `#d97706` |
-| `semantic.danger` | `#ef4444` | `#dc2626` |
-| `semantic.info` | `#3b82f6` | `#2563eb` |
+| `brand.fg` | `#ffffff` | `#ffffff` |
+| `brand.hover` | `#3b82f6` | `#1d4ed8` |
+| `brand.text` | `#3b82f6` | `#1d4ed8` |
+| `brand.soft` | `rgba(37,99,235,0.18)` | `rgba(37,99,235,0.10)` |
+| `semantic.success` | `#10b981` | `#047857` |
+| `semantic.warning` | `#f59e0b` | `#b45309` |
+| `semantic.danger` | `#ef4444` | `#b91c1c` |
+| `semantic.info` | `#3b82f6` | `#1d4ed8` |
 | `accent.teal` | `#06b6d4` | `#0891b2` |
 | `accent.purple` | `#8b5cf6` | `#7c3aed` |
 | `accent.orange` | `#f97316` | `#ea580c` |
 | `accent.pink` | `#ec4899` | `#db2777` |
 | `accent.yellow` | `#eab308` | `#ca8a04` |
 | `text.base` | `#e2e8f0` | `#0f172a` |
-| `text.dim` | `#94a3b8` | `#64748b` |
-| `text.muted` | `#4b5563` | `#94a3b8` |
-| `border.base` | `rgba(255,255,255,0.07)` | `rgba(0,0,0,0.07)` |
-| `border.md` | `rgba(255,255,255,0.12)` | `rgba(0,0,0,0.12)` |
-| `border.bright` | `rgba(37,99,235,0.4)` | `rgba(37,99,235,0.4)` |
+| `text.dim` | `#94a3b8` | `#475569` |
+| `text.muted` | `#64748b` | `#64748b` |
+| `border.base` | `rgba(255,255,255,0.07)` | `rgba(15,23,42,0.10)` |
+| `border.md` | `rgba(255,255,255,0.12)` | `rgba(15,23,42,0.16)` |
+| `border.bright` | `rgba(37,99,235,0.4)` | `rgba(37,99,235,0.45)` |
+| `surface.sunken` | `#131720` | `#f8fafc` |
+| `focus.ring` | `#3b82f6` | `#2563eb` |
+| `nav.active-bg` | `#2563eb` | `rgba(37,99,235,0.10)` |
+| `nav.active-fg` | `#ffffff` | `#1d4ed8` |
+| `overlay` | `rgba(0,0,0,0.6)` | `rgba(15,23,42,0.4)` |
+
+Contrast targets are enforced by `design-tokens/tests/contrast.test.mjs`; see [design-system.md](../standards/design-system.md).
 
 ## 3. Token Consumption
 
-- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/theme.css` through their `index.css` and extend the shared Tailwind preset.
+- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/base.css` (theme variables + self-hosted fonts + document defaults) at the top of their `index.css` and extend the shared Tailwind preset.
 - Use semantic utilities such as `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-fg`, `text-fg-dim`, `text-fg-muted`, `text-brand-blue-light`, `text-success`, `text-warning`, `text-danger`, `text-info`, `border`, `border-md`, and `border-bright`.
 - Use `font-sans`, `font-mono`, `font-display`, `rounded-sm`, `rounded-lg`, `shadow-card`, `w-sidebar-w`, `h-topbar-h`, `text-base`, and `text-label` for their corresponding shared tokens.
 - Charts needing theme-aware colors use the shared `colorByTheme(theme, tokenPath)` helper from [design-tokens/index.ts](../../design-tokens/index.ts). Never add app-local hex values or duplicate tokens.
@@ -64,7 +75,7 @@ The source is `design-tokens/tokens.json`: `color.*` contains the dark values an
 | Large radius | 12px |
 | Card shadow | `0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.2)` |
 
-The dimensions and fonts are current local values, not universal AACF defaults. The template's `index.html` currently does not load the specified web fonts; verify font availability before claiming the rendered UI uses them.
+The dimensions and fonts are current local values, not universal AACF defaults. Fonts are self-hosted and loaded once by `@internal/design-tokens/base.css` (see [design-system.md](../standards/design-system.md)); the shared stacks fall back to system fonts.
 
 ## 5. Shared Component Inventory
 
@@ -72,7 +83,9 @@ UI primitives belong in `@internal/ui`; an app must not create a competing local
 
 | Group | Components |
 |---|---|
-| Inputs and atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Spinner`, `Switch`, `Textarea` |
+| Inputs and atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Skeleton`, `Spinner`, `Switch`, `Textarea` |
+| Layout and forms | `PageHeader`, `FormField`, `CollapsibleSection`, `Alert`, `Tabs`, `Table`, `Tooltip` |
+| Standard settings | `LlmSettingsPanel`, `DemoModeSettingsCard` |
 | Cross-app/business | `ChartCard`, `EmptyState`, `FileDropzone`, `KpiCard`, `LoadingOverlay`, `MarkdownView`, `MultiSelect`, `PortalLink`, `Slicer` |
 | Overlays | `Dialog`, `Toast` |
 | Shell and utilities | `ThemeToggle`, `ErrorBoundary`, `useMediaQuery`, `cn` |
@@ -137,9 +150,9 @@ Invalidate/refetch health after saving settings, toggling the capability, or tes
 | Token format | Local raw-hex JSON + Tailwind preset; AACF specifies DTCG/OKLCH + Style Dictionary. | Define one canonical source and a conversion/registry path. |
 | Tailwind version | Local apps use Tailwind 3.4; AACF's web-app template specifies Tailwind 4. | Confirm a supported adapter/version and compatibility with the AACF registry. |
 | Components | Local `@internal/ui` uses Radix-based components; AACF specifies a private shadcn registry. | Approve the mapping or migrate; do not run competing libraries. |
-| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. | Approve or remove Orbitron; verify actual font loading. |
+| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. All three are self-hosted through `design-tokens/base.css`. | Approve or remove Orbitron. |
 | Browser preferences | `ThemeToggle` writes to localStorage. | Resolve HR1 before persisting preferences. |
-| Theme defaults | [tokens.json](../../design-tokens/tokens.json) comments describe a `.light` selector; [theme.css](../../design-tokens/theme.css) actually uses light `:root` plus `.dark`. [STANDARD_POC.md](../../STANDARD_POC.md) says default dark, while the [template startup](../../apps/_template/frontend/index.html) follows OS preference when no saved value exists. | Choose and document one source/runtime behavior; correct stale comments. |
+| Theme defaults | Resolved locally: [theme.css](../../design-tokens/theme.css) is generated from [tokens.json](../../design-tokens/tokens.json) (light `:root`, dark `.dark`) and every template/app starts dark unless `light` was explicitly saved. | Confirm the dark default against AACF. |
 | Shell and routes | [App.tsx](../../apps/_template/frontend/src/App.tsx) has a header and Home route only. [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) is not routed; Data is absent. | Complete and test the target shell before claiming the scaffold implements it. |
 | Localization and mutation UX | [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) has hard-coded copy; [ThemeToggle](../../packages/ui/src/components/ThemeToggle.tsx) fallback label is English; the LLM switch is not optimistic. | Localize all strings/aria names and meet HR20 before claiming AACF alignment. |
 | Destructive confirmation | Local double-click pattern is not inherently logged. | Use an approved dialog/audit flow or obtain an explicit HR9 decision. |

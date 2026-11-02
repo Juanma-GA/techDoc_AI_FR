@@ -22,10 +22,13 @@ from app.config import settings
 from app.core import doc_convert
 from app.parsers.pdf_parser import parse_pdf
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("DR_TEST_REAL_WORD") != "1" or not doc_convert.word_available(),
-    reason="opt-in : DR_TEST_REAL_WORD=1 sur un poste avec Microsoft Word",
-)
+pytestmark = [
+    pytest.mark.requires_office,
+    pytest.mark.skipif(
+        os.environ.get("DR_TEST_REAL_WORD") != "1" or not doc_convert.word_available(),
+        reason="opt-in : DR_TEST_REAL_WORD=1 sur un poste avec Microsoft Word",
+    ),
+]
 
 TEXT = "Faulty parts should be replaced by approved spares only."
 MASS = "400 g + 3% (0,882 lb + 3%)"

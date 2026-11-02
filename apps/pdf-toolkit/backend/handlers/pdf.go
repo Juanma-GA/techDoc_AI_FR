@@ -17,7 +17,8 @@ import (
 )
 
 type PDFHandler struct {
-	service *services.PDFService
+	service       *services.PDFService
+	splitProgress *splitProgressStore
 }
 
 type errorResponse struct {
@@ -25,7 +26,7 @@ type errorResponse struct {
 }
 
 func NewPDFHandler(service *services.PDFService) *PDFHandler {
-	return &PDFHandler{service: service}
+	return &PDFHandler{service: service, splitProgress: newSplitProgressStore()}
 }
 
 func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
@@ -38,6 +39,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/reorder", h.Reorder)
 	router.POST("/rotate", h.Rotate)
 	router.POST("/split", h.Split)
+	router.GET("/split/progress/:jobID", h.SplitProgress)
 	router.POST("/signature", h.Signature)
 }
 
@@ -307,6 +309,11 @@ func (h *PDFHandler) writeServiceError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, services.ErrInvalidInput) {
 		writeError(c, http.StatusBadRequest, "Vérifiez les options et le PDF sélectionnés.")
+		return
+	}
+	if errors.Is(err, services.ErrOutputWrite) {
+		log.Printf("pdf-toolkit: write PDF output: %v", err)
+		writeError(c, http.StatusInternalServerError, "Impossible d’écrire les fichiers de sortie dans le dossier choisi.")
 		return
 	}
 	if errors.Is(err, services.ErrInvalidPDF) {

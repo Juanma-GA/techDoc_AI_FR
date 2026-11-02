@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.demo_scope import get_document_in_current_mode
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
+from app.core.preparation_state import get_record, get_validated_ocr_page_text
 from app.db.session import get_db
 from app.parsers.cmm_metadata import (
     MAX_METADATA_PAGES,
@@ -51,8 +52,19 @@ def suggest_document_metadata(
     if not pdf_path.is_file():
         raise AppError("PDF_VERSION_MISSING", "Snapshot absent", status_code=404)
     try:
+        ocr_page_texts: dict[int, str] = {}
+        record = get_record(db, document.id)
+        if (
+            record is not None
+            and record.source_version == document.current_version
+            and record.selected_provider == "mistral"
+        ):
+            for page_number in range(1, min(MAX_METADATA_PAGES, document.page_count) + 1):
+                text = get_validated_ocr_page_text(record, "mistral", page_number)
+                if text is not None and text.strip():
+                    ocr_page_texts[page_number] = text
         return DocumentMetadataSuggestionsOut(
-            **suggest_cmm_metadata_from_pdf(pdf_path)
+            **suggest_cmm_metadata_from_pdf(pdf_path, ocr_page_texts=ocr_page_texts)
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc

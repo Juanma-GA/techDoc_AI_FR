@@ -1,13 +1,4 @@
-@import "@internal/design-tokens/theme.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/500.css";
-@import "@fontsource/jetbrains-mono/700.css";
-@import "@fontsource/orbitron/500.css";
-@import "@fontsource/orbitron/700.css";
+@import "@internal/design-tokens/base.css";
 
 @tailwind base;
 @tailwind components;
@@ -15,7 +6,7 @@
 
 :root {
   color-scheme: light;
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--color-text-base);
@@ -78,7 +69,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 .dropzone:focus-visible {
-  outline: 2px solid var(--color-brand-blue-light);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
@@ -116,6 +107,7 @@ a {
   align-items: center;
   gap: 9px;
   margin: 0;
+  margin-top: auto;
   padding-top: 20px;
   color: var(--color-text-dim);
   font-size: 0.75rem;
@@ -132,6 +124,12 @@ a {
 
 .tool-panel {
   min-width: 0;
+}
+
+.pdf-toolkit-shell .ui-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .pdf-toolkit-shell .ui-tool-tabs {
@@ -172,14 +170,14 @@ a {
   border-radius: var(--radius-sm);
   background: var(--color-card-hover);
   color: var(--brand);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 700;
 }
 
 .panel-heading h2 {
   margin: 1px 0 4px;
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 500;
 }
@@ -194,7 +192,7 @@ a {
 .dropzone-limit {
   margin-top: 12px;
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.6rem;
 }
 
@@ -237,7 +235,7 @@ a {
   border-radius: 6px;
   background: var(--color-card-hover);
   color: var(--brand);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
 }
@@ -270,7 +268,7 @@ a {
 
 .file-size {
   color: var(--muted);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
 }
 
@@ -311,7 +309,7 @@ a {
 }
 
 .page-range-input {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.02em;
 }
 
@@ -355,6 +353,8 @@ a {
 
 .output-preview > span:last-child {
   display: grid;
+  min-width: 0;
+  flex: 1;
   gap: 3px;
 }
 
@@ -395,6 +395,77 @@ a {
   border: 1px solid var(--success-border);
   background: var(--success-soft);
   color: var(--success);
+}
+
+.export-progress {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.export-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.export-progress-label > :last-child {
+  color: var(--brand);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.export-progress-track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-base);
+  border-radius: 999px;
+  background: var(--color-bg-2);
+}
+
+.export-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width 180ms ease;
+}
+
+.export-progress-indeterminate::after {
+  position: absolute;
+  width: 35%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  animation: export-progress-indeterminate 1.4s ease-in-out infinite;
+  content: "";
+}
+
+@keyframes export-progress-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-progress-fill {
+    transition: none;
+  }
+
+  .export-progress-indeterminate::after {
+    width: 50%;
+    animation: none;
+    transform: translateX(50%);
+  }
 }
 
 .reorder-workflow {

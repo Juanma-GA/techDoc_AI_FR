@@ -24,6 +24,7 @@ struct BackendProcess {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let stopping = Arc::new(AtomicBool::new(false));
             app.manage(BackendProcess {
@@ -31,10 +32,18 @@ pub fn run() {
                 stopping: Arc::clone(&stopping),
             });
 
+            let window_icon = app.default_window_icon().cloned().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "configured PDF Toolkit window icon is unavailable",
+                )
+            })?;
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("splash.html".into()))
                     .title("PDF Toolkit")
+                    .icon(window_icon)?
                     .inner_size(520.0, 380.0)
+                    .theme(Some(tauri::Theme::Dark))
                     .decorations(true)
                     .resizable(false)
                     .center()

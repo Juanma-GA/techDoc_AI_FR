@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
-from app.checks.thales_rules.operations import _paragraphs_from_pdf_page
-from app.checks.thales_rules.page_classifier import classify_pages
+from app.checks.thales_rules.ata100.operations import _paragraphs_from_pdf_page
+from app.checks.thales_rules.ata100.page_classifier import classify_pages
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span, parse_pdf
 
@@ -173,6 +173,23 @@ def test_short_sentence_final_line_is_ignored_when_other_edges_align() -> None:
             ("The second justified line reaches the same right margin too.", 50.0, 500.0),
             ("source. A pressure increase of 15 mb for 10 minutes is tolerated.", 50.0, 465.0),
             ("For example: in case of a leak the pointer shifts from zero.", 50.0, 430.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_completed_list_note_does_not_skew_following_paragraph_alignment() -> None:
+    parsed = _layout_pdf(
+        [
+            ("- Not applicable for this CMM ATA 22-44-44.", 20.0, 300.0),
+            ("Refer to CMMs 22-43-18, 22-43-25B2, B3, B4 and B5 which contain", 50.0, 500.0),
+            ("the section Testing and Fault Isolation or Automatic Test", 50.0, 390.0),
+            ("Requirements for the board part number listed in the Title Page", 50.0, 500.0),
+            ("of this CMM.", 50.0, 300.0),
         ]
     )
 

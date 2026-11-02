@@ -24,12 +24,17 @@ from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
 from app.core.pdf_versioning import current_path
+from app.core.preparation_classification import (
+    load_preparation_page_titles,
+    save_preparation_page_titles,
+)
 from app.core.rules_engine import validate_rule_pattern
 from app.core.security import read_upload_limited
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion
 from app.db.session import get_db
 from app.parsers.pdf_parser import parse_pdf
+from app.preparation_schemas import PreparationPageTitlesPatchIn
 from app.schemas import (
     ClientCatalogOut,
     ClientConfigOut,
@@ -139,6 +144,45 @@ def get_client_config(
     )
 
 
+@router.get("/client-preparation-page-titles")
+def get_client_preparation_page_titles(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, list[str]]:
+    configuration = get_request_client_configuration(request, db)
+    if configuration.manifest.client_code != "THALES":
+        raise AppError(
+            "PREPARATION_TITLE_CATALOG_UNAVAILABLE",
+            "La liste des titres de préparation est réservée à THALES.",
+            status_code=409,
+        )
+    return {
+        "titles": load_preparation_page_titles(
+            db, configuration.manifest.client_code
+        )
+    }
+
+
+@router.patch("/client-preparation-page-titles")
+def put_client_preparation_page_titles(
+    body: PreparationPageTitlesPatchIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, list[str]]:
+    configuration = get_request_client_configuration(request, db)
+    if configuration.manifest.client_code != "THALES":
+        raise AppError(
+            "PREPARATION_TITLE_CATALOG_UNAVAILABLE",
+            "La liste des titres de préparation est réservée à THALES.",
+            status_code=409,
+        )
+    return {
+        "titles": save_preparation_page_titles(
+            db, configuration.manifest.client_code, body.titles
+        )
+    }
+
+
 @router.get("/client-rules", response_model=list[ClientRuleOut])
 def list_client_rules(
     request: Request,
@@ -163,6 +207,7 @@ def list_client_rules(
                 message=definition.message,
                 rule_number=len(results) + 1,
                 kind=definition.kind,
+                scope="preparation" if definition.preparation else "verification",
                 severity=definition.presentation_severity or compiled.severity,
                 execution=compiled.execution,
                 active=definition.code not in disabled,
@@ -225,6 +270,7 @@ def patch_client_rule(
         message=definition.message,
         rule_number=rule_number,
         kind=definition.kind,
+        scope="preparation" if definition.preparation else "verification",
         severity=definition.presentation_severity or compiled.severity,
         execution=compiled.execution,
         active=body.active,

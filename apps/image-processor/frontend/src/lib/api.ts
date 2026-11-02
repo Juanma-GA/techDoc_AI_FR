@@ -103,12 +103,16 @@ export type OcrLineDto = {
   confidence: number;
   box: number[][];
   matched_references: string[];
+  original_box?: number[][] | null;
+  box_offset_x?: number;
+  box_offset_y?: number;
 };
 
 export type OcrReferenceSnapshotDto = {
   reference: string;
   found: boolean;
   line_indices: number[];
+  partial_line_indices?: number[];
   replacement?: string;
   replacement_count?: number;
 };
@@ -147,6 +151,13 @@ export type LineReplacementDto = {
   replacement_font_size: number | null;
 };
 
+export type ReappliedReplacementsDto = {
+  edited_image: string;
+  replacement_counts: number[];
+  partial_line_indices?: number[][];
+  replacement_font_size: number | null;
+};
+
 export const healthApi = { read: () => api<HealthDto>("/health") };
 
 export const adminApi = {
@@ -174,6 +185,8 @@ export const imageReplaceApi = {
     apiForm<OcrResultDto>("/image-processor/ocr", formData),
   replaceLine: (formData: FormData) =>
     apiForm<LineReplacementDto>("/image-processor/replace-line", formData),
+  reapplyReplacements: (formData: FormData) =>
+    apiForm<ReappliedReplacementsDto>("/image-processor/reapply-replacements", formData),
   inpaint: (formData: FormData) =>
     apiForm<{ edited_image: string }>("/image-processor/inpaint", formData),
 };

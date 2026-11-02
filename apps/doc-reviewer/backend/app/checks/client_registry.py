@@ -7,7 +7,7 @@ import os
 import re
 import sys
 import types
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -55,7 +55,9 @@ class ClientManifest(_StrictModel):
     label: str = Field(min_length=1, max_length=200)
     bundle_version: str = Field(pattern=r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
     contract_version: str = Field(min_length=1, max_length=40)
-    catalogs: list[ClientCatalog] = Field(min_length=1)
+    catalogs: list[ClientCatalog] = Field(default_factory=list)
+    # Sub-folders of the bundle, each one a self-contained rule set (norm).
+    norms: list[str] = Field(default_factory=list)
     files: dict[str, str] = Field(min_length=1)
     modules: dict[str, str] = Field(default_factory=dict)
     ui_options: dict[str, Any] = Field(default_factory=dict)
@@ -64,6 +66,12 @@ class ClientManifest(_StrictModel):
     def validate_declarations(self) -> ClientManifest:
         if "mapping" not in self.files:
             raise ValueError("files must declare a mapping file")
+        if not self.catalogs and not self.norms:
+            raise ValueError("a bundle must declare catalogs or norms")
+        if len(self.norms) != len(set(self.norms)):
+            raise ValueError("norms must not contain duplicates")
+        if any(not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name) for name in self.norms):
+            raise ValueError("norm names must be lowercase slugs")
         catalog_keys = [(catalog.code, catalog.version) for catalog in self.catalogs]
         if len(catalog_keys) != len(set(catalog_keys)):
             raise ValueError("catalog code/version pairs must be unique")
@@ -87,11 +95,13 @@ class ClientRuleBundleManifest(_StrictModel):
     bundle_version: str = Field(pattern=r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
     catalogs: list[ClientCatalog] = Field(min_length=1)
     modules: dict[str, str] = Field(min_length=1)
+    # Rules of a bundle that is not enabled by default start disabled at first sync.
+    default_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_declarations(self) -> ClientRuleBundleManifest:
-        if set(self.modules) != {"rules"}:
-            raise ValueError("rule bundles must declare exactly one rules module")
+        if "rules" not in self.modules:
+            raise ValueError("rule bundles must declare a rules module")
         catalog_codes = [catalog.code for catalog in self.catalogs]
         if len(catalog_codes) != len(set(catalog_codes)):
             raise ValueError("rule bundle catalog codes must be unique")
@@ -130,6 +140,12 @@ class _LoadedRuleBundle:
     module_payloads: Mapping[str, bytes]
     rules: tuple[ClientRuleDefinition, ...]
     standard_specs: Mapping[str, Mapping[str, Any]]
+    operations: Mapping[str, ClientOperation[Any]]
+    page_classifier: Callable[[Any, Any], None] | None
+
+    @property
+    def default_enabled(self) -> bool:
+        return self.manifest.default_enabled
 
 
 def active_standard_versions(
@@ -226,6 +242,53 @@ def _load_bundle_modules(
     return loaded
 
 
+def _exported_operations(
+    module: types.ModuleType | None,
+    description: str,
+) -> dict[str, ClientOperation[Any]]:
+    if module is None:
+        return {}
+    if not hasattr(module, "OPERATIONS"):
+        raise ClientConfigurationError(f"{description} must export OPERATIONS")
+    operations = module.OPERATIONS
+    if not isinstance(operations, Mapping) or any(
+        not isinstance(operation, ClientOperation) for operation in operations.values()
+    ):
+        raise ClientConfigurationError(
+            f"{description} must export OPERATIONS as ClientOperation values"
+        )
+    return dict(operations)
+
+
+def _exported_classifier(
+    module: types.ModuleType | None,
+    description: str,
+) -> Callable[[Any, Any], None] | None:
+    if module is None:
+        return None
+    classifier = getattr(module, "classify_pages", None)
+    if not callable(classifier):
+        raise ClientConfigurationError(
+            f"{description} must export callable classify_pages"
+        )
+    return classifier
+
+
+def _compose_page_classifiers(
+    classifiers: list[Callable[[Any, Any], None]],
+) -> Callable[[Any, Any], None] | None:
+    if not classifiers:
+        return None
+    if len(classifiers) == 1:
+        return classifiers[0]
+
+    def classify_pages(parsed: Any, document: Any) -> None:
+        for classifier in classifiers:
+            classifier(parsed, document)
+
+    return classify_pages
+
+
 def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
     bundle_dir = (root / bundle_code).resolve()
     try:
@@ -313,6 +376,7 @@ def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
         )
         for definition in raw_rules
     )
+    description = f"rule bundle '{bundle_code}'"
     return _LoadedRuleBundle(
         code=bundle_code,
         manifest=manifest,
@@ -320,6 +384,12 @@ def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
         module_payloads=module_payloads,
         rules=rules,
         standard_specs=standard_specs,
+        operations=_exported_operations(
+            modules.get("operations"), f"{description} operations module"
+        ),
+        page_classifier=_exported_classifier(
+            modules.get("page_classifier"), f"{description} page_classifier module"
+        ),
     )
 
 
@@ -332,6 +402,7 @@ def _build_client_bundle(
     mapping_hash: str,
     configuration_hash: str,
     rule_bundles: tuple[_LoadedRuleBundle, ...] = (),
+    norm_bundles: tuple[_LoadedRuleBundle, ...] = (),
 ) -> ClientBundle[Any]:
     namespace_hash = sha256(
         f"{configuration_hash}:{bundle_dir}".encode("utf-8")
@@ -393,7 +464,18 @@ def _build_client_bundle(
                 f"{catalog.code}:{catalog.version}"
             )
 
-    for rule_bundle in rule_bundles:
+    classifiers: list[Callable[[Any, Any], None]] = []
+    classifier = getattr(modules.get("page_classifier"), "classify_pages", None)
+    if "page_classifier" in manifest.modules and not callable(classifier):
+        raise ClientConfigurationError(
+            "page_classifier module must export callable classify_pages"
+        )
+    if classifier is not None:
+        classifiers.append(classifier)
+
+    operations = dict(operations)
+    # Norms (sub-folders of this bundle) come before externally selected rule bundles.
+    for rule_bundle in (*norm_bundles, *rule_bundles):
         for catalog in rule_bundle.manifest.catalogs:
             if catalog.code in catalog_codes:
                 raise ClientConfigurationError(
@@ -407,27 +489,34 @@ def _build_client_bundle(
             raise ClientConfigurationError(
                 f"standard specs are selected by more than one bundle: {names}"
             )
+        duplicate_operations = set(operations).intersection(rule_bundle.operations)
+        if duplicate_operations:
+            names = ", ".join(sorted(duplicate_operations))
+            raise ClientConfigurationError(
+                f"operations are declared by more than one bundle: {names}"
+            )
+        operations.update(rule_bundle.operations)
+        if rule_bundle.page_classifier is not None:
+            classifiers.append(rule_bundle.page_classifier)
         rule_bundle_specs = dict(rule_bundle.standard_specs)
-        for catalog in rule_bundle.manifest.catalogs:
-            spec = rule_bundle_specs[catalog.code]
-            versions = spec["versions"]
-            default_disabled_rule_codes = {
-                catalog.version: sorted(
-                    {str(rule.id) for rule in versions[catalog.version]}
-                )
-            }
-            rule_bundle_specs[catalog.code] = {
-                **spec,
-                "default_disabled_rule_codes_by_version": default_disabled_rule_codes,
-            }
+        if not rule_bundle.default_enabled:
+            for catalog in rule_bundle.manifest.catalogs:
+                spec = rule_bundle_specs[catalog.code]
+                versions = spec["versions"]
+                default_disabled_rule_codes = {
+                    catalog.version: sorted(
+                        {str(rule.id) for rule in versions[catalog.version]}
+                    )
+                }
+                rule_bundle_specs[catalog.code] = {
+                    **spec,
+                    "default_disabled_rule_codes_by_version": default_disabled_rule_codes,
+                }
         standard_specs.update(rule_bundle_specs)
         all_rules.extend(rule_bundle.rules)
 
-    classifier = getattr(modules.get("page_classifier"), "classify_pages", None)
-    if "page_classifier" in manifest.modules and not callable(classifier):
-        raise ClientConfigurationError(
-            "page_classifier module must export callable classify_pages"
-        )
+    if not catalogs:
+        raise ClientConfigurationError("client bundle declares no catalog")
 
     try:
         return ClientBundle(
@@ -440,9 +529,9 @@ def _build_client_bundle(
             catalogs=tuple(catalogs),
             mapping=mapping,
             rules=tuple(all_rules),
-            operations=dict(operations),
+            operations=operations,
             standard_specs=standard_specs,
-            page_classifier=classifier,
+            page_classifier=_compose_page_classifiers(classifiers),
         )
     except (TypeError, ValueError) as exc:
         raise ClientConfigurationError(f"client bundle contract is invalid: {exc}") from exc
@@ -490,6 +579,10 @@ def load_active_client_configuration(
         declared_payloads[role] = _read_bytes(declared_path, f"declared file '{role}'")
 
     mapping = _parse_model(ClientMapping, declared_payloads["mapping"], "mapping file")
+    norm_bundles = tuple(
+        _load_rule_bundle(bundle_dir, norm_code)
+        for norm_code in manifest.norms
+    )
     rule_bundles = tuple(
         _load_rule_bundle(root, bundle_code)
         for bundle_code in selection.rule_bundles
@@ -502,7 +595,7 @@ def load_active_client_configuration(
         configuration_digest.update(role.encode("utf-8"))
         configuration_digest.update(b"\0")
         configuration_digest.update(payload)
-    for rule_bundle in rule_bundles:
+    for rule_bundle in (*norm_bundles, *rule_bundles):
         configuration_digest.update(b"\0")
         configuration_digest.update(rule_bundle.code.encode("utf-8"))
         configuration_digest.update(b"\0")
@@ -525,6 +618,7 @@ def load_active_client_configuration(
         mapping_hash,
         configuration_hash,
         rule_bundles,
+        norm_bundles,
     )
 
     return LoadedClientConfiguration(

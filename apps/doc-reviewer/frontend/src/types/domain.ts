@@ -155,13 +155,16 @@ export function missingDocumentContext(
     | "document_language"
   > | null | undefined,
   requiredFields: readonly string[] = REQUIRED_DOCUMENT_CONTEXT_FIELDS,
+  metadataOverride?: Record<string, unknown>,
 ): string[] {
-  if (!document) return [...requiredFields];
-  const metadata = document.client_metadata ?? {};
+  if (!document && metadataOverride === undefined) return [...requiredFields];
+  const metadata = metadataOverride ?? document?.client_metadata ?? {};
   return requiredFields.filter((field) => {
-    const value = Object.prototype.hasOwnProperty.call(metadata, field)
-      ? metadata[field]
-      : (document as unknown as Record<string, unknown>)[field];
+    const value = metadataOverride !== undefined
+      ? metadataOverride[field]
+      : Object.prototype.hasOwnProperty.call(metadata, field)
+        ? metadata[field]
+        : (document as unknown as Record<string, unknown>)[field];
     if (Array.isArray(value)) return !value.some((item) => String(item ?? "").trim());
     if (typeof value === "boolean" || typeof value === "number") return false;
     return !String(value ?? "").trim();

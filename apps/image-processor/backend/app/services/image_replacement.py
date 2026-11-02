@@ -7,7 +7,7 @@ import structlog
 from PIL import Image, ImageChops, ImageDraw
 
 from app.services.image_layout import image_on_white
-from app.services.ocr_engine import normalize_reference
+from app.services.ocr_engine import find_reference_occurrences, normalize_reference
 from app.services.replacement_rendering import _draw_replacement_text, _sample_background_color
 from app.services.replacement_typography import (
     dominant_height,
@@ -35,16 +35,6 @@ class _ReplacementOccurrence(TypedDict):
     start: int
     end: int
     polygon: list[list[float]]
-
-
-def _normalized_text_with_positions(value: str) -> tuple[str, list[int]]:
-    normalized_parts: list[str] = []
-    positions: list[int] = []
-    for index, character in enumerate(value):
-        normalized_character = normalize_reference(character)
-        normalized_parts.append(normalized_character)
-        positions.extend([index] * len(normalized_character))
-    return "".join(normalized_parts), positions
 
 
 def _interpolate_point(start: list[float], end: list[float], ratio: float) -> list[float]:
@@ -290,19 +280,30 @@ def apply_replacements(
 
     for line_index, line in enumerate(lines):
         text = str(line["text"])
-        normalized_text, positions = _normalized_text_with_positions(text)
+        line_matched_references = line.get("matched_references")
+        if line_matched_references is not None:
+            if not isinstance(line_matched_references, list) or any(
+                not isinstance(reference, str) for reference in line_matched_references
+            ):
+                raise ValueError("Les références OCR associées à une ligne sont invalides.")
+            normalized_line_references = {
+                normalize_reference(reference) for reference in line_matched_references
+            }
+        else:
+            normalized_line_references = None
         for normalized_reference, pair_indices in pair_indices_by_reference.items():
-            search_offset = 0
-            while True:
-                start = normalized_text.find(normalized_reference, search_offset)
-                if start < 0:
-                    break
-                end = start + len(normalized_reference)
+            if (
+                normalized_line_references is not None
+                and normalized_reference not in normalized_line_references
+            ):
+                continue
+            reference = replacement_pairs[pair_indices[0]]["reference"]
+            for start, end in find_reference_occurrences(text, reference):
                 segment = _replacement_segment(
                     line.get("box", []),
                     len(text),
-                    positions[start],
-                    positions[end - 1] + 1,
+                    start,
+                    end,
                 )
                 if segment:
                     occurrences.append(
@@ -315,7 +316,6 @@ def apply_replacements(
                             "polygon": segment,
                         }
                     )
-                search_offset = end
 
     occurrences.sort(
         key=lambda item: (
@@ -343,9 +343,12 @@ def apply_replacements(
     accepted: list[_ReplacementOccurrence] = []
     for reference, reference_occurrences in accepted_by_reference.items():
         pair_indices = pair_indices_by_reference[reference]
-        if reference in broadcast_references and len(pair_indices) == 1:
-            pair_index = pair_indices[0]
-            for occurrence in reference_occurrences:
+        replacement_values = {
+            replacement_pairs[pair_index]["replacement"] for pair_index in pair_indices
+        }
+        if reference in broadcast_references and len(replacement_values) == 1:
+            for occurrence_index, occurrence in enumerate(reference_occurrences):
+                pair_index = pair_indices[occurrence_index % len(pair_indices)]
                 occurrence["pair_index"] = pair_index
                 accepted.append(occurrence)
                 applied_counts[pair_index] += 1

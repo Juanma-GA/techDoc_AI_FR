@@ -131,17 +131,17 @@ frontend est `_run_no_front.bat` à la racine de l'application, et non
 Depuis `backend/`, le parcours manuel complet hors LLM est :
 
 ```bat
-tests\backend_only_tests\run_manual_verification.bat C:\docs\manual.pdf
+dev_tools\manual_verification\run_manual_verification.bat C:\docs\manual.pdf
 ```
 
 Le programme vérifie `/health`, exécute les scripts personnels `01` (upload),
 `04` (format automatique et exports), puis `02` (analyse SSE déterministe).
 Les réponses, événements SSE et artefacts restent dans
-`tests/backend_only_tests/outputs/`. Pour tester la checklist avec le vrai LLM,
+`dev_tools/manual_verification/outputs/`. Pour tester la checklist avec le vrai LLM,
 configurer d'abord Mistral dans l'application puis lancer :
 
 ```bat
-tests\backend_only_tests\run_manual_verification.bat C:\docs\manual.docx --checklist C:\docs\checklist.xlsx --run-llm
+dev_tools\manual_verification\run_manual_verification.bat C:\docs\manual.docx --checklist C:\docs\checklist.xlsx --run-llm
 ```
 
 Le runner n'envoie aucune clé API et n'utilise aucun mock.
@@ -159,6 +159,15 @@ records remain hidden and unchanged while demo mode is active. Supplemental
 bundle rules start disabled by default; the primary normal rules remain
 enabled. Rule bundles declare their catalog and `rules.py` module in their own
 `manifest.json`.
+
+A client bundle can also be split into **norms**: its `manifest.json` lists
+sub-folders in `norms`, and each sub-folder has its own `manifest.json`
+(label, catalogs, `rules`/`operations`/`page_classifier` modules and
+`default_enabled`). The mapping stays shared at the client level. Each norm
+shows up as its own collapsible group in the Rules screen (group code = folder
+name, label = manifest `label`) and can be enabled or disabled as a whole or
+rule by rule. `thales_rules` has two norms: `ata100/` (enabled by default) and
+`s1000d/` (disabled by default, catalog `THALES-S1000D`).
 
 ## Layout
 

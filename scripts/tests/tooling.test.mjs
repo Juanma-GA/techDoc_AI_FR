@@ -183,10 +183,13 @@ for (const desktop of [false, true]) {
       const pkg = JSON.parse(readFileSync(path.join(app, "frontend/package.json"), "utf8"));
       const hasLlm = profiles?.includes("llm") ?? false;
       const readme = readFileSync(path.join(app, "README.md"), "utf8");
+      const desktopPackage = readFileSync(path.join(app, "package-desktop.bat"), "utf8");
       const registry = JSON.parse(readFileSync(path.join(root, "scripts/apps.json"), "utf8"));
 
       assert.equal(pkg.name, "@apps/synthetic-test-frontend");
       assert.equal(existsSync(path.join(app, "frontend/src-tauri/Cargo.toml")), desktop);
+      assert.match(desktopPackage, /_package\.bat" desktop/);
+      assert.equal(readme.includes("package-desktop.bat"), desktop);
       assert.equal(existsSync(path.join(app, "desktop")), false);
       assert.equal(readFileSync(path.join(app, "_run.bat"), "utf8").includes('set "PORT=8123"'), true);
       assert.equal(readFileSync(path.join(root, "scripts/package_synthetic-test.py"), "utf8")

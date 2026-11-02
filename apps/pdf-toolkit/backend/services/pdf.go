@@ -10,6 +10,7 @@ import (
 var (
 	ErrInvalidInput = errors.New("invalid PDF operation input")
 	ErrInvalidPDF   = errors.New("invalid or unsupported PDF")
+	ErrOutputWrite  = errors.New("PDF output could not be written")
 )
 
 type PDFProcessor interface {
@@ -22,6 +23,16 @@ type PDFProcessor interface {
 	Reorder(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
 	StampSignature(ctx context.Context, input, image, output string, options SignatureStampOptions) error
+}
+
+type SplitDocument interface {
+	PageCount() int
+	Extract(ctx context.Context, output string, pages []int) error
+	Close() error
+}
+
+type SplitDocumentProvider interface {
+	OpenSplitDocument(ctx context.Context, input string) (SplitDocument, error)
 }
 
 type PDFService struct {

@@ -12,13 +12,14 @@ async function serializeExcel(memory: ExcelMemorySnapshot): Promise<ExcelSnapsho
 type StorageOptions = {
   excel: ExcelMemorySnapshot;
   excelPending: boolean;
+  suspendPersistence: boolean;
   restoreExcel: (snapshot: ExcelSnapshot) => void;
   document: ReturnType<typeof useImageDocument>["document"];
   manualPairs: ReplacementPair[];
 };
 
 export function useWorkspaceStorage({
-  excel, excelPending, restoreExcel, document, manualPairs,
+  excel, excelPending, suspendPersistence, restoreExcel, document, manualPairs,
 }: StorageOptions) {
   const [ready, setReady] = useState(false);
   const [startupError, setStartupError] = useState<unknown>(null);
@@ -37,12 +38,12 @@ export function useWorkspaceStorage({
     return () => { active = false; };
   }, [attempt, restoreExcel]);
 
-  const preset = useMemo(() => ready ? {
+  const preset = useMemo(() => ready && !suspendPersistence ? {
     workbook: excel.workbook, sheets: excel.sheets, sheet: excel.sheet, columns: excel.columns,
     referenceColumn: excel.referenceColumn, replacementColumn: excel.replacementColumn,
     icnColumn: excel.icnColumn, pieceColumn: excel.pieceColumn, pieces: excel.pieces,
   } : null, [
-    ready, excel.workbook, excel.sheets, excel.sheet, excel.columns, excel.referenceColumn,
+    ready, suspendPersistence, excel.workbook, excel.sheets, excel.sheet, excel.columns, excel.referenceColumn,
     excel.replacementColumn, excel.icnColumn, excel.pieceColumn, excel.pieces,
   ]);
   const presetSave = useQueuedSave(preset, async (memory) =>
@@ -51,8 +52,10 @@ export function useWorkspaceStorage({
     }),
   );
   const snapshot = useMemo(
-    () => ready && document && !excelPending ? { document, excel, manualPairs } : null,
-    [ready, document, excelPending, excel, manualPairs],
+    () => ready && !suspendPersistence && document && !excelPending
+      ? { document, excel, manualPairs }
+      : null,
+    [ready, suspendPersistence, document, excelPending, excel, manualPairs],
   );
   const historySave = useQueuedSave(snapshot, async (memory) =>
     workspaceApi.save(memory.document.id, {

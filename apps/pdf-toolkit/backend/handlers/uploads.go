@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	maxFileSize  int64 = 250 * 1024 * 1024
+	maxFileSize  int64 = 500 * 1024 * 1024
 	maxFieldSize int64 = 1024 * 1024
 )
 
@@ -197,7 +197,7 @@ func saveUpload(source io.Reader, destination string, maxSize int64) error {
 	if size > maxSize {
 		return &requestError{
 			status:  http.StatusRequestEntityTooLarge,
-			message: "Chaque fichier doit faire au maximum 250 Mo.",
+			message: "Chaque fichier doit faire au maximum 500 Mo.",
 		}
 	}
 	return nil

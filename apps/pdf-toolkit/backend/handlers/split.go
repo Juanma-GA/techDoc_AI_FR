@@ -3,11 +3,14 @@ package handlers
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,15 +21,31 @@ import (
 )
 
 const defaultSplitFolder = "split"
+const splitProgressIDHeader = "X-Split-Progress-ID"
+const directSplitExportHeader = "X-PDF-Toolkit-Direct-Export"
 
 func (h *PDFHandler) Split(c *gin.Context) {
+	progressID := c.GetHeader(splitProgressIDHeader)
+	if progressID != "" {
+		if !isSplitProgressID(progressID) {
+			writeError(c, http.StatusBadRequest, "L’identifiant de progression est invalide.")
+			return
+		}
+		if !h.splitProgress.start(progressID) {
+			writeError(c, http.StatusConflict, "Cette progression est déjà utilisée.")
+			return
+		}
+		defer h.splitProgress.remove(progressID)
+		h.splitProgress.update(progressID, "processing", 0, 0)
+	}
+
 	tempDir, ok := createWorkspace(c)
 	if !ok {
 		return
 	}
 	defer removeWorkspace(tempDir)
 
-	upload, err := parseMultipart(c.Request, tempDir, "file", 1, "groups", "folder")
+	upload, err := parseMultipart(c.Request, tempDir, "file", 1, "groups", "folder", "zip_path")
 	if err != nil {
 		writeUploadError(c, err)
 		return
@@ -60,47 +79,174 @@ func (h *PDFHandler) Split(c *gin.Context) {
 	}
 
 	outputDir := filepath.Join(tempDir, "split")
-	if err := os.Mkdir(outputDir, 0o700); err != nil {
-		log.Printf("pdf-toolkit: create split directory: %v", err)
-		writeError(c, http.StatusInternalServerError, "Impossible de créer l'espace temporaire de traitement.")
+	rawZipPath, err := optionalSingleField(upload.fields, "zip_path")
+	if err != nil {
+		writeUploadError(c, err)
 		return
 	}
-	outputs, err := h.service.Split(c.Request.Context(), upload.files[0].path, outputDir, groups)
+	directOutput := rawZipPath != ""
+	zipPath := ""
+	if directOutput {
+		if c.GetHeader(directSplitExportHeader) != "1" || !hasLoopbackOrigin(c.GetHeader("Origin")) {
+			writeError(c, http.StatusForbidden, "L’export direct est réservé à l’application de bureau.")
+			return
+		}
+		zipPath = filepath.Clean(rawZipPath)
+		if strings.ContainsRune(zipPath, 0) || !filepath.IsAbs(zipPath) || !strings.EqualFold(filepath.Ext(zipPath), ".zip") {
+			writeError(c, http.StatusBadRequest, "Le chemin du ZIP sélectionné est invalide.")
+			return
+		}
+		outputDir = filepath.Dir(zipPath)
+		info, err := os.Stat(outputDir)
+		if err != nil {
+			log.Printf("pdf-toolkit: inspect split output directory: %v", err)
+			writeError(c, http.StatusBadRequest, "Le dossier de destination est inaccessible.")
+			return
+		}
+		if !info.IsDir() {
+			writeError(c, http.StatusBadRequest, "Le dossier de destination est invalide.")
+			return
+		}
+		if info, err := os.Lstat(zipPath); err == nil && info.IsDir() {
+			writeError(c, http.StatusBadRequest, "Le chemin du ZIP désigne un dossier.")
+			return
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("pdf-toolkit: inspect split archive destination: %v", err)
+			writeError(c, http.StatusInternalServerError, "Impossible de vérifier le fichier ZIP de destination.")
+			return
+		}
+	} else {
+		if c.GetHeader(directSplitExportHeader) == "1" {
+			writeError(c, http.StatusBadRequest, "Le chemin du ZIP de destination est requis.")
+			return
+		}
+		if err := os.Mkdir(outputDir, 0o700); err != nil {
+			log.Printf("pdf-toolkit: create split directory: %v", err)
+			writeError(c, http.StatusInternalServerError, "Impossible de créer l'espace temporaire de traitement.")
+			return
+		}
+	}
+	onProgress := func(completed, total int) {
+		h.splitProgress.update(progressID, "extracting", completed, total)
+	}
+	var outputs []services.SplitOutput
+	if directOutput {
+		outputs, err = h.service.SplitToDirectoryWithProgress(c.Request.Context(), upload.files[0].path, outputDir, groups, onProgress)
+	} else {
+		outputs, err = h.service.SplitWithProgress(c.Request.Context(), upload.files[0].path, outputDir, groups, onProgress)
+	}
 	if err != nil {
 		h.writeServiceError(c, err)
 		return
 	}
+	if directOutput {
+		defer func() {
+			if cleanupErr := removeSplitOutputs(outputs); cleanupErr != nil {
+				log.Printf("pdf-toolkit: clean direct split outputs: %v", cleanupErr)
+			}
+		}()
+	}
 
 	archivePath := filepath.Join(tempDir, "split.zip")
-	if err := writeSplitArchive(archivePath, folder, outputs); err != nil {
+	if directOutput {
+		archivePath = zipPath
+	}
+	h.splitProgress.update(progressID, "archiving", 0, len(outputs))
+	if err := writeSplitArchive(archivePath, folder, outputs, func(completed, total int) {
+		h.splitProgress.update(progressID, "archiving", completed, total)
+	}); err != nil {
 		log.Printf("pdf-toolkit: write split archive: %v", err)
 		writeError(c, http.StatusInternalServerError, "Impossible de lire le PDF traité.")
+		return
+	}
+	if directOutput {
+		if err := removeSplitOutputs(outputs); err != nil {
+			log.Printf("pdf-toolkit: remove direct split outputs after archive creation: %v", err)
+			writeError(c, http.StatusInternalServerError, "Le ZIP a été créé, mais des PDF intermédiaires n'ont pas pu être supprimés.")
+			return
+		}
+		outputs = nil
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, gin.H{"file_name": filepath.Base(zipPath)})
 		return
 	}
 	sendFile(c, archivePath, folder+".zip", "application/zip")
 }
 
-func writeSplitArchive(archivePath, folder string, outputs []services.SplitOutput) (err error) {
-	file, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+func hasLoopbackOrigin(rawOrigin string) bool {
+	origin, err := url.Parse(rawOrigin)
+	if err != nil || origin.User != nil || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+	if origin.Scheme != "http" && origin.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(origin.Hostname())
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func removeSplitOutputs(outputs []services.SplitOutput) error {
+	var cleanupErr error
+	for _, output := range outputs {
+		if err := os.Remove(output.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove split output %q: %w", output.Path, err))
+		}
+	}
+	return cleanupErr
+}
+
+func writeSplitArchive(
+	archivePath, folder string,
+	outputs []services.SplitOutput,
+	onProgress func(completed, total int),
+) (err error) {
+	file, err := os.CreateTemp(filepath.Dir(archivePath), ".pdf-toolkit-split-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create archive: %w", err)
 	}
+	stagingPath := file.Name()
+	fileClosed := false
+	committed := false
 	defer func() {
-		if closeErr := file.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close archive: %w", closeErr)
+		if !fileClosed {
+			if closeErr := file.Close(); closeErr != nil {
+				err = errors.Join(err, fmt.Errorf("close archive: %w", closeErr))
+			}
+		}
+		if !committed {
+			if removeErr := os.Remove(stagingPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("remove incomplete archive: %w", removeErr))
+			}
 		}
 	}()
 
 	archive := zip.NewWriter(file)
-	for _, output := range outputs {
+	for index, output := range outputs {
 		if err := addArchiveFile(archive, folder+"/"+output.Name, output.Path); err != nil {
-			_ = archive.Close()
-			return err
+			return errors.Join(err, archive.Close())
+		}
+		if onProgress != nil {
+			onProgress(index+1, len(outputs))
 		}
 	}
 	if err := archive.Close(); err != nil {
 		return fmt.Errorf("finalize archive: %w", err)
 	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync archive: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close archive: %w", err)
+	}
+	fileClosed = true
+	if err := os.Rename(stagingPath, archivePath); err != nil {
+		return fmt.Errorf("publish archive: %w", err)
+	}
+	committed = true
 	return nil
 }
 

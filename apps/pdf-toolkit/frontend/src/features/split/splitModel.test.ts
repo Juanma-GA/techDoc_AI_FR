@@ -8,6 +8,7 @@ import {
   extractValue,
   formatPageSelection,
   groupPageValues,
+  maxSplitGroups,
   parsePageSelection,
   parseSplitRanges,
   parsePastedRows,
@@ -22,6 +23,9 @@ describe("page selections", () => {
   it("parses one document per custom range and keeps combined selections", () => {
     expect(parseSplitRanges("1-4 ; 5-8\n9-12;13-16", 16)).toEqual(["1-4", "5-8", "9-12", "13-16"]);
     expect(parseSplitRanges("1-3,5;6-8", 8)).toEqual(["1-3,5", "6-8"]);
+    const maximumRanges = Array.from({ length: maxSplitGroups }, (_, index) => `${index + 1}`).join(";");
+    expect(parseSplitRanges(maximumRanges, maxSplitGroups)).toHaveLength(5000);
+    expect(parseSplitRanges(`${maximumRanges};5001`, maxSplitGroups + 1)).toBeNull();
     expect(parseSplitRanges(" ; \n", 16)).toBeNull();
     expect(parseSplitRanges("1-4;15-18", 16)).toBeNull();
     expect(parseSplitRanges("4-1;5", 16)).toBeNull();

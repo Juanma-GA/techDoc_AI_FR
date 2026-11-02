@@ -33,6 +33,13 @@ class DocumentPreparation(Base):
     validated_pages_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     selected_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     page_decisions_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    preparation_mapping_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    page_classification_json: Mapped[str] = mapped_column(
+        Text, default="{}", server_default="{}"
+    )
+    absent_page_types_json: Mapped[str] = mapped_column(
+        Text, default="[]", server_default="[]"
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 

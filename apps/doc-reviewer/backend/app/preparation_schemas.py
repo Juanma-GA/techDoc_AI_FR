@@ -20,6 +20,11 @@ class PreparationPageOut(BaseModel):
     needs_ocr: bool
 
 
+class PreparationPageTitleOption(BaseModel):
+    title: str
+    page_type: str
+
+
 class PreparationStateOut(BaseModel):
     document_id: str
     source_filename: str | None
@@ -34,6 +39,13 @@ class PreparationStateOut(BaseModel):
     preparation_rule_count: int = 0
     checklist_source_filename: str | None
     page_decisions: list[dict[str, Any]] = Field(default_factory=list)
+    preparation_mapping: dict[str, Any] = Field(default_factory=dict)
+    page_classification: dict[str, dict[str, str | None]] = Field(default_factory=dict)
+    page_type_options: list[str] = Field(default_factory=list)
+    page_title_options: list[PreparationPageTitleOption] = Field(default_factory=list)
+    missing_page_types: list[list[str]] = Field(default_factory=list)
+    absent_page_types: list[list[str]] = Field(default_factory=list)
+    skipped_rules: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class OcrResultOut(BaseModel):
@@ -79,6 +91,25 @@ class OcrValidationPatchIn(BaseModel):
 
 class PageDecisionPatchIn(BaseModel):
     is_modified: bool
+
+
+class PageClassificationPatchIn(BaseModel):
+    page_type: str | None = Field(default=None, max_length=60)
+    document_page: str | None = Field(default=None, max_length=40)
+    page_title: str | None = Field(default=None, max_length=80)
+
+
+class AbsentPageTypesPatchIn(BaseModel):
+    page_types: list[str] = Field(min_length=1, max_length=10)
+    absent: bool
+
+
+class PreparationPageTitlesPatchIn(BaseModel):
+    titles: list[str] = Field(max_length=200)
+
+
+class PreparationMappingPatchIn(BaseModel):
+    mapping: dict[str, Any] = Field(default_factory=dict)
 
 
 class PageDecisionOut(BaseModel):

@@ -1,4 +1,4 @@
-export const MAX_FILE_SIZE = 250 * 1024 * 1024;
+export const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 export function moveFileInList(files: File[], index: number, offset: -1 | 1): File[] {
   const file = files[index];
@@ -24,7 +24,7 @@ export type ImageValidationMessages = {
 };
 
 const defaultValidationMessages: PDFValidationMessages = {
-  tooLarge: (name) => `« ${name} » dépasse la limite de 250 Mo.`,
+  tooLarge: (name) => `« ${name} » dépasse la limite de 500 Mo.`,
   notPdf: (name) => `« ${name} » n'est pas un fichier PDF.`,
 };
 

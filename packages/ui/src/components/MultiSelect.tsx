@@ -56,9 +56,9 @@ export function MultiSelect({
       <Popover.Trigger
         disabled={disabled || items.length === 0}
         className={cn(
-          "inline-flex h-10 w-full items-center justify-between gap-2 rounded-sm border border-md bg-bg-2 px-3 text-left text-fg",
+          "inline-flex h-10 w-full items-center justify-between gap-2 rounded-sm border border-md bg-surface-sunken px-3 text-left text-fg",
           "hover:bg-card-hover",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
           "disabled:cursor-not-allowed disabled:opacity-50",
           triggerClassName,
         )}
@@ -98,7 +98,7 @@ export function MultiSelect({
                       {isSelected ? (
                         <Check
                           size={14}
-                          className="shrink-0 text-brand-blue-light"
+                          className="shrink-0 text-brand-text"
                           aria-hidden="true"
                         />
                       ) : null}

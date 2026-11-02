@@ -1,7 +1,7 @@
 .split-workflow {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.15fr);
-  align-items: start;
+  align-items: stretch;
   gap: 16px;
 }
 
@@ -161,7 +161,7 @@
   border-radius: 6px;
   background: var(--color-card-hover);
   color: var(--color-text-base);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -228,14 +228,14 @@
 .split-row-index {
   width: 36px;
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
 }
 
 .split-file-name {
   max-width: 0;
   overflow: hidden;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
