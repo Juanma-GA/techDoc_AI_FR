@@ -5,6 +5,7 @@ import {
   Grip,
   Image,
   ImagePlus,
+  LockKeyhole,
   Minimize2,
   PenTool,
   RotateCw,
@@ -34,6 +35,7 @@ import { MergeTool } from "./features/merge/MergeTool";
 import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
 import { InsertTool } from "./features/insert/InsertTool";
 import { PdfToImagesTool } from "./features/pdf-to-images/PdfToImagesTool";
+import { ProtectTool } from "./features/protect/ProtectTool";
 import { RotateTool } from "./features/rotate/RotateTool";
 import { SignatureTool } from "./features/signature/SignatureTool";
 import { SettingsTool } from "./features/settings/SettingsTool";
@@ -52,6 +54,7 @@ const tools = [
   { id: "delete", icon: Trash2 },
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
+  { id: "protect", icon: LockKeyhole },
   { id: "rotate", icon: RotateCw },
   { id: "signature", icon: PenTool },
   { id: "imagesToPdf", icon: ImagePlus },
@@ -261,6 +264,7 @@ export function App() {
                 </Suspense>
               ) : null}
               {activeTool === "compress" ? <CompressTool /> : null}
+              {activeTool === "protect" ? <ProtectTool /> : null}
               {activeTool === "rotate" ? <RotateTool /> : null}
               {activeTool === "signature" ? <SignatureTool /> : null}
               {activeTool === "imagesToPdf" ? <ImagesToPdfTool /> : null}

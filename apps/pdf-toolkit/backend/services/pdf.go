@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -17,6 +18,12 @@ type PDFProcessor interface {
 	Merge(ctx context.Context, inputFiles []string, output string) error
 	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
 	Compress(ctx context.Context, input, output string) error
+	Protect(ctx context.Context, input, output string, options PDFProtectionOptions) error
+	ChangeUserPassword(
+		ctx context.Context,
+		input, output string,
+		options PDFPasswordChangeOptions,
+	) error
 	PageCount(ctx context.Context, input string) (int, error)
 	Extract(ctx context.Context, input, output string, pages []int) error
 	Delete(ctx context.Context, input, output string, pages []int) error
@@ -24,6 +31,22 @@ type PDFProcessor interface {
 	Collect(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
 	StampSignature(ctx context.Context, input, image, output string, options SignatureStampOptions) error
+}
+
+type PDFProtectionOptions struct {
+	UserPassword  string
+	OwnerPassword string
+	AllowPrint    bool
+	AllowCopy     bool
+	AllowModify   bool
+	AllowComments bool
+	AllowFormFill bool
+	AllowSign     bool
+}
+
+type PDFPasswordChangeOptions struct {
+	OwnerPassword   string
+	NewUserPassword string
 }
 
 type SplitDocument interface {
@@ -72,6 +95,52 @@ func (s *PDFService) Compress(ctx context.Context, input, output string) error {
 			return err
 		}
 		return fmt.Errorf("%w: compress PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) Protect(
+	ctx context.Context,
+	input, output string,
+	options PDFProtectionOptions,
+) error {
+	if input == "" || output == "" ||
+		utf8.RuneCountInString(options.UserPassword) < 8 ||
+		utf8.RuneCountInString(options.OwnerPassword) < 8 ||
+		options.UserPassword == options.OwnerPassword {
+		return fmt.Errorf("%w: protection passwords or paths are invalid", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Protect(ctx, input, output, options); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: protect PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) ChangeUserPassword(
+	ctx context.Context,
+	input, output string,
+	options PDFPasswordChangeOptions,
+) error {
+	if input == "" || output == "" ||
+		options.OwnerPassword == "" ||
+		utf8.RuneCountInString(options.NewUserPassword) < 8 ||
+		options.OwnerPassword == options.NewUserPassword {
+		return fmt.Errorf("%w: password change options or paths are invalid", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.ChangeUserPassword(ctx, input, output, options); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: change PDF open password: %w", ErrInvalidPDF, err)
 	}
 	return nil
 }

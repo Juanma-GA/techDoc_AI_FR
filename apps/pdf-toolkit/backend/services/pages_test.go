@@ -61,6 +61,17 @@ func (p *fakeProcessor) Compress(context.Context, string, string) error {
 	p.compressCall = true
 	return nil
 }
+func (p *fakeProcessor) Protect(context.Context, string, string, PDFProtectionOptions) error {
+	return nil
+}
+func (p *fakeProcessor) ChangeUserPassword(
+	context.Context,
+	string,
+	string,
+	PDFPasswordChangeOptions,
+) error {
+	return nil
+}
 func (p *fakeProcessor) PageCount(_ context.Context, input string) (int, error) {
 	if count, ok := p.pageCounts[input]; ok {
 		return count, nil

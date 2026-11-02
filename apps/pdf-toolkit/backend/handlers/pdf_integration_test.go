@@ -23,6 +23,7 @@ type routeProcessor struct {
 	collected []int
 	rotated   []int
 	rotation  int
+	protected services.PDFProtectionOptions
 }
 
 func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {
@@ -53,6 +54,25 @@ func (p *routeProcessor) ImagesToPDF(_ context.Context, _ []string, output strin
 
 func (p *routeProcessor) Compress(_ context.Context, input, output string) error {
 	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Protect(
+	_ context.Context,
+	_ string,
+	output string,
+	options services.PDFProtectionOptions,
+) error {
+	p.protected = options
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) ChangeUserPassword(
+	_ context.Context,
+	_ string,
+	output string,
+	_ services.PDFPasswordChangeOptions,
+) error {
 	return writeRoutePDF(output)
 }
 

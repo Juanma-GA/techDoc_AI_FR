@@ -111,6 +111,8 @@ export async function processPDF(
     | "merge"
     | "images-to-pdf"
     | "compress"
+    | "protect"
+    | "change-password"
     | "extract"
     | "delete"
     | "insert"
