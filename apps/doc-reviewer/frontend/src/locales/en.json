@@ -223,9 +223,10 @@
     "aiTruncated": "The summary is based on a selection of differences; the full report remains available above.",
     "aiKeyChanges": "Key changes",
     "aiImpact": "Impact summary",
-    "exportAll": "Download commented PDFs",
-    "exportOne": "Download commented PDF",
-    "exportZipHint": "A ZIP contains all commented PDFs; each PDF can also be downloaded separately.",
+    "exportAll": "Download reference with all differences",
+    "exportOne": "Download commented reference PDF",
+    "exportCandidate": "Download reference for this version",
+    "exportAllHint": "The PDF uses the reference and identifies each version's differences by name.",
     "textLayerOnly": "PDFs without extractable text are not supported (no OCR).",
     "retention": "Files remain in this library until the comparison is deleted.",
     "deleteConfirmTitle": "Confirm deletion"
