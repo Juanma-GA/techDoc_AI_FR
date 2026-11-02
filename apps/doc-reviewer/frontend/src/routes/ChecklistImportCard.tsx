@@ -217,7 +217,7 @@ export function ChecklistImportCard() {
       ) : null}
 
       {diag ? (
-        <p className="label" style={{ fontFamily: '"JetBrains Mono", monospace', marginTop: 6 }}>
+        <p className="label" style={{ fontFamily: "var(--font-mono)", marginTop: 6 }}>
           {diag}
         </p>
       ) : null}

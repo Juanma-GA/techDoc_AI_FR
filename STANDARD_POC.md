@@ -36,7 +36,8 @@ internal-poc-monorepo/
 │   ├── _run.bat                      # logique de lancement Windows
 │   ├── start.sh                      # lanceur Unix
 │   ├── package.bat                   # packaging Windows — wrapper court
-│   ├── _package.bat                  # logique de packaging Windows
+│   ├── _package.bat                  # logique de packaging Windows (web + `desktop`)
+│   ├── package-desktop.bat           # packaging Tauri — wrapper court (apps générées avec --desktop)
 │   ├── backend/                      # FastAPI
 │   │   ├── README.md                 # niveau backend — détail tech
 │   │   ├── pyproject.toml
@@ -335,7 +336,7 @@ apps/<poc>/frontend/src/
 ├── main.tsx                 # ReactDOM root + providers globaux
 ├── App.tsx                  # Layout (sidebar + topbar + main) + ErrorBoundary + routes
 ├── i18n.ts                  # init i18next
-├── index.css                # @tailwind directives + variables CSS si besoin
+├── index.css                # @import "@internal/design-tokens/base.css" + @tailwind directives
 ├── routes/                  # 1 fichier par page
 ├── components/
 │   ├── business/            # composants métier propres au POC
@@ -353,45 +354,44 @@ apps/<poc>/frontend/src/
 
 ### 5.1 Tokens
 
-Trois fichiers à la racine de `design-tokens/`, source unique de vérité :
+Trois fichiers à la racine de `design-tokens/`, source unique de vérité (détail complet : [supplément design system](./docs/standards/design-system.md)) :
 
 | Fichier | Rôle |
 |---|---|
-| `tokens.json` | Valeurs brutes : couleurs dark (à plat sous `color.*`) + overrides light sous `themes.light.color.*` + tokens non-thèmes (font, radius, shadow, layout). |
-| `theme.css` | CSS custom properties dérivées de `tokens.json`. Pattern Tailwind classique : `:root { … }` = palette light par défaut, `.dark { … }` = overrides dark. Importé par chaque app via `index.css` (`@import "@internal/design-tokens/theme.css"`). |
-| `tailwind-preset.ts` | Preset Tailwind partagé. Mappe les classes (`bg-bg`, `text-fg`…) vers `var(--color-*)` pour rendre le dual-theme automatique sans recompile. |
+| `tokens.json` | Valeurs brutes : couleurs dark (à plat sous `color.*`) + overrides light sous `themes.light.color.*` / `themes.light.shadow.*` + tokens non-thèmes (font, fontSize, radius, shadow, motion, layout). Validé par `tokens.schema.json`. |
+| `theme.css` | **Généré** depuis `tokens.json` par `pnpm tokens:build` (`design-tokens/scripts/build-theme.mjs`) — ne jamais l'éditer à la main ; `pnpm tokens:check` échoue s'il est périmé. `:root { … }` = palette light + tokens statiques, `.dark { … }` = palette dark. Chaque couleur hex émet `--color-x` (couleur complète, rétrocompatible) et `--color-x-rgb` (canaux). |
+| `tailwind-preset.ts` | Preset Tailwind partagé. Mappe les classes (`bg-bg`, `text-fg`…) vers `rgb(var(--color-x-rgb) / <alpha-value>)` : dual-theme automatique **et** modificateurs d'opacité (`bg-success/15`) fonctionnels. |
 
-**Structure de `tokens.json`** :
+**Structure de `tokens.json`** (extrait — fichier complet dans `design-tokens/tokens.json`) :
 
 ```json
 {
   "color": {
     "bg":   { "base": "#0e1117", "2": "#131720", "3": "#1a2035" },
     "card": { "base": "#161c2b", "hover": "#1d2540" },
-    "brand":    { "blue": "#2563eb", "blue-light": "#3b82f6" },
+    "brand":    { "blue": "#2563eb", "blue-light": "#3b82f6", "fg": "#ffffff", "hover": "…", "text": "…", "soft": "rgba(…)" },
     "semantic": { "success": "#10b981", "warning": "#f59e0b", "danger": "#ef4444", "info": "#3b82f6" },
     "text":     { "base": "#e2e8f0", "dim": "#94a3b8", "muted": "#4b5563" },
-    "border":   { "base": "rgba(255,255,255,0.07)", "md": "rgba(255,255,255,0.12)", "bright": "rgba(37,99,235,0.4)" }
+    "border":   { "base": "rgba(255,255,255,0.07)", "md": "rgba(255,255,255,0.12)", "bright": "rgba(37,99,235,0.4)" },
+    "surface":  { "sunken": "…" }, "focus": { "ring": "…" }, "nav": { "active-bg": "…", "active-fg": "…" }, "overlay": "rgba(…)"
   },
   "themes": {
     "light": {
-      "color": {
-        "bg":   { "base": "#ffffff", "2": "#f8fafc", "3": "#e2e8f0" },
-        "card": { "base": "#ffffff", "hover": "#f1f5f9" },
-        "text": { "base": "#0f172a", "dim": "#64748b", "muted": "#94a3b8" },
-        "border": { "base": "rgba(0,0,0,0.07)", "md": "rgba(0,0,0,0.12)", "bright": "rgba(37,99,235,0.4)" }
-      }
+      "color":  { "bg": { "base": "…" }, "text": { "base": "#0f172a" } },
+      "shadow": { "card": "…", "popover": "…" }
     }
   },
-  "font":   { "sans": ["Inter", "sans-serif"], "mono": ["JetBrains Mono", "monospace"] },
-  "radius": { "sm": "8px", "lg": "12px" },
+  "font":   { "sans": ["Inter", "system-ui", "…"], "mono": ["JetBrains Mono", "…"], "display": ["Orbitron", "…"] },
+  "radius": { "xs": "4px", "sm": "8px", "md": "10px", "lg": "12px", "xl": "16px", "full": "9999px" },
+  "shadow": { "card": "…", "popover": "…" },
+  "motion": { "duration-fast": "150ms", "duration-base": "200ms", "easing-standard": "…" },
   "layout": { "sidebar-w": "252px", "topbar-h": "52px" }
 }
 ```
 
-**Pourquoi cette structure** : `color.*` reste à plat pour la rétrocompat des consommateurs JS/TS (charts Recharts qui font `color.brand.blue`). Les overrides light vivent sous `themes.light` et n'ont à contenir que les valeurs qui changent. Le preset Tailwind ne consomme **plus** ces hex directement — il consomme les CSS variables émises par `theme.css`, ce qui rend le toggle dark/light automatique sans recompiler Tailwind.
+**Pourquoi cette structure** : `color.*` reste à plat pour la rétrocompat des consommateurs JS/TS (charts Recharts qui font `color.brand.blue`). Les overrides light vivent sous `themes.light` et n'ont à contenir que les valeurs qui changent. Le preset Tailwind ne consomme **plus** ces hex directement — il consomme les CSS variables générées dans `theme.css`, ce qui rend le toggle dark/light automatique sans recompiler Tailwind.
 
-**Naming Tailwind** : le preset expose `text.*` sous `fg.*` pour éviter la classe `text-text-base`. Utiliser `text-fg`, `text-fg-dim`, `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-brand-blue-light`.
+**Naming Tailwind** : le preset expose `text.*` sous `fg.*` pour éviter la classe `text-text-base`. Utiliser `text-fg`, `text-fg-dim`, `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-brand-text`. Sur un fond `bg-brand` ou `bg-danger`, le texte est **toujours** `text-brand-fg` (jamais `text-fg`, quasi noir en clair).
 
 **Conforme** : `<div className="bg-bg text-fg">…</div>` (classes Tailwind résolues via CSS vars, dual-theme automatique).
 **Non conforme** : `<div style={{ background: "#0e1117" }}>…</div>` (hex en dur, ne suit pas le toggle theme).
@@ -399,13 +399,15 @@ Trois fichiers à la racine de `design-tokens/`, source unique de vérité :
 **Code TS theme-aware** (charts qui doivent changer de couleurs entre dark/light) :
 
 ```ts
-import { colorByTheme } from "@internal/design-tokens";
-const fill = colorByTheme(theme, "text.base");  // "#e2e8f0" en dark, "#0f172a" en light
+import { colorByTheme, currentTheme } from "@internal/design-tokens";
+const fill = colorByTheme(currentTheme(), "text.base");  // "#e2e8f0" en dark, "#0f172a" en light
 ```
 
 ### 5.2 Typographie
 
-Inter (sans), JetBrains Mono (chiffres/badges techniques). Body 13.5px line-height 1.5. Identique en dark et light. Imposé par le preset Tailwind partagé.
+Inter (sans, UI), JetBrains Mono (chiffres, badges techniques, `.label`), Orbitron (marque, titres de page et de carte). Body 13.5px line-height 1.5. Identique en dark et light.
+
+Les polices sont **self-hosted** (`@fontsource`) et chargées une seule fois par `@internal/design-tokens/base.css`, que chaque app importe en tête de `src/index.css`. Les apps ne déclarent **ni** dépendance `@fontsource/*`, **ni** `<link>` Google Fonts (interdit : local-first, hors-ligne). Les piles `--font-sans|mono|display` (générées dans `theme.css`) prévoient des polices système de repli. Dans le CSS, utiliser `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)` ; dans le JSX, `font-sans`, `font-mono`, `font-display`. Détail : [supplément design system](./docs/standards/design-system.md#4-fonts-and-base-stylesheet).
 
 ### 5.3 Composants `@internal/ui` (canoniques)
 
@@ -413,12 +415,16 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 
 | Catégorie | Composants |
 |---|---|
-| Atoms | `Badge`, `Button`, `Card` |
+| Atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Spinner`, `Switch`, `Textarea`, `Skeleton` |
+| Layout & formulaires | `AppShell`, `PageHeader`, `FormField`, `CollapsibleSection`, `Tabs`, `Table`, `Alert`, `Tooltip` |
+| Paramètres standard | `LlmSettingsPanel` (bloc Mistral repliable du profil `llm`), `DemoModeSettingsCard` (carte « Mode de fonctionnement ») |
 | Overlays (remplacent alert/confirm) | `Dialog`, `Toast` |
-| Métier transverses | `ChartCard`, `EmptyState`, `KpiCard`, `LoadingOverlay` |
+| Métier transverses | `ChartCard`, `EmptyState`, `KpiCard`, `LoadingOverlay`, `FileDropzone`, `MultiSelect`, `Slicer`, `MarkdownView`, `LlmStatus`, `DemoMode*` |
 | Hooks & utils | `useMediaQuery`, `cn` |
 
-**Règle d'extension** : tout composant atomique nouveau (Input, Select, Tabs, Tooltip, Skeleton, etc.) se crée dans `packages/ui/` **avant** d'être consommé dans une app. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/`.
+Usage, états et a11y de chaque primitive : [supplément design system §5](./docs/standards/design-system.md#5-shared-primitives).
+
+**Règle d'extension** : tout composant atomique nouveau se crée dans `packages/ui/` **avant** d'être consommé dans une app, avec un test Vitest. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/` (en-têtes de page, onglets, tableaux, bandeaux, infobulles, champs de formulaire et sections repliables existent déjà).
 
 **Bannis** :
 - `alert()` natif (bloquant, pas stylable, pas a11y) → utiliser `Dialog`.
@@ -537,7 +543,7 @@ while (true) {
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 22 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM, 1 de robustesse du launcher, 2 de registre/thème et 5 de design system (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
 1. Préfixe `/api/v1/` monté dans chaque backend : routeur FastAPI ou groupe Gin pour Go.
@@ -557,9 +563,17 @@ while (true) {
 12. Chaque dossier `apps/<poc>/` (sauf `_template`) a un script `dev:<poc>` dans le `package.json` racine.
 13. Aucun `--host 0.0.0.0` dans les `_run.bat` / `start.sh` (palier 1 strict).
 
+**Design system** (checks 18 à 22, détail : [supplément design system §8](./docs/standards/design-system.md#8-guardrails)) :
+
+18. `design-tokens/theme.css` est à jour avec `tokens.json` (`pnpm tokens:check`).
+19. Aucun CDN de polices (`fonts.googleapis.com` / `fonts.gstatic.com`) dans les frontends, `packages/` et `design-tokens/`.
+20. Aucun `@fontsource` ni nom de police littéral (`Inter`, `Orbitron`, `JetBrains Mono`) dans `apps/*/frontend/src`, `packages/ui/src` et les `package.json` d'apps : utiliser `var(--font-*)`.
+21. Chaque `apps/*/frontend/index.html` déclare `<meta name="color-scheme">` et chaque `src/index.css` importe `@internal/design-tokens/base.css`.
+22. Aucune règle CSS d'app dont le sélecteur commence par une classe `.ui-*` (le shell et les primitives restent stylés par `@internal/ui`).
+
 ## 9. Lanceurs locaux et packaging
 
-Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/` :
+Chaque POC fournit **sept** fichiers à la racine de `apps/<poc>/` (cinq `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/`. `package-desktop.bat` est copié dans toutes les apps mais n'est fonctionnel que pour une app générée avec `--desktop` (sinon il s'arrête avec un message explicite) :
 
 Les commandes Python ci-dessous s'appliquent au template FastAPI. Un backend Go
 utilise son binaire et un packager Node ; le frontend peut être embarqué via
@@ -574,7 +588,10 @@ s'appliquent. Tauri est optionnel et ne remplace jamais le mode web.
 | `_run.bat` | Logique de lancement Windows (détection Python, venv, deps, Alembic, **rebuild front auto**, uvicorn). **ASCII pur** : aucun accent (sinon cmd.exe ferme la fenêtre avant que l'utilisateur ne voie le message). |
 | `_needs_rebuild.ps1` | Helper PowerShell appelé par `_run.bat` : compare la date de `frontend/dist/index.html` aux sources front (`frontend/src` + configs) et renvoie `exit 1` si le dist est périmé. Permet le **rebuild auto** sans comparaison de dates en batch pur (impossible proprement). |
 | `start.sh` | Équivalent Unix (variable `PORT` configurable, `lsof` pour vérifier que le port est libre, **même rebuild front auto** via comparaison `find -newer`). |
-| `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. |
+| `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. `package.bat desktop` (arguments transmis) lance le build Tauri. |
+| `package-desktop.bat` | Wrapper Windows double-cliquable équivalent à `package.bat desktop` : fenêtre `cmd /k`, puis `_package.bat desktop` (vérifie `frontend/desktop.json`, `pnpm install` seulement si `node_modules` absent, `pnpm tauri:build`). Installeurs dans `apps/<poc>/dist/tauri/release/bundle/`. |
+
+`start.bat` / `start.sh` lancent **toujours le mode web** (navigateur). Le mode desktop se lance en développement par `pnpm desktop:dev:<slug>` depuis la racine et se distribue via `package-desktop.bat` ; il n'existe pas de lanceur `.bat` desktop. Détail : [stacks et desktop](docs/standards/desktop-and-stacks.md#windows-launchers-and-packaging).
 
 **Comportement attendu de `start.bat`** :
 
@@ -681,11 +698,11 @@ Le titre HTML initial (`<title>`), le `document.title` React et le titre de fen�
 
 ### Conventions visuelles
 
-- **Fonts Google** (chargées via `<link>` dans `<head>`) :
-  - `Inter` (400/500/600/700) — body sans-serif
-  - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value`
-  - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title`
-- **Layout** : `html { font-size: 13.5px; }`, sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
+- **Fonts self-hosted** (chargées par `@internal/design-tokens/base.css`, jamais via `<link>` Google Fonts ni CDN) :
+  - `Inter` (400/500/600/700) — body sans-serif — `var(--font-sans)` / `font-sans`
+  - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value` — `var(--font-mono)` / `font-mono`
+  - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title` — `var(--font-display)` / `font-display`
+- **Layout** : `html { font-size: 13.5px; }` (fourni par `base.css`), sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
 - **Description brève de l'app (obligatoire)** : le nom / logo (`.brand`) porte une
   **infobulle** décrivant l'app en une phrase — attribut `title={t("app.description")}`
   (clé i18n `app.description` FR + EN) + `cursor: help`. Chaque POC personnalise cette
@@ -704,7 +721,7 @@ Le titre HTML initial (`<title>`), le `document.title` React et le titre de fen�
 | `.empty-state` | — | Texte centré "Aucun X" |
 | `.label` | — | Étiquette uppercase mono |
 
-- **Couleurs** : toutes via les CSS vars des design-tokens (`@internal/design-tokens/theme.css` + preset Tailwind). **Aucun hex en dur** (règle #4).
+- **Couleurs** : toutes via les CSS vars des design-tokens (`@internal/design-tokens/base.css`, qui inclut `theme.css`, + preset Tailwind). **Aucun hex en dur** (règle #4).
 
 ### Theme toggle (dark ↔ light)
 

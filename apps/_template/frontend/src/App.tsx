@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AppShell,
@@ -31,11 +31,22 @@ declare global {
   }
 }
 
+// Reference of the shared components: always in `pnpm dev`; in builds only when
+// VITE_DESIGN_GALLERY=true (set by the template's frontend/.env.production, which
+// new_poc.mjs does not copy, so generated apps do not ship it by default).
+const DESIGN_GALLERY_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_DESIGN_GALLERY === "true";
+
 const NAV_ITEMS = [
   { to: "/", key: "nav.home", icon: "home" },
   { to: "/data", key: "nav.data", icon: "data" },
   { to: "/settings", key: "nav.settings", icon: "settings" },
+  ...(DESIGN_GALLERY_ENABLED ? [{ to: "/design", key: "nav.design", icon: "color" } as const] : []),
 ] as const;
+
+const DesignGallery = DESIGN_GALLERY_ENABLED
+  ? lazy(() => import("./routes/DesignGallery").then((module) => ({ default: module.DesignGallery })))
+  : null;
 
 export function App() {
   useEffect(() => {
@@ -135,6 +146,16 @@ export function App() {
             <Route path="/" element={<Home />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
+            {DesignGallery ? (
+              <Route
+                path="/design"
+                element={
+                  <Suspense fallback={null}>
+                    <DesignGallery />
+                  </Suspense>
+                }
+              />
+            ) : null}
           </Routes>
         </ErrorBoundary>
       </DemoModeProvider>

@@ -12,7 +12,7 @@
   width: min(100%, 28rem);
   border: 1px solid var(--color-semantic-danger);
   border-radius: 0.75rem;
-  background: var(--color-bg-2);
+  background: var(--color-card-base);
   padding: 1.5rem;
 }
 
@@ -53,7 +53,7 @@
 
 .ui-error-details summary {
   cursor: pointer;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
 }
 
 .ui-error-details pre {

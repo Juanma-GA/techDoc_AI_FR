@@ -11,6 +11,7 @@
 # check additionally tolerates tokens.json (the canonical palette),
 # tailwind-preset.ts (consumes tokens), theme.css + preview-skin.css (CSS
 # variables for dark/light), and any *.test.* / tests/ file.
+# Checks 18-22 guard the design system (docs/standards/design-system.md §8).
 
 set -o pipefail
 
@@ -25,7 +26,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/18] %-38s" "$1" "$2"; }
+step()  { printf "[%d/23] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -312,9 +313,71 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 18. Summary
+# 18. Design tokens: theme.css is generated from tokens.json.
 # ------------------------------------------------------------------
-step 18 "Summary"
+step 18 "theme.css genere depuis tokens.json"
+if [[ -z "$NODE_BIN" ]]; then
+  fail "Node.js est requis pour verifier design-tokens/theme.css."
+elif "$NODE_BIN" design-tokens/scripts/build-theme.mjs --check > /dev/null 2>&1; then pass; else
+  fail "design-tokens/theme.css est perime ou edite a la main : lancer 'pnpm tokens:build' (docs/standards/design-system.md §1)."
+fi
+
+# ------------------------------------------------------------------
+# 19. No font CDN (local-first): fonts come from design-tokens/base.css.
+# ------------------------------------------------------------------
+step 19 "Pas de CDN de polices"
+hits=$(grep -rnE "${exclude_args[@]}" --include='*.html' --include='*.css' --include='*.ts' --include='*.tsx' \
+  'fonts\.(googleapis|gstatic)\.com' apps/*/frontend packages design-tokens 2>/dev/null || true)
+if [[ -z "$hits" ]]; then pass; else
+  fail "Polices self-hosted uniquement via @internal/design-tokens/base.css (jamais Google Fonts) :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 20. Fonts are never declared or named locally in apps / shared UI CSS.
+# ------------------------------------------------------------------
+step 20 "Polices via var(--font-*) uniquement"
+hits=$( {
+  grep -rnE "${exclude_args[@]}" --include='*.css' --include='*.ts' --include='*.tsx' \
+    '@fontsource|font-family:[[:space:]]*["'"'"']?(Inter|Orbitron|JetBrains Mono)|fontFamily[=:][[:space:]]*["'"'"'][^"'"'"']*(Inter|Orbitron|JetBrains)' \
+    apps/*/frontend/src packages/ui/src 2>/dev/null
+  grep -nH '"@fontsource/' apps/*/frontend/package.json packages/ui/package.json 2>/dev/null
+} || true)
+if [[ -z "$hits" ]]; then pass; else
+  fail "Utiliser var(--font-sans|mono|display) ; les polices et @fontsource vivent dans @internal/design-tokens :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 21. Every frontend uses the shared entry stylesheet and declares color-scheme.
+# ------------------------------------------------------------------
+step 21 "base.css + meta color-scheme"
+missing=""
+for frontend in apps/*/frontend; do
+  [[ -f "$frontend/index.html" ]] || continue
+  grep -q 'name="color-scheme"' "$frontend/index.html" ||
+    missing+="$frontend/index.html -- <meta name=\"color-scheme\" content=\"dark light\" /> manquant\n"
+  if [[ -f "$frontend/src/index.css" ]]; then
+    grep -q '@internal/design-tokens/base.css' "$frontend/src/index.css" ||
+      missing+="$frontend/src/index.css -- doit importer @internal/design-tokens/base.css\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Chaque frontend herite du design system (docs/standards/design-system.md §4) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 22. Apps do not restyle the shared shell/primitives through .ui-* selectors.
+# ------------------------------------------------------------------
+step 22 "Pas de surcharge des classes .ui-*"
+hits=$(grep -rnE "${exclude_args[@]}" --include='*.css' \
+  '^[[:space:]]*\.ui-[A-Za-z]' apps/*/frontend/src 2>/dev/null || true)
+if [[ -z "$hits" ]]; then pass; else
+  fail "Le shell et les primitives sont styles par @internal/ui uniquement (CLAUDE.md regle #3) :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 23. Summary
+# ------------------------------------------------------------------
+step 23 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1

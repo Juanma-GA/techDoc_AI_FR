@@ -27,7 +27,7 @@ function DesktopStartup() {
             <LoadingOverlay
               visible
               label={t("common.loading")}
-              className="rounded-xl bg-card/90"
+              className="rounded-lg bg-card/90"
             />
           </div>
           <p

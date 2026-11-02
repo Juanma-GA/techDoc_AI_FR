@@ -152,7 +152,7 @@ export function DemoScenarioPanel({ scenarios, labels }: DemoScenarioPanelProps)
             <span className="label">{labels.result}</span>
             <pre
               aria-label={labels.result}
-              className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-md bg-bg-2 p-3 text-sm"
+              className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-md bg-surface-sunken p-3 text-sm"
             >
               {result}
             </pre>

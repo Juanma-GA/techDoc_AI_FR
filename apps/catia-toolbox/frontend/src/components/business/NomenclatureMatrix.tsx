@@ -47,7 +47,7 @@ export function NomenclatureMatrix({ result, labelOf }: Props) {
                     position: "sticky",
                     left: 0,
                     background: "var(--bg-2)",
-                    fontFamily: '"JetBrains Mono", monospace',
+                    fontFamily: "var(--font-mono)",
                   }}
                 >
                   {row.sin}
@@ -55,7 +55,7 @@ export function NomenclatureMatrix({ result, labelOf }: Props) {
                 <td>{row.designation}</td>
                 {row.cells.map((cell) => (
                   <td key={cell.run_id}>
-                    <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                    <span style={{ fontFamily: "var(--font-mono)" }}>
                       {cell.present ? cell.pn || t("diff.present") : t("diff.absent")}
                     </span>
                     {cell.state !== "unchanged" ? (

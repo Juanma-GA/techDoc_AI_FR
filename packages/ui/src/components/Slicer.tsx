@@ -40,10 +40,10 @@ function SlicerPill({
       onClick={onClick}
       className={cn(
         "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         active
-          ? "border-brand bg-brand text-fg"
-          : "border-md bg-bg-2 text-fg-dim hover:bg-card-hover hover:text-fg",
+          ? "border-brand bg-brand text-brand-fg"
+          : "border-md bg-surface-sunken text-fg-dim hover:bg-card-hover hover:text-fg",
       )}
     >
       {children}

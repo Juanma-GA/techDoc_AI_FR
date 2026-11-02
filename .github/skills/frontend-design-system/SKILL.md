@@ -21,8 +21,9 @@ Plan and apply frontend changes through the repository design system while keepi
 1. Current AACF design system and branding when accessible.
 2. `STANDARD_POC.md` frontend and design-system rules.
 3. `CLAUDE.md` shared-component, token, i18n, and structural-change rules.
-4. `design-tokens/tokens.json` and existing `@internal/ui` patterns.
-5. Application-specific README deviations and accepted ADRs.
+4. `docs/standards/design-system.md` (token pipeline, utilities, fonts, light palette, shared primitives, guardrails) and ADR 0005.
+5. `design-tokens/tokens.json` and existing `@internal/ui` patterns.
+6. Application-specific README deviations and accepted ADRs.
 
 ## Procedure
 
@@ -48,10 +49,17 @@ Any new shared path or dependency requires a new approved batch.
 
 - Components come from `@internal/ui`; new primitives live there only with shared-change approval.
 - Colors, typography, spacing, and dimensions use approved tokens.
+- Token edits happen in `design-tokens/tokens.json` only, followed by `pnpm tokens:build`; `theme.css` is generated and never edited by hand. `pnpm tokens:check` and `pnpm --filter @internal/design-tokens test` (theme sync + WCAG contrast for both themes) pass.
+- Active/selected states use `--color-nav-active-bg`/`--color-nav-active-fg` (soft tint in light, solid blue in dark); a printable or exported "white page" uses `card.base`, not the tinted light `bg.base`.
+- Fonts and theme variables come only from `@import "@internal/design-tokens/base.css"` at the top of the app `index.css`: no app-level `@fontsource/*` dependency or import, no Google Fonts `<link>`, and CSS uses `var(--font-sans|mono|display)` instead of literal font names.
+- Before writing a local component, check the shared primitives in `docs/standards/design-system.md` §5 (`PageHeader`, `FormField`, `CollapsibleSection`, `Alert`, `Tabs`, `Table`, `Tooltip`, `Skeleton`, `LlmSettingsPanel`, `DemoModeSettingsCard`, ...).
+- New or reworked Settings pages use `LlmSettingsPanel` for the Mistral block (app-specific LLM options go in its `children`, extra models via `modelFields`) and `DemoModeSettingsCard` for the operating mode, instead of local forms.
+- Text or icons on a `bg-brand`/`bg-danger` fill use `text-brand-fg`, never `text-fg`. Opacity modifiers (`bg-success/15`) are allowed on hex tokens only.
 - Dark and light themes, FR and EN, keyboard use, focus, loading, error, empty, disabled, and optimistic states are covered when applicable.
 - The shared AI4TECHDOC logo must also appear as the browser tab icon: call `setAi4TechDocFavicon()` from `@internal/ui` once in the frontend entry point (`src/main.tsx`) and do not leave the default Vite icon. Use `Ai4TechDocLogo` rather than copying the asset; see `docs/standards/demo-mode-integration.md`.
 - For apps with the `llm` profile, the LLM settings (key, base URL, models, connection test) must sit in a collapsible section of Settings, collapsed by default once configured, with an accessible toggle (`aria-expanded`) and FR/EN labels. The models available from the provider (returned by the connection test, `models` field of `POST /api/v1/settings/test`) must be listed and selectable for the chat, embedding and vision model fields rather than typed blind; free text stays possible when the list is empty.
 - No hardcoded hex, raw machine tokens, prohibited UI libraries, browser alerts, or Unicode icons are introduced.
+- `bash scripts/check_standard.sh` design-system checks 18-22 pass (generated theme, no font CDN, `var(--font-*)` only, `base.css` + `color-scheme` in every frontend, no `.ui-*` overrides in app CSS).
 - Frontend build, typecheck, lint, Vitest, and Playwright status is recorded as executed or recommended.
 
 ## Expected Output

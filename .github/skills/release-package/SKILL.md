@@ -48,7 +48,7 @@ Validate release readiness and, only after dedicated confirmation, generate the 
 - Bind remains `127.0.0.1` and the chosen port is printed and opened.
 - Frontend rebuild is conditional; dependency installation occurs only when `node_modules` is absent.
 - ZIP output is under `apps/<poc>/dist/` and includes required launchers and runtime assets. FastAPI packages carry source, frontend dist and embedded Python; PDF Toolkit web packages carry the Windows x64 Go toolchain, allowlisted backend source, vendored dependencies, built UI, documentation and licenses. They compile offline at first launch and reuse the binary conditionally. Do not require Python in a Go package or promise that local compilation bypasses endpoint protection.
-- Optional Tauri installers retain the web workflow. Verify the backend resource, startup health/error handling, installed paths and child shutdown; use the app's `package.bat desktop` output policy.
+- Optional Tauri installers retain the web workflow. Verify the backend resource, startup health/error handling, installed paths and child shutdown; build with `package-desktop.bat` (equivalent to `package.bat desktop`), whose output stays in `apps/<poc>/dist/tauri/` (see `docs/standards/desktop-and-stacks.md`, "Windows launchers and packaging").
 - ZIP excludes databases, data, storage, uploads, secrets, virtual environments, caches, and unrelated apps.
 - Executed and recommended checks are separate.
 

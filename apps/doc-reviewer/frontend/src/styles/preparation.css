@@ -128,7 +128,7 @@
 }
 
 .prep-type-name {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 
@@ -181,7 +181,7 @@
 
 .prep-type-evidence li > span:first-child:not(:last-child) {
   flex: none;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   color: var(--fg);
 }
 
@@ -270,7 +270,7 @@
 }
 
 .prep-missing-type {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
@@ -403,7 +403,7 @@
   .prep-decisions td::before {
     content: attr(data-label);
     color: var(--fg-dim);
-    font-family: "JetBrains Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 0.62rem;
     letter-spacing: 1px;
     text-transform: uppercase;
