@@ -7,8 +7,10 @@ import { useTranslation } from "react-i18next";
 import { FilePicker } from "../components/FilePicker";
 import {
   ApiClientError,
+  browseApi,
   colorizationApi,
   identificationApi,
+  treeOptimizationApi,
   type MonoBodyColorizationDto,
   type NomenclatureItemDto,
   type NomenclatureRunDto,
@@ -29,10 +31,13 @@ export function Colorization() {
   const profilesRoot = useWorkspace((state) => state.sources.profilesRoot);
   const preferredRunId = useWorkspace((state) => state.nomenclatureRunId);
   const setSource = useWorkspace((state) => state.setSource);
+  const rootsQuery = useQuery({ queryKey: ["browse", "roots"], queryFn: browseApi.roots });
+  const hasInputRoot = Boolean(rootsQuery.data?.input);
   const [runId, setRunId] = useState(preferredRunId ?? "");
   const [apply, setApply] = useState(false);
   const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profilesPickerError, setProfilesPickerError] = useState<string | null>(null);
   const [result, setResult] = useState<MonoBodyColorizationDto | null>(null);
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -48,6 +53,17 @@ export function Colorization() {
   const monoParts = monoPartsQuery.data ?? [];
   const distinctOldPns = new Set(monoParts.map((item) => item.old_pn.trim()).filter(Boolean));
   const missingProfiles = monoParts.filter((item) => !item.mono_texture.trim()).length;
+  const pickProfilesFolderMutation = useMutation({
+    mutationFn: () =>
+      treeOptimizationApi.pickFolder(profilesRoot.trim() || undefined, t("colorization.profilesRoot")),
+    onSuccess: ({ path }) => {
+      if (!path) return;
+      setSource("profilesRoot", path);
+      setProfilesPickerError(null);
+    },
+    onError: (reason: unknown) =>
+      setProfilesPickerError(reason instanceof Error ? reason.message : String(reason)),
+  });
   const displayError = (reason: unknown) =>
     reason instanceof ApiClientError && reason.code === "PIECES_FOLDER_CONTENT_INVALID"
       ? t("colorization.invalidFolderContents")
@@ -165,12 +181,48 @@ export function Colorization() {
           </div>
           <div className="field">
             <span className="field-label">{t("colorization.profilesRoot")}</span>
-            <FilePicker
-              mode="folder"
-              exts={[]}
-              value={profilesRoot}
-              onChange={(path) => setSource("profilesRoot", path)}
-            />
+            {rootsQuery.isLoading ? (
+              <Spinner aria-label={t("common.loading")} />
+            ) : rootsQuery.isError ? (
+              <p className="error" role="alert">
+                {rootsQuery.error instanceof Error ? rootsQuery.error.message : String(rootsQuery.error)}
+              </p>
+            ) : hasInputRoot ? (
+              <FilePicker
+                mode="folder"
+                exts={[]}
+                value={profilesRoot}
+                onChange={(path) => setSource("profilesRoot", path)}
+              />
+            ) : (
+              <>
+                <div className="row">
+                  <Input
+                    type="text"
+                    className="grow"
+                    aria-label={t("colorization.profilesRoot")}
+                    placeholder={t("picker.folderPlaceholder")}
+                    value={profilesRoot}
+                    onChange={(event) => setSource("profilesRoot", event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => pickProfilesFolderMutation.mutate()}
+                    disabled={pickProfilesFolderMutation.isPending}
+                  >
+                    {pickProfilesFolderMutation.isPending ? (
+                      <Spinner aria-label={t("common.loading")} />
+                    ) : null}
+                    <span>{t("picker.browse")}</span>
+                  </Button>
+                </div>
+                <p className="hint">{t("treeOptimization.noInputRootHint")}</p>
+                {profilesPickerError ? (
+                  <p className="error" role="alert">{profilesPickerError}</p>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
 
