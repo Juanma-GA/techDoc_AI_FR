@@ -37,8 +37,8 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
 const IDENTITY_FIELDS: (keyof NomenclatureMapping)[] = ["sin", "old_pn", "new_pn"];
 
-// Mapping par defaut du gabarit, applique tant qu'aucun mapping n'a ete
-// memorise : SIN en colonne B (index 1), Designation en colonne D (index 3).
+// Mapping du gabarit si les en-tetes du fichier ne sont pas reconnus :
+// SIN en colonne B (index 1), Designation en colonne D (index 3).
 const DEFAULT_MAPPING: Record<string, number> = { sin: 1, designation: 3 };
 
 // Registre des colonnes affichables (cle = cle backend du mapping). Le tableau
@@ -251,14 +251,12 @@ function MonoCorpsCard({
   runId,
   sourcePath,
   analysisStatus,
-  canAutoPreview,
   runIdentityFields,
   runIdentityFieldsLoading,
 }: {
   runId: string | null;
   sourcePath: string;
   analysisStatus: { matched: number; mono: number } | null;
-  canAutoPreview: boolean;
   runIdentityFields: string[];
   runIdentityFieldsLoading: boolean;
 }) {
@@ -281,11 +279,14 @@ function MonoCorpsCard({
     previewRequestId.current += 1;
     setPreview(null);
     setPreviewSourcePath("");
+    setSheet("");
+    setHeaderRow(1);
     setIdentityCol(undefined);
     setFirstSlotCol(undefined);
     setResult(null);
     setError(null);
     setNotice(null);
+    return () => { previewRequestId.current += 1; };
   }, [runId, sourcePath]);
 
   const previewMutation = useMutation({
@@ -342,22 +343,6 @@ function MonoCorpsCard({
     },
   });
   const mutatePreview = previewMutation.mutate;
-
-  useEffect(() => {
-    if (
-      !canAutoPreview ||
-      runIdentityFieldsLoading ||
-      !sourcePath.trim()
-    ) return;
-    const timeout = window.setTimeout(() => {
-      const requestId = ++previewRequestId.current;
-      mutatePreview({ path: sourcePath, requestId });
-    }, 250);
-    return () => {
-      window.clearTimeout(timeout);
-      previewRequestId.current += 1;
-    };
-  }, [canAutoPreview, mutatePreview, runIdentityFieldsLoading, sourcePath]);
 
   const requestPreview = (requestedSheet?: string) => {
     const requestId = ++previewRequestId.current;
@@ -769,15 +754,12 @@ export function Identification() {
     queryFn: identificationApi.list,
   });
   const runs = runsQuery.data ?? [];
-  const activeRun = runs.find((run) => run.id === resultRunId);
+  const activeRun = runs.find((run) =>
+    run.id === resultRunId && comparablePath(run.source_ref) === comparablePath(nomenPath),
+  );
   const sourceRuns = nomenPath.trim()
     ? runs.filter((run) => comparablePath(run.source_ref) === comparablePath(nomenPath))
     : [];
-  useEffect(() => {
-    if (activeRun && comparablePath(nomenPath) !== comparablePath(activeRun.source_ref)) {
-      useWorkspace.getState().setSource("nomenclature", activeRun.source_ref);
-    }
-  }, [activeRun?.source_ref, nomenPath]);
   const runIdentityFields = activeRun
     ? detectedColumns(activeRun.summary).filter((field) =>
         MONO_IDENTITY_FIELDS.some((identity) => identity.field === field),
@@ -806,8 +788,10 @@ export function Identification() {
           complete: false,
         };
   const selectRun = (run: NomenclatureRunDto) => {
-    if (comparablePath(run.source_ref) !== comparablePath(nomenPath)) {
+    if (run.id !== resultRunId || comparablePath(run.source_ref) !== comparablePath(nomenPath)) {
       nomenPreviewRequestId.current += 1;
+      previewMutation.reset();
+      analyzeMappingMutation.reset();
       setPreview(null);
       setNomenPreviewPath("");
       setSheet("");
@@ -823,19 +807,6 @@ export function Identification() {
     setResultColumns(columns);
     setFilter(defaultFilter(columns));
   };
-
-  useEffect(() => {
-    if (resultRunId || !nomenPath.trim() || runsQuery.isLoading || runsQuery.isFetching) return;
-    const matchingRun = runs.find(
-      (run) => comparablePath(run.source_ref) === comparablePath(nomenPath),
-    );
-    if (!matchingRun) return;
-    setResultRunId(matchingRun.id);
-    useWorkspace.getState().setNomenclatureRun(matchingRun.id);
-    const columns = detectedColumns(matchingRun.summary);
-    setResultColumns(columns);
-    setFilter(defaultFilter(columns));
-  }, [nomenPath, resultRunId, runs, runsQuery.isFetching, runsQuery.isLoading]);
 
   useEffect(() => {
     if (!resultRunId) return;
@@ -882,14 +853,8 @@ export function Identification() {
       setPreview(data);
       setNomenPreviewPath(path);
       setSheet(data.sheet);
-      // Pre-remplit avec le dernier mapping memorise si present, sinon la
-      // detection automatique par mots-cles d'en-tete.
-      const saved = useWorkspace.getState().nomenMapping;
-      const hr = saved?.headerRow ?? (data.header_row_detected > 0 ? data.header_row_detected : 1);
-      setHeaderRow(hr);
-      // Priorite : mapping memorise > detection auto completee par le defaut
-      // du gabarit (SIN=B, Designation=D).
-      setMapping(saved ? { ...saved.cols } : { ...data.columns_map, ...DEFAULT_MAPPING });
+      setHeaderRow(data.header_row_detected > 0 ? data.header_row_detected : 1);
+      setMapping({ ...DEFAULT_MAPPING, ...data.columns_map });
     },
     onError: (e, request) => {
       if (request.requestId === nomenPreviewRequestId.current) {
@@ -903,28 +868,20 @@ export function Identification() {
     mutateNomenPreview({ path, sheet: requestedSheet, requestId });
   };
 
-  useEffect(() => {
-    if (!nomenPath.trim()) return;
-    const timeout = window.setTimeout(() => {
-      const requestId = ++nomenPreviewRequestId.current;
-      mutateNomenPreview({ path: nomenPath, requestId });
-    }, 250);
-    return () => {
-      window.clearTimeout(timeout);
-      nomenPreviewRequestId.current += 1;
-    };
-  }, [mutateNomenPreview, nomenPath]);
+  useEffect(() => () => { nomenPreviewRequestId.current += 1; }, []);
 
   // Analyse avec le mapping de colonnes choisi : "Analyser avec ce mapping".
   const analyzeMappingMutation = useMutation({
-    mutationFn: (body: NomenclatureMapping) =>
+    mutationFn: (request: NomenPreviewRequest & { mapping: NomenclatureMapping }) =>
       identificationApi.nomenclature({
         scope: "input",
-        path: nomenPath.trim(),
-        sheet: sheet || undefined,
-        mapping: body,
+        path: request.path,
+        sheet: request.sheet,
+        mapping: request.mapping,
       }),
-    onSuccess: (run) => {
+    onSuccess: (run, request) => {
+      void qc.invalidateQueries({ queryKey: ["identification"] });
+      if (request.requestId !== nomenPreviewRequestId.current) return;
       setNomenError(null);
       setNomenNotice(
         t("identification.analyzedShort", {
@@ -940,9 +897,12 @@ export function Identification() {
       // Filtre par defaut sur "Pieces remplacees" quand la colonne est mappee,
       // sinon toutes les lignes.
       setFilter(defaultFilter(cols));
-      void qc.invalidateQueries({ queryKey: ["identification"] });
     },
-    onError: onMutationError(setNomenError),
+    onError: (error, request) => {
+      if (request.requestId === nomenPreviewRequestId.current) {
+        onMutationError(setNomenError)(error);
+      }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -958,6 +918,9 @@ export function Identification() {
 
   // ----- Handlers nomenclature ---------------------------------------------
   const onNomenPathChange = (nextPath: string) => {
+    nomenPreviewRequestId.current += 1;
+    previewMutation.reset();
+    analyzeMappingMutation.reset();
     const matchedRun = nextPath.trim()
       ? runs.find((run) => comparablePath(run.source_ref) === comparablePath(nextPath))
       : undefined;
@@ -965,9 +928,9 @@ export function Identification() {
       selectRun(matchedRun);
       return;
     }
-    setNomenPath(nextPath);
     setResultRunId(null);
     useWorkspace.getState().setNomenclatureRun(null);
+    setNomenPath(nextPath);
     setResultColumns([]);
     setFilter("all");
     setPreview(null);
@@ -999,17 +962,18 @@ export function Identification() {
       return;
     }
     const body: NomenclatureMapping = { header_row: headerRow };
-    const cols: Record<string, number> = {};
     for (const { field } of MAPPING_FIELDS) {
       const v = mapping[field];
       if (v !== undefined) {
         body[field] = v;
-        cols[field] = v;
       }
     }
-    // Memorise ce mapping pour le pre-remplir au prochain preview.
-    useWorkspace.getState().setNomenMapping({ headerRow, cols });
-    analyzeMappingMutation.mutate(body);
+    analyzeMappingMutation.mutate({
+      path: nomenPath.trim(),
+      sheet: sheet || undefined,
+      mapping: body,
+      requestId: nomenPreviewRequestId.current,
+    });
   };
 
   // Nombre max de colonnes dans l'apercu (pour les selects de mapping).
@@ -1333,10 +1297,10 @@ export function Identification() {
 
       {/* ---- Carte Mono-Corps : onglet Materiaux + n slots ---------------- */}
       <MonoCorpsCard
+        key={`${nomenPath}:${resultRunId ?? ""}`}
         runId={resultRunId}
-        sourcePath={activeRun?.source_ref ?? nomenPath}
+        sourcePath={nomenPath}
         analysisStatus={monoAnalysisStatus}
-        canAutoPreview={!!nomenPath.trim()}
         runIdentityFields={runIdentityFields}
         runIdentityFieldsLoading={!!resultRunId && (!activeRun || runsQuery.isLoading)}
       />

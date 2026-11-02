@@ -11,6 +11,11 @@ Identify and compare CATIA delivery data, prepare Composer assets, and run confi
 ## Features
 
 - Identify parts from nomenclature and delivery inputs.
+- Nomenclature and Materials previews and analyses are started explicitly.
+  Selecting another file clears the previous preview, column mapping, and active
+  result; the new mapping is detected from that file, not reused from another one.
+  Imported files remain distinct by their full storage path, even with the same
+  filename. A late analysis response is saved without changing the selected file.
 - Filter optimized parts using the `X000` marker in the nomenclature.
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imported folder structures.
@@ -95,7 +100,7 @@ No shared package or template was modified. The following improvements belong up
 ## Tests
 
 Use the backend pytest suite and frontend scripts declared in `frontend/package.json`.
-The frontend `test` script excludes Playwright files; use `test:e2e` for browser scenarios. Playwright uses port 5188 and synthetic API responses, never the user's database or uploads. The suite covers all active pages at 360, 768, 1280, and 1920 px, mobile navigation, retired-route redirects, local settings, keyboard tabs, theme/language controls, double-click reset confirmation, and CATPart screening/export.
+The frontend `test` script excludes Playwright files; use `test:e2e` for browser scenarios. Playwright uses port 5188 and synthetic API responses, never the user's database or uploads. The suite covers all active pages at 360, 768, 1280, and 1920 px, mobile navigation, retired-route redirects, local settings, keyboard tabs, theme/language controls, double-click reset confirmation, CATPart screening/export, and same-named nomenclature imports with delayed preview/analysis responses.
 
 ## Limitations
 

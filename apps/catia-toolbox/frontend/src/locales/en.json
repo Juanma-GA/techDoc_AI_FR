@@ -293,7 +293,7 @@
   },
   "identification": {
     "sourceTitle": "Import a nomenclature",
-    "sharedSourceHint": "This file is used by both analyses; its preview loads automatically.",
+    "sharedSourceHint": "This file is used by both analyses. Click Preview, then Analyze for each analysis.",
     "importedListTitle": "Imported nomenclatures",
     "importListEmpty": "No nomenclature available. Choose a file above.",
     "sourceNotAnalyzed": "To analyze",
