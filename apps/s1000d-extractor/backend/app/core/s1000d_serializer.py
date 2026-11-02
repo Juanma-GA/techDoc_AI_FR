@@ -16,14 +16,19 @@ Noms d'elements conformes aux XSD locaux Issue 4.1 / 4.2 :
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
+import structlog
 from lxml import etree
 
+from app.core import ir as ir_mod
 from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import InlineRun, IRNode
@@ -34,6 +39,8 @@ from app.core.procedure_structure import is_numbered_procedure_group as _is_numb
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
 from app.core.s1000d_ids import normalize_dm_ids
 from app.core.xsd_model import ConstraintReport, load_xsd_model
+
+log = structlog.get_logger(__name__)
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
@@ -46,10 +53,11 @@ _MISSING_DATA_COMMENT_PREFIX = "A REMPLACER AVANT PUBLICATION:"
 # souvent : form feed, NUL...). lxml leve une ValueError -> 500 cote API. On les
 # retire au seuil de la serialisation, une fois pour toutes.
 _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]")
-# Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
+# Nom d'element XML valide (les candidats viennent d'un override humain).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
-_GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
-_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+_GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png|cgm|svg)$", re.IGNORECASE)
+_GRAPHIC_FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|cgm|svg)", re.IGNORECASE)
+_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png", ".cgm": "cgm", ".svg": "svg"}
 _ICN_TITLE_TOKEN = re.compile(
     r"(?<![A-Za-z0-9_-])ICN-[A-Za-z0-9_.-]+?(?:\.(?:jpe?g|png))?"
     r"(?=$|[\s,;|)\]}])",
@@ -164,7 +172,41 @@ class SerializationDiagnostics:
     provisional_fields: list[str] = field(default_factory=list)
 
 
+@dataclass
+class CachedContent:
+    fingerprint: str
+    issue: str
+    dm_type: str
+    content: etree._Element
+    report: ConstraintReport
+
+
+@dataclass
+class _InlineBinding:
+    parent: etree._Element
+    text: str
+    runs: list[InlineRun] | None
+    refs: list[dict]
+    dm_id: str
+
+
 ReferenceIndex = dict[tuple[str, str], list[ReferenceTarget]]
+
+
+class _CachedReferenceIndex(ReferenceIndex):
+    def __init__(self) -> None:
+        super().__init__()
+        self.contents: dict[str, CachedContent] = {}
+        self.pending: list[_InlineBinding] | None = []
+
+
+SERIALIZER_VERSION = 2
+
+
+def ir_fingerprint(root: IRNode) -> str:
+    return hashlib.sha256(json.dumps(
+        ir_mod.to_dict(root), sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
 
 
 def xml_text(value: str | None) -> str:
@@ -230,21 +272,28 @@ def build_reference_index(
     documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
 ) -> ReferenceIndex:
     """Index visible reference targets with the IDs emitted in each DM."""
-    index: ReferenceIndex = {}
+    index = _CachedReferenceIndex()
+    prepared = []
     for dm_id, root, metadata in documents:
         metadata = metadata or {}
         dmc = str(metadata.get("dmc") or "")
         dm_type = _normalize_dm_type(str(metadata.get("dm_type") or "descriptive"))
         issue = str(metadata.get("issue") or "4.2")
+        pending_start = len(index.pending or [])
         content = _build_content(
             root,
             dm_type,
             {"figure": 0, "table": 0, "section": 0},
-            reference_index={},
+            reference_index=index,
             current_dm_id=dm_id,
         )
-        load_xsd_model(issue, dm_type).constrain(content)
+        model = load_xsd_model(issue, dm_type)
+        declarations = {}
+        report = model.constrain(content, root_path="/dmodule/content", declarations=declarations)
         normalize_dm_ids(content)
+        cached = CachedContent(ir_fingerprint(root), issue, dm_type, content, report)
+        index.contents[dm_id] = cached
+        prepared.append((cached, model, declarations, (index.pending or [])[pending_start:]))
 
         targets_by_kind = {
             "figure": list(content.iter("figure")),
@@ -313,6 +362,23 @@ def build_reference_index(
                     dm_id=dm_id,
                     dmc=dmc,
                 ))
+    index.pending = None
+    # All constrained target IDs must be known before resolving cross-DM references.
+    for cached, model, declarations, bindings in prepared:
+        for binding in bindings:
+            declaration = declarations.get(binding.parent)
+            if declaration is None:
+                continue
+            binding.parent.text = None
+            for child in list(binding.parent):
+                binding.parent.remove(child)
+            _inline_content_with_refs(
+                binding.parent, binding.text, binding.runs, binding.refs,
+                reference_index=index, current_dm_id=binding.dm_id,
+            )
+            extra = model.constrain_fragment(binding.parent, *declaration)
+            cached.report.violations.extend(extra.violations)
+            cached.report.provisional_fields.extend(extra.provisional_fields)
     return index
 
 
@@ -366,38 +432,62 @@ def _figure_icns(node: IRNode) -> list[str]:
     return names
 
 
-def _doctype(root: IRNode, dmodule: etree._Element | None = None) -> str:
+def _entity_decl(ident: str, filename: str, notation: str) -> str:
+    if (
+        not _NCNAME.fullmatch(ident)
+        or not _GRAPHIC_FILENAME.fullmatch(filename)
+        or notation not in _GRAPHIC_NOTATION.values()
+    ):
+        raise ValueError("Invalid graphic entity name.")
+    return f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
+
+
+def _doctype(
+    root: IRNode,
+    dmodule: etree._Element | None = None,
+    *,
+    image_name_map: dict[str, str] | None = None,
+    diagnostics: SerializationDiagnostics | None = None,
+) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
     placeholder_ident = "ICN-ZZZ-00000"
+
+    def declare(ident: str, source_name: str) -> None:
+        if ident in declared:
+            return
+        declared.add(ident)
+        filename = (image_name_map or {}).get(source_name, source_name)
+        suffix = re.search(r"\.[^.]+$", filename)
+        notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "") if suffix else ""
+        try:
+            declaration = _entity_decl(ident, filename, notation)
+        except ValueError as exc:
+            log.warning("graphic_name_invalid", filename=filename, entity_ident=ident,
+                        error_type=type(exc).__name__)
+            if diagnostics is not None:
+                diagnostics.xsd_violations.append({
+                    "severity": "error",
+                    "rule": "GRAPHIC_NAME_INVALID",
+                    "message": f"Nom de fichier graphique invalide : {filename}",
+                    "path": "/dmodule/content//graphic",
+                })
+            return
+        declarations.append(declaration)
+
     for node in root.walk():
         if node.kind != "figure" or node.is_pictogram:
             continue
         if not _figure_icns(node) and placeholder_ident not in declared:
-            declarations.append(
-                f'<!ENTITY {placeholder_ident} SYSTEM "{placeholder_ident}.jpg" NDATA jpg>'
-            )
-            declared.add(placeholder_ident)
+            declare(placeholder_ident, f"{placeholder_ident}.jpg")
         for icn in _figure_icns(node):
-            filename = xml_text(icn)
-            ident = _graphic_ident(filename)
-            if not filename or ident in declared or not _NCNAME.fullmatch(ident):
-                continue
-            declared.add(ident)
-            suffix = re.search(r"\.[^.]+$", filename)
-            notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
-            declarations.append(
-                f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
-            )
+            declare(_graphic_ident(icn), icn)
     if dmodule is not None:
         for graphic in dmodule.iter("graphic"):
             ident = graphic.get("infoEntityIdent", "")
             if ident and ident not in declared and _NCNAME.fullmatch(ident):
-                declarations.append(
-                    f'<!ENTITY {ident} SYSTEM "{ident}.jpg" NDATA jpg>'
-                )
-                declared.add(ident)
+                declare(ident, f"{ident}.jpg")
     declarations.append(
         '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">'
     )
@@ -806,6 +896,10 @@ def _inline_content_with_refs(
     reference_index: ReferenceIndex,
     current_dm_id: str,
 ) -> None:
+    if refs and isinstance(reference_index, _CachedReferenceIndex) and reference_index.pending is not None:
+        reference_index.pending.append(_InlineBinding(parent, text, runs, refs, current_dm_id))
+        _inline_content(parent, text, runs)
+        return
     if not refs:
         _inline_content(parent, text, runs)
         return
@@ -865,7 +959,7 @@ def _para(
         text,
         runs,
         refs,
-        reference_index=reference_index or {},
+        reference_index=reference_index if reference_index is not None else {},
         current_dm_id=current_dm_id,
     )
     return el
@@ -1614,6 +1708,7 @@ def serialize(
     reference_dm_id: str = "",
     created_at: datetime | None = None,
     diagnostics: SerializationDiagnostics | None = None,
+    image_name_map: dict[str, str] | None = None,
 ) -> str:
     """Construit un squelette XML S1000D contraint par le XSD local (UTF-8 indente)."""
     if issue not in {"4.1", "4.2"}:
@@ -1648,14 +1743,26 @@ def serialize(
         created_at=created_at,
     )
 
-    dmodule.append(_build_content(
-        root,
-        normalized_type,
-        counters,
-        reference_index=reference_index,
+    cached = (
+        reference_index.contents.get(reference_dm_id)
+        if isinstance(reference_index, _CachedReferenceIndex) else None
+    )
+    if cached and (
+        cached.fingerprint != ir_fingerprint(root)
+        or cached.issue != issue or cached.dm_type != normalized_type
+    ):
+        cached = None
+    content = deepcopy(cached.content) if cached else _build_content(
+        root, normalized_type, counters, reference_index=reference_index,
         current_dm_id=reference_dm_id,
-    ))
-    xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(dmodule)
+    )
+    dmodule.append(content)
+    xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(
+        dmodule, skip_nodes=frozenset({content}) if cached else frozenset(),
+    )
+    if cached:
+        xsd_report.violations.extend(deepcopy(cached.report.violations))
+        xsd_report.provisional_fields.extend(cached.report.provisional_fields)
     normalize_dm_ids(dmodule)
     if normalized_type == "ipd" and _content_nodes(root):
         xsd_report.violations.append({
@@ -1684,5 +1791,5 @@ def serialize(
     tree = dmodule.getroottree()
     return etree.tostring(
         tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",
-        doctype=_doctype(root, dmodule),
+        doctype=_doctype(root, dmodule, image_name_map=image_name_map, diagnostics=diagnostics),
     ).decode("utf-8")

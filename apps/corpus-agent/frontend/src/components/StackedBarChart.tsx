@@ -57,7 +57,7 @@ export function StackedBarChart({ runs }: { runs: Run[] }) {
         {ticks.map((v) => (
           <g key={`tick-${v}`}>
             <line x1={PL} x2={W - PR} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeDasharray="2 4" />
-            <text x={PL - 6} y={y(v) + 4} textAnchor="end" fontSize="10" fill="var(--fg-dim)" fontFamily="JetBrains Mono">
+            <text x={PL - 6} y={y(v) + 4} textAnchor="end" fontSize="10" fill="var(--fg-dim)" style={{ fontFamily: "var(--font-mono)" }}>
               {v}
             </text>
           </g>
@@ -81,7 +81,7 @@ export function StackedBarChart({ runs }: { runs: Run[] }) {
             <g key={`bar-${i}`}>
               {segs}
               {stackBase > 0 && (
-                <text x={x0 + barW / 2} y={y(stackBase) - 4} textAnchor="middle" fontSize="10" fill="var(--fg)" fontFamily="JetBrains Mono">
+                <text x={x0 + barW / 2} y={y(stackBase) - 4} textAnchor="middle" fontSize="10" fill="var(--fg)" style={{ fontFamily: "var(--font-mono)" }}>
                   {stackBase}
                 </text>
               )}
@@ -92,7 +92,7 @@ export function StackedBarChart({ runs }: { runs: Run[] }) {
           const d = String(runs[i]?.started_at || "").substring(0, 10);
           const cx = PL + i * slotW + slotW / 2;
           return (
-            <text key={`x-${i}`} x={cx} y={H - PB + 14} textAnchor="middle" fontSize="10" fill="var(--fg-dim)" fontFamily="JetBrains Mono">
+            <text key={`x-${i}`} x={cx} y={H - PB + 14} textAnchor="middle" fontSize="10" fill="var(--fg-dim)" style={{ fontFamily: "var(--font-mono)" }}>
               {d}
             </text>
           );

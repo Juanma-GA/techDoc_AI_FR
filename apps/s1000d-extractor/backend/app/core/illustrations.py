@@ -11,14 +11,18 @@ les figures gardent leur placeholder ICN).
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+import pymupdf as fitz
+import structlog
+
+from app.core.fs import atomic_write_bytes
 from app.core.ir import IRNode
 from app.core.pdf_overlays import large_red_cross_rects
 
@@ -28,7 +32,30 @@ _PICTOGRAM_MAX_PIXELS = 65
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 _JPEG_QUALITY = 100
 
-log = logging.getLogger("s1000d_extractor.illustrations")
+log = structlog.get_logger("s1000d_extractor.illustrations")
+_EXTRACTION_ERRORS = (fitz.FileDataError, RuntimeError, ValueError, OSError)
+
+
+@dataclass
+class IllustrationResult:
+    saved_count: int = 0
+    illustration_errors: int = 0
+
+
+def _extraction_failed(
+    event: str,
+    exc: Exception,
+    diagnostics: IllustrationResult | None = None,
+    **context: object,
+) -> None:
+    if diagnostics is not None:
+        diagnostics.illustration_errors += 1
+    log.warning(event, **context, error_type=type(exc).__name__, exc_info=True)
+
+
+def _page_number(page: fitz.Page) -> int | None:
+    number = page.number
+    return number + 1 if number is not None else None
 
 
 class _PageAnalysis:
@@ -71,7 +98,19 @@ def slugify(text: str, *, maxlen: int = 60) -> str:
     return slug[:maxlen].strip("-") or "illustration"
 
 
-def _save_pixmap(doc, xref: int, dest: Path) -> bool:
+def _to_jpeg_compatible(fitz, pix):
+    """Drop alpha, then convert non-RGB/gray colorspaces to RGB (JPEG has no alpha)."""
+    if pix.alpha:
+        # Pixmap(csRGB, pix) keeps the alpha channel; it must be removed explicitly.
+        pix = fitz.Pixmap(pix, 0)
+    if pix.n not in (1, 3):
+        pix = fitz.Pixmap(fitz.csRGB, pix)
+    return pix
+
+
+def _save_pixmap(
+    doc, xref: int, dest: Path, diagnostics: IllustrationResult | None = None,
+) -> bool:
     """Enregistre l'image `xref` en JPG. Convertit CMYK/alpha en RGB. Best-effort."""
     import pymupdf as fitz
 
@@ -83,26 +122,25 @@ def _save_pixmap(doc, xref: int, dest: Path) -> bool:
             and not extracted.get("smask")
         ):
             # JPEG has no alpha channel; copy its encoded bytes without rasterizing.
-            dest.write_bytes(extracted["image"])
+            atomic_write_bytes(dest, extracted["image"])
             return True
-        pix = fitz.Pixmap(doc, xref)
-        if pix.n >= 5 or pix.alpha:            # CMYK ou canal alpha -> RGB
-            pix = fitz.Pixmap(fitz.csRGB, pix)
-
-        pix.save(str(dest), jpg_quality=_JPEG_QUALITY)
+        pix = _to_jpeg_compatible(fitz, fitz.Pixmap(doc, xref))
+        atomic_write_bytes(dest, pix.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
         return True
-    except Exception:
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_save_failed", exc, diagnostics, xref=xref, path=str(dest))
         return False
 
 
 
-def _image_digest(doc, xref: int) -> str | None:
+def _image_digest(doc, xref: int, diagnostics: IllustrationResult | None = None) -> str | None:
     """Return a digest of the embedded bytes without decoding image pixels."""
     try:
 
         image = doc.extract_image(xref).get("image")
         return hashlib.sha256(image).hexdigest() if image else None
-    except Exception:
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_digest_failed", exc, diagnostics, xref=xref)
         return None
 
 
@@ -140,14 +178,13 @@ def _figure_caption_rect(
 def _table_bboxes(
     page: Any,
     page_number: int,
+    diagnostics: IllustrationResult | None = None,
 ) -> list[tuple[float, float, float, float]]:
     try:
         tables = getattr(page.find_tables(), "tables", []) or []
-    except Exception as exc:
-        log.warning(
-            "illustration_table_detection_failed page=%d error_type=%s",
-            page_number,
-            type(exc).__name__,
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed(
+            "illustration_table_detection_failed", exc, diagnostics, page=page_number,
         )
         return []
     bboxes = []
@@ -175,6 +212,7 @@ def _image_records(
     page,
     xref_digest_cache: dict[int, bytes] | None = None,
     table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+    diagnostics: IllustrationResult | None = None,
 ):
     """Return unique page image resources with their displayed rectangles."""
     import pymupdf as fitz
@@ -184,7 +222,8 @@ def _image_records(
     try:
         infos = page.get_image_info(hashes=True)
         image_refs = page.get_images()
-    except Exception:
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_image_lookup_failed", exc, diagnostics, page=_page_number(page))
         infos = []
         image_refs = []
     table_only = bool(table_bboxes) and bool(infos) and all(
@@ -204,7 +243,9 @@ def _image_records(
                     pixmap = fitz.Pixmap(page.parent, xref)
                     digest = pixmap.digest
                     del pixmap
-                except Exception:
+                except _EXTRACTION_ERRORS as exc:
+                    _extraction_failed("illustration_pixmap_lookup_failed", exc, diagnostics,
+                                       page=_page_number(page), xref=xref)
                     lookup_failed = True
                     break
                 if xref_digest_cache is not None:
@@ -418,6 +459,7 @@ def _save_vector_figure(
     dest: Path,
     page_analysis: _PageAnalysis | None = None,
     table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+    diagnostics: IllustrationResult | None = None,
 ) -> bool:
     import pymupdf as fitz
 
@@ -436,9 +478,10 @@ def _save_vector_figure(
         return False
     try:
         pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=bounds, alpha=False)
-        pixmap.save(str(dest), jpg_quality=_JPEG_QUALITY)
+        atomic_write_bytes(dest, pixmap.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
         return True
-    except Exception:
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_vector_save_failed", exc, diagnostics, page=_page_number(page))
         return False
 
 
@@ -525,6 +568,7 @@ def _save_composite_figure(
     image_rects,
     dest: Path,
     page_analysis: _PageAnalysis | None = None,
+    diagnostics: IllustrationResult | None = None,
 ) -> bool:
     """Rasterise une figure composee et ses annotations vectorielles."""
     import pymupdf as fitz
@@ -555,9 +599,10 @@ def _save_composite_figure(
                     ),
                     (255, 255, 255),
                 )
-        pixmap.save(str(dest), jpg_quality=_JPEG_QUALITY)
+        atomic_write_bytes(dest, pixmap.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
         return True
-    except Exception:
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_composite_save_failed", exc, diagnostics, page=_page_number(page))
         return False
 
 
@@ -599,21 +644,20 @@ def attach_illustrations(
     out_dir: Path,
     doc_id: str,
     dm_level: int | None = None,
-) -> int:
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
+) -> IllustrationResult:
     """Extrait les figures hors tableaux et range les images non associees comme pictogrammes.
 
     Les figures contenant plusieurs bitmaps sont rasterisees en une seule image
     afin de conserver aussi les annotations vectorielles superposees. Renvoie le
-    nombre de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image.
+    nombre de fichiers enregistres et les erreurs d'extraction.
     """
-    try:
-        import pymupdf as fitz
-    except Exception:
-        return 0
+    result = IllustrationResult()
     try:
         doc = fitz.open(pdf_path)
-    except Exception:
-        return 0
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_document_open_failed", exc, result, document_id=doc_id)
+        return result
 
     started = perf_counter()
     timings = {
@@ -640,7 +684,6 @@ def attach_illustrations(
         if n.kind == "admonition" and n.is_pictogram and n.page is not None:
             pictogram_callouts_by_page.setdefault(n.page, []).append(n)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
     # `seen` est GLOBAL au document : une meme image (xref) reutilisee sur
     # plusieurs pages (logo, bandeau, figure repetee) ne doit etre extraite
@@ -649,9 +692,17 @@ def attach_illustrations(
     seen_digests: set[str] = set()
     xref_digest_cache: dict[int, bytes] = {}
     try:
+        if table_bboxes_by_page is not None:
+            assert set(table_bboxes_by_page) == set(range(1, doc.page_count + 1)), (
+                "Table geometry must describe the same PDF pages as illustration extraction."
+            )
+        out_dir.mkdir(parents=True, exist_ok=True)
         for pidx, page in enumerate(doc, start=1):
             page_analysis = _PageAnalysis(page)
-            table_bboxes = _table_bboxes(page, pidx)
+            table_bboxes = (
+                table_bboxes_by_page[pidx] if table_bboxes_by_page is not None
+                else _table_bboxes(page, pidx, result)
+            )
             figs = list(figs_by_page.get(pidx, []))
             stage_started = perf_counter()
             figure_anchors = [
@@ -670,7 +721,7 @@ def attach_illustrations(
             ]
             timings["caption_lookup_ms"] += (perf_counter() - stage_started) * 1000
             stage_started = perf_counter()
-            image_records = _image_records(page, xref_digest_cache, table_bboxes)
+            image_records = _image_records(page, xref_digest_cache, table_bboxes, result)
             timings["image_info_ms"] += (perf_counter() - stage_started) * 1000
             image_occurrence_count += len(image_records)
             standard_matches = {
@@ -694,7 +745,7 @@ def attach_illustrations(
                 seen.add(xref)
                 unique_xref_count += 1
                 stage_started = perf_counter()
-                digest = _image_digest(doc, xref)
+                digest = _image_digest(doc, xref, result)
                 timings["image_digest_ms"] += (perf_counter() - stage_started) * 1000
                 if digest is not None and digest in seen_digests:
                     continue
@@ -712,7 +763,7 @@ def attach_illustrations(
                     dm_section = _dm_for_page(dm_sections, pidx)
                     chapter = _chapter_key(dm_section, pidx)
                     name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
-                    if _save_pixmap(doc, xref, out_dir / name):
+                    if _save_pixmap(doc, xref, out_dir / name, result):
                         saved += 1
                         if pictogram_callouts_by_page.get(pidx):
                             continue
@@ -731,7 +782,7 @@ def attach_illustrations(
                 dm_section = _dm_for_page(dm_sections, pidx)
                 chapter = _chapter_key(dm_section, pidx)
                 name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
-                if _save_pixmap(doc, xref, out_dir / name):
+                if _save_pixmap(doc, xref, out_dir / name, result):
                     saved += 1
                     if not pictogram_callouts_by_page.get(pidx):
                         _attach_pictogram(root, dm_section, pidx, xref, chapter, name)
@@ -745,17 +796,17 @@ def attach_illustrations(
                 if composite:
                     composite_count += 1
                     success = _save_composite_figure(
-                        page, image_rects, out_dir / name, page_analysis
+                        page, image_rects, out_dir / name, page_analysis, result
                     )
                 else:
-                    success = _save_pixmap(doc, records[0][0], out_dir / name)
+                    success = _save_pixmap(doc, records[0][0], out_dir / name, result)
                 if success:
                     saved += 1
                     _set_figure_icn(fig, name)
                 elif composite:
                     for xref, _ in records:
                         fallback_name = _unique_name(out_dir, base)
-                        if _save_pixmap(doc, xref, out_dir / fallback_name):
+                        if _save_pixmap(doc, xref, out_dir / fallback_name, result):
                             saved += 1
                             _set_figure_icn(fig, fallback_name)
             for fig in figs:
@@ -770,6 +821,7 @@ def attach_illustrations(
                     out_dir / name,
                     page_analysis,
                     table_bboxes,
+                    result,
                 ):
                     saved += 1
                     _set_figure_icn(fig, name)
@@ -778,30 +830,24 @@ def attach_illustrations(
             timings["dict_blocks_ms"] += page_analysis.dict_blocks_ms
             timings["drawings_ms"] += page_analysis.drawings_ms
         log.info(
-            "illustration_breakdown duration_ms=%.1f page_count=%d figure_count=%d "
-            "image_occurrence_count=%d unique_xref_count=%d saved_count=%d "
-            "composite_count=%d vector_count=%d caption_lookup_ms=%.1f image_info_ms=%.1f "
-            "image_digest_ms=%.1f image_processing_ms=%.1f text_blocks_ms=%.1f "
-            "dict_blocks_ms=%.1f drawings_ms=%.1f",
-            (perf_counter() - started) * 1000,
-            doc.page_count,
-            sum(len(figures) for figures in figs_by_page.values()),
-            image_occurrence_count,
-            unique_xref_count,
-            saved,
-            composite_count,
-            vector_count,
-            timings["caption_lookup_ms"],
-            timings["image_info_ms"],
-            timings["image_digest_ms"],
-            timings["image_processing_ms"],
-            timings["text_blocks_ms"],
-            timings["dict_blocks_ms"],
-            timings["drawings_ms"],
+            "illustrations_done",
+            duration_ms=round((perf_counter() - started) * 1000, 1),
+            page_count=doc.page_count,
+            figure_count=sum(len(figures) for figures in figs_by_page.values()),
+            image_occurrence_count=image_occurrence_count,
+            unique_xref_count=unique_xref_count,
+            saved_count=saved,
+            illustration_errors=result.illustration_errors,
+            composite_count=composite_count,
+            vector_count=vector_count,
+            **{name: round(value, 1) for name, value in timings.items()},
         )
-        return saved
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_extraction_failed", exc, result, document_id=doc_id)
     finally:
         doc.close()
+    result.saved_count = saved
+    return result
 
 
 def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> str | None:
@@ -828,15 +874,16 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
             import pymupdf as fitz
 
             pixmap = fitz.Pixmap(str(source))
-            if pixmap.n >= 5 or pixmap.alpha:
-                pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
             if target.suffix.lower() == ".png":
-                pixmap.save(str(destination))
+                if pixmap.n - pixmap.alpha >= 4:
+                    pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+                atomic_write_bytes(destination, pixmap.tobytes("png"))
             else:
-                pixmap.save(str(destination), jpg_quality=_JPEG_QUALITY)
+                pixmap = _to_jpeg_compatible(fitz, pixmap)
+                atomic_write_bytes(destination, pixmap.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
             source.unlink()
-    except Exception:
-        destination.unlink(missing_ok=True)
+    except _EXTRACTION_ERRORS as exc:
+        _extraction_failed("illustration_rename_failed", exc, source=current_name, target=target_name)
         return None
     return final_name
 

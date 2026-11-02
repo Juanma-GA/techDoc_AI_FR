@@ -13,15 +13,14 @@ est purement deterministe.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from lxml import etree
 
 from app.core import brex_profile as brex_profile_mod
 from app.core import s1000d_schema, xml_safe
 from app.core.brex_validation import validate_brex
 
-log = logging.getLogger("s1000d_extractor.validator")
+log = structlog.get_logger("s1000d_extractor.validator")
 
 
 def _v(severity: str, rule: str, message: str, path: str = "/") -> dict:
@@ -56,7 +55,7 @@ def validate_document(
             )
         )
     except Exception as exc:
-        log.warning("XSD validation failed: %s", exc)
+        log.warning("xsd_validation_failed", issue=issue, error_type=type(exc).__name__, exc_info=True)
         # `warning`, pas `info` : "non validee" ne doit pas se lire comme "validee
         # avec une remarque benigne".
         violations.append(_v("warning", "XSD", f"Validation XSD NON EXECUTEE : {exc}"))
@@ -79,7 +78,7 @@ def validate_document(
                     f"BREX/{rule.rule_id or rule.rule_type}",
                 ))
         except Exception as exc:
-            log.warning("BREX validation failed: %s", exc)
+            log.warning("brex_validation_failed", error_type=type(exc).__name__, exc_info=True)
             violations.append(_v("warning", "BREX", f"Validation BREX NON EXECUTEE : {exc}"))
 
     # 4. Regles client (BREX JSON) sur le DM lui-meme, si fournies.
@@ -89,7 +88,7 @@ def validate_document(
         try:
             violations.extend(validate_dm_against_brex(dm, brex_rules))
         except Exception as exc:
-            log.warning("client BREX rules failed: %s", exc)
+            log.warning("client_brex_validation_failed", error_type=type(exc).__name__, exc_info=True)
             violations.append(
                 _v("warning", "BREX_RULES", f"Regles client NON APPLIQUEES : {exc}")
             )
@@ -102,4 +101,12 @@ def xsd_is_valid(violations: list[dict]) -> bool:
     return not any(
         violation.get("rule") in {"XSD", "WELLFORMED"}
         for violation in violations
+    )
+
+
+def has_blocking_violation(violations: list[dict]) -> bool:
+    """Only XSD/well-formedness failures and error-severity rules make a DM incomplete;
+    warnings and provisional missing fields are reported but do not."""
+    return not xsd_is_valid(violations) or any(
+        violation.get("severity") == "error" for violation in violations
     )

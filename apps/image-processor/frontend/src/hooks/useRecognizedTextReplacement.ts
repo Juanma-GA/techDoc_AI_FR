@@ -82,6 +82,7 @@ export function useRecognizedTextReplacement({
         reference: previousReference.reference,
         found: previousReference.found,
         line_indices: previousReference.line_indices,
+        partial_line_indices: previousReference.partial_line_indices,
         replacement: previousReference.replacement,
         replacement_count: previousReference.replacement_count,
       } : null,

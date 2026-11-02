@@ -132,6 +132,32 @@ For example, Image Processor opts into `DESKTOP_PRELOAD_MODELS=true` for both
 local services, so its health checks stay pending until OCR and LaMa models are
 loaded; the general template does not enable model warm-up by default.
 
+## Windows launchers and packaging
+
+Every scaffolded app has the same Windows entry points at `apps/<slug>/`. The
+desktop ones only work for apps generated with `--desktop` (they check
+`frontend/desktop.json` and stop with an explicit message otherwise).
+
+| Goal | Command | Notes |
+|---|---|---|
+| Run the web app (browser) | `start.bat` / `start.sh` | Always web mode. Rebuilds `frontend/dist/` when stale, serves it on a free local port. |
+| Run the desktop app in development | `pnpm desktop:dev:<slug>` (repository root) | Requires Rust, VS C++ build tools, WebView2, Python 3.11+. No `.bat` wrapper by design. |
+| Build the web ZIP | `package.bat` | ZIP in `apps/<slug>/dist/`. |
+| Build the desktop installer | `package-desktop.bat` (or `package.bat desktop`, or `pnpm desktop:build:<slug>`) | Installers in `apps/<slug>/dist/tauri/release/bundle/`. |
+
+`package-desktop.bat` follows the launcher rules of `STANDARD_POC.md` §9:
+
+- it is a three-line wrapper that opens a `cmd /k` window (the window stays open
+  on error) and delegates to `_package.bat desktop`;
+- `_package.bat desktop` runs `pnpm install` only when `frontend/node_modules` is
+  absent, then `pnpm tauri:build` with `CARGO_TARGET_DIR=apps\<slug>\dist\tauri`;
+- `.bat` files stay pure ASCII and avoid parentheses inside `echo` lines within
+  `if (...)` blocks.
+
+The desktop startup page (`frontend/src/desktop-startup.html`) follows the
+design system like the web entry: `<meta name="color-scheme" content="dark light">`,
+dark by default, styles from `src/index.css` (`@internal/design-tokens/base.css`).
+
 ## Default FastAPI desktop adapter
 
 Currently supported for **Windows x64**. Requires Rust stable, Visual Studio C++
@@ -142,8 +168,8 @@ pnpm desktop:dev:my-desktop-app
 pnpm desktop:build:my-desktop-app
 ```
 
-Or run `package.bat desktop` inside the generated app; this puts Cargo output in
-`apps/<slug>/dist/tauri/`. The generated `tauri:dev` and `tauri:build` package
+Or double-click `package-desktop.bat` in the generated app (equivalent to
+`package.bat desktop`); this puts Cargo output in `apps/<slug>/dist/tauri/`. The generated `tauri:dev` and `tauri:build` package
 scripts prepare frontend and runtime resources synchronously before invoking
 Tauri. Direct Tauri CLI commands must first run
 `node scripts/prepare-desktop.mjs dev` or `build`; they use the usual target

@@ -3,12 +3,36 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
+
+import pymupdf as fitz
+import pytest
 
 from app.config import settings
 from app.core.pdf_cut import _start_page_after_tables_list, detect_start_pages
 from app.core.pdf_cut_scoring import dmrl_data_module_titles, dmrl_scoring_title
 from app.core.pdf_cut_scoring import score_page as _score_page
+
+
+def test_failed_pdf_save_keeps_previous_cut(tmp_path, pdf_bytes, monkeypatch) -> None:
+    from app.core.pdf_cut import cut_from_page
+
+    source = tmp_path / "source.pdf"
+    source.write_bytes(pdf_bytes)
+    document = SimpleNamespace(id="synthetic", storage_path=str(source))
+    output = Path(cut_from_page(document, 1))
+    previous = output.read_bytes()
+
+    def fail_save(_document, filename, *_args, **_kwargs):
+        Path(filename).write_bytes(b"partial")
+        raise OSError("Synthetic PDF save failure")
+
+    monkeypatch.setattr(fitz.Document, "save", fail_save)
+    with pytest.raises(OSError, match="Synthetic PDF save failure"):
+        cut_from_page(document, 1)
+    assert output.read_bytes() == previous
+    assert set(tmp_path.iterdir()) == {source, output}
 
 
 def _upload(client, data: bytes) -> str:
@@ -153,6 +177,43 @@ def test_selected_dm_title_changes_candidate_scoring(tmp_path) -> None:
     assert detect_start_pages(document, "Pump assembly")[0]["page"] == 2
 
 
+def test_partial_first_dm_title_outranks_a_generic_heading_on_the_next_page(tmp_path) -> None:
+    import fitz
+
+    pdf_path = tmp_path / "dmrl-title-before-following-heading.pdf"
+    pdf = fitz.open()
+    first_page = pdf.new_page()
+    first_page.insert_text((72, 72), "This page introduces the Terminologie entry.")
+    for index in range(1, 16):
+        first_page.insert_text(
+            (72, 72 + 16 * index),
+            "Background terminology and system context before the first numbered chapter.",
+        )
+    second_page = pdf.new_page()
+    second_page.insert_text((72, 72), "1.1 First numbered section")
+    for index in range(1, 16):
+        second_page.insert_text(
+            (72, 72 + 16 * index),
+            "Detailed section text describes equipment, operation and maintenance steps.",
+        )
+    pdf.save(str(pdf_path))
+    pdf.close()
+
+    document = SimpleNamespace(
+        source_format="pdf",
+        storage_path=str(pdf_path),
+        dmrl_json=json.dumps([{
+            "dmc": "DMC-PUMP-A-00-00-00-00A-040A-D",
+            "title": "Terminologie",
+        }]),
+    )
+
+    candidates = detect_start_pages(document)
+
+    assert candidates[0]["page"] == 1
+    assert "dmrl_title_contains" in candidates[0]["reasons"]
+
+
 def test_selected_title_score_outranks_after_tables_list_hint(tmp_path) -> None:
     import fitz
 
@@ -265,3 +326,27 @@ def test_pdf_cut_can_preview_and_confirm_page(client, pdf_bytes_headers, monkeyp
 
     started = client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": True})
     assert started.status_code == 200
+
+
+def test_pdf_cut_confirm_accepts_legacy_page_alias(client, pdf_bytes_headers) -> None:
+    doc_id = _upload(client, pdf_bytes_headers)
+
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+        json={"page": 2, "end_page": 3},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["page"] == 2
+    assert response.json()["start_page"] == 2
+
+
+def test_invalid_pdf_page_fields_use_stable_request_validation_code(client) -> None:
+    for path, payload in (
+        ("/api/v1/documents/unknown/pdf-cut/confirm", {"page": 0}),
+        ("/api/v1/documents/unknown/wizard/start", {"start_page": 0}),
+    ):
+        response = client.post(path, json=payload)
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"

@@ -6,6 +6,7 @@ import pymupdf as fitz
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.api_models import PageAnchorsOut, PreliminaryStateOut, SourcePageOut
 from app.core import preliminary_review as review
 from app.core.errors import AppError
 from app.db.models import Document
@@ -21,14 +22,14 @@ def _require(db: Session, doc_id: str) -> Document:
     return doc
 
 
-@router.post("/{doc_id}/wizard/preliminary")
+@router.post("/{doc_id}/wizard/preliminary", response_model=PreliminaryStateOut, response_model_exclude_unset=True)
 def update_review(
     doc_id: str, action: review.ReviewAction, db: Session = Depends(get_db),
 ) -> dict:
     return review.apply(db, _require(db, doc_id), action)
 
 
-@router.get("/{doc_id}/wizard/preliminary/{dm_id}/page/{page_number}")
+@router.get("/{doc_id}/wizard/preliminary/{dm_id}/page/{page_number}", response_model=PageAnchorsOut)
 def source_anchors(
     doc_id: str, dm_id: str, page_number: int, db: Session = Depends(get_db),
 ) -> dict:
@@ -67,7 +68,7 @@ def source_anchors(
         raise AppError("PDF_UNREADABLE", "Impossible de lire la page source.", 422) from exc
 
 
-@router.get("/{doc_id}/wizard/preliminary/{dm_id}/pages")
+@router.get("/{doc_id}/wizard/preliminary/{dm_id}/pages", response_model=list[SourcePageOut])
 def source_pages(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> list[dict]:
     doc = _require(db, doc_id)
     current = review.view(doc)["reviews"].get(dm_id)

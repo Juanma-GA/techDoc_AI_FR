@@ -112,6 +112,7 @@ export type OcrReferenceSnapshotDto = {
   reference: string;
   found: boolean;
   line_indices: number[];
+  partial_line_indices?: number[];
   replacement?: string;
   replacement_count?: number;
 };
@@ -153,6 +154,7 @@ export type LineReplacementDto = {
 export type ReappliedReplacementsDto = {
   edited_image: string;
   replacement_counts: number[];
+  partial_line_indices?: number[][];
   replacement_font_size: number | null;
 };
 

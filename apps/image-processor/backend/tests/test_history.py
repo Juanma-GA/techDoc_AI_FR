@@ -12,6 +12,23 @@ PRESET = "/api/v1/image-processor/workspace/excel"
 
 
 def test_full_history_restores_all_state(workspace_client, workspace_state) -> None:
+    workspace_state["revisions"][0]["analysis"] = {
+        "width": 2480,
+        "height": 3508,
+        "source_width": 120,
+        "source_height": 80,
+        "full_text": "34708SM\n34708SM2",
+        "lines": [],
+        "references": [{
+            "reference": "34708SM",
+            "found": True,
+            "line_indices": [0],
+            "partial_line_indices": [1],
+            "replacement": "28",
+            "replacement_count": 1,
+        }],
+        "filename": "ICN-TEST.jpg",
+    }
     history_id = str(uuid4())
     created = workspace_client.put(f"{BASE}/{history_id}", json=workspace_state)
     assert created.status_code == 200
@@ -26,6 +43,7 @@ def test_full_history_restores_all_state(workspace_client, workspace_state) -> N
     assert saved["image"]["name"] == "synthetic.png"
     assert saved["output_filename"] == restored.json()["filename"] == "ICN-TEST.jpg"
     assert saved["revisions"][0]["image"]["data_url"] == workspace_state["image"]["data_url"]
+    assert saved["revisions"][0]["analysis"]["references"][0]["partial_line_indices"] == [1]
     assert saved["excel"]["pieceRow"] == "2"
     assert saved["excel"]["pairs"][0]["enabled"] is False
     assert saved["manualPairs"] == workspace_state["manualPairs"]

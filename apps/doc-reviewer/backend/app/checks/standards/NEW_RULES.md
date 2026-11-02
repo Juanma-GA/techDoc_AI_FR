@@ -1,19 +1,59 @@
 # Regles par bundle client
 
-Les regles officielles THALES sont declarees dans `app/checks/thales_rules/rules.py`.
-Ce module est la source unique des `CompiledRule` et des metadonnees de presentation.
-`RULE_METADATA` est genere depuis les definitions ; ne pas ajouter de metadonnees
-manuelles paralleles.
+Le bundle THALES est decoupe en deux normes, une par sous-dossier de
+`app/checks/thales_rules/` :
 
-`active_client.json` selectionne le bundle actif. Le registre charge ses modules
-de regles, operations et classification depuis les chemins du manifest ; le
-catalogue est synchronise au demarrage et les versions manifestes sont les defauts
-des nouveaux uploads et des analyses historiques sans version enregistree.
+| Norme | Dossier | Catalogue | Etat par defaut |
+| --- | --- | --- | --- |
+| ATA100 | `ata100/` | `THALES-CUSTOM` `v1` | actif |
+| S1000D | `s1000d/` | `THALES-S1000D` `v1` | desactive |
 
-## Ajouter une regle THALES
+Chaque norme declare ses regles dans son `rules.py` : source unique des
+`CompiledRule` et des metadonnees de presentation, construites par la fabrique
+commune `thales_rules/rule_factory.py` (`partial(build_rule, code_catalogue,
+version)`). `RULE_METADATA` est genere depuis les definitions ; ne pas ajouter de
+metadonnees manuelles paralleles. Le mapping (`mapping.json`) reste commun a
+toutes les normes du client.
 
-1. Ajouter une definition avec la fabrique `rule(...)` dans
-   `app/checks/thales_rules/rules.py`.
+`active_client.json` selectionne le bundle actif. Le registre charge ses normes
+(`norms` du manifest client), puis leurs modules de regles, operations et
+classification depuis les chemins du manifest de chaque norme ; le catalogue est
+synchronise au demarrage et les versions manifestes sont les defauts des nouveaux
+uploads et des analyses historiques sans version enregistree. Dans l'ecran Rules,
+chaque norme forme un groupe repliable (code = nom du dossier, libelle = `label`
+du manifest de la norme) avec son bouton « Tout activer / Tout desactiver ».
+
+## Ajouter une norme a un client
+
+1. Creer `app/checks/<bundle>/<norme>/` avec `__init__.py`, `manifest.json`,
+   `rules.py` et, si besoin, `operations.py` / `page_classifier.py` :
+
+   ```json
+   {
+     "label": "S1000D",
+     "bundle_version": "1.0.0",
+     "catalogs": [{ "code": "THALES-S1000D", "version": "v1" }],
+     "modules": { "rules": "rules.py", "operations": "operations.py" },
+     "default_enabled": false
+   }
+   ```
+
+2. Exporter `RULE_DEFINITIONS` et `STANDARD_SPEC` dans `rules.py` (voir
+   `s1000d/rules.py`), et `OPERATIONS` dans `operations.py`. Les noms d'operations
+   et les codes de catalogue doivent etre uniques dans tout le bundle : prefixer
+   les operations par la norme (`s1000d_...`).
+3. Ajouter le nom du dossier a `norms` dans le `manifest.json` du client et
+   augmenter son `bundle_version`.
+4. Ajouter les textes du front : `client-rules.fr.json` / `client-rules.en.json`
+   (nom et description) et `rules.messages` / `rules.catalog` de `fr.json` /
+   `en.json`.
+5. `default_enabled: false` cree le catalogue avec toutes ses regles
+   desactivees ; l'etat est ensuite conserve par version de catalogue.
+
+## Ajouter une regle a une norme
+
+1. Ajouter une definition avec la fabrique `rule(...)` dans le `rules.py` de la
+   norme (`app/checks/thales_rules/ata100/rules.py` ou `s1000d/rules.py`).
 2. Fournir dans cette definition son code, nom, description, message, type de
    presentation, severite, cible, checks et eventuelles traductions.
 3. Ajouter la definition a `RULE_DEFINITIONS` a l'endroit correspondant a l'ordre
@@ -74,21 +114,28 @@ branche sur le code de regle dans le moteur. Toute operation utilisee doit etre
 exportee par `OPERATIONS`; le chargeur bloque si une regle reference un nom absent.
 
 Les controles de revision utilisent maintenant ce meme contrat. Leur moteur est
-dans `app/checks/thales_rules/revision_engine.py`.
+dans `app/checks/thales_rules/ata100/revision_engine.py`.
+
+Les controles S1000D sont regroupes en trois operations a parametre `control`
+(`s1000d_dm_status`, `s1000d_front_matter`, `s1000d_content`). Un controle ne
+renvoie jamais FAIL sans preuve : lorsque la structure attendue (LOEDM, titre,
+annotations de lien) est absente du PDF, il renvoie INCONCLUSIVE avec la raison.
 
 ## Classifier une page
 
 La classification des pages appartient au module `page_classifier.py` declare
-par le manifest. Le pipeline appelle son entree `classify_pages(parsed, document)`
-depuis le `ClientBundle` actif. Les regles ne doivent pas etre declarees dans le
-classifieur.
+par le manifest de la norme (aujourd'hui ATA100 uniquement). Le pipeline appelle
+son entree `classify_pages(parsed, document)` depuis le `ClientBundle` actif ; les
+classifieurs de plusieurs normes sont enchaines. Les regles ne doivent pas etre
+declarees dans le classifieur.
 
 ## Manifest et versions
 
 - `active_client.json` selectionne un dossier bundle ; `CLIENT_BUNDLE` peut
   surcharger ce nom.
-- Le manifest declare le client, les catalogues, leur version, le mapping et les
-  modules Python du bundle.
+- Le manifest declare le client, ses normes (`norms`) ou ses catalogues, le mapping
+  et les modules Python du bundle ; chaque norme declare ses propres catalogues,
+  sa version et ses modules.
 - Les modules declares (`rules`, `operations`, `page_classifier` et le moteur
   interne de revision) sont charges dans un namespace isole ; leur contenu
   participe au `bundle_hash`.
@@ -116,7 +163,7 @@ Depuis la racine du depot :
 
 ```powershell
 Push-Location backend
-python -m pytest tests/test_client_bundle_contract.py tests/test_client_registry.py tests/test_thales_catalog_baseline.py tests/test_thales_bundle_rules.py tests/test_compiled_standard_catalogs.py tests/test_revision_state.py -q
+python -m pytest tests/test_client_bundle_contract.py tests/test_client_registry.py tests/test_thales_catalog_baseline.py tests/test_thales_bundle_rules.py tests/test_compiled_standard_catalogs.py tests/test_revision_state.py tests/test_s1000d_rules.py -q
 Pop-Location
 ```
 

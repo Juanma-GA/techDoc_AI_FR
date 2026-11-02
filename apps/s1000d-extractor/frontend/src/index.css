@@ -1,4 +1,4 @@
-@import "@internal/design-tokens/theme.css";
+@import "@internal/design-tokens/base.css";
 
 @tailwind base;
 @tailwind components;
@@ -14,59 +14,68 @@
   #root {
     height: 100%;
   }
-}
-
-@layer utilities {
-  .label {
-    @apply font-mono text-label uppercase text-fg-dim;
+  summary {
+    cursor: pointer;
   }
 }
 
 @layer components {
-  .validation-page {
+  .s1k-dmrl-rows {
+    overflow-x: auto;
+  }
+
+  .s1k-dmrl-row {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 2fr) 18rem 11rem minmax(0, 0.5fr) minmax(0, 0.5fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 80rem;
+  }
+
+  .s1k-validation-page {
     display: flex;
     flex-direction: column;
     gap: 14px;
     min-width: 0;
   }
 
-  .validation-import {
+  .s1k-validation-import {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 20px;
     padding: 16px;
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--color-border-base);
     border-radius: 4px;
     transition: border-color 120ms ease, background-color 120ms ease;
   }
 
-  .validation-import.is-dragging {
-    border-color: var(--accent, currentColor);
-    background: color-mix(in srgb, currentColor 6%, transparent);
+  .s1k-validation-import.s1k-validation-is-dragging {
+    border-color: var(--color-brand-blue);
+    background: color-mix(in srgb, var(--color-brand-blue) 6%, transparent);
   }
 
-  .validation-hidden-input {
+  .s1k-validation-hidden-input {
     display: none;
   }
 
-  .validation-drop-copy,
-  .validation-import-actions,
-  .validation-summary,
-  .validation-pending,
-  .validation-detail-heading,
-  .validation-detail-title,
-  .validation-violation-meta {
+  .s1k-validation-drop-copy,
+  .s1k-validation-import-actions,
+  .s1k-validation-summary,
+  .s1k-validation-pending,
+  .s1k-validation-detail-heading,
+  .s1k-validation-detail-title,
+  .s1k-validation-violation-meta {
     display: flex;
     align-items: center;
   }
 
-  .validation-drop-copy {
+  .s1k-validation-drop-copy {
     gap: 12px;
   }
 
-  .validation-drop-copy > div,
-  .validation-detail-title {
+  .s1k-validation-drop-copy > div,
+  .s1k-validation-detail-title {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -74,30 +83,23 @@
     min-width: 0;
   }
 
-  .validation-drop-copy strong {
+  .s1k-validation-drop-copy strong {
     font-size: 1rem;
   }
 
-  .validation-import-actions {
+  .s1k-validation-import-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
   }
 
-  .validation-import-actions .btn,
-  .validation-clear {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-  }
-
-  .validation-summary {
+  .s1k-validation-summary {
     flex-wrap: wrap;
     gap: 8px;
     min-height: 28px;
   }
 
-  .validation-error-filter {
+  .s1k-validation-error-filter {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -105,23 +107,16 @@
     cursor: pointer;
   }
 
-  .validation-error-filter input {
-    width: 15px;
-    height: 15px;
-    margin: 0;
-    accent-color: var(--accent, currentColor);
-  }
-
-  .validation-pending {
+  .s1k-validation-pending {
     gap: 6px;
     margin-left: 4px;
   }
 
-  .validation-clear {
+  .s1k-validation-clear {
     margin-left: auto;
   }
 
-  .validation-grid {
+  .s1k-validation-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
     align-items: start;
@@ -129,22 +124,22 @@
     min-width: 0;
   }
 
-  .validation-list-panel,
-  .validation-detail-panel {
+  .s1k-validation-list-panel,
+  .s1k-validation-detail-panel {
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 360px;
   }
 
-  .validation-table-scroll {
+  .s1k-validation-table-scroll {
     overflow: auto;
     max-height: min(68vh, 680px);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border-base);
     border-radius: 3px;
   }
 
-  .validation-table {
+  .s1k-validation-table {
     width: 100%;
     min-width: 760px;
     border-collapse: collapse;
@@ -152,52 +147,46 @@
     font-size: 0.86rem;
   }
 
-  .validation-table th {
+  .s1k-validation-table th {
     position: sticky;
     top: 0;
     z-index: 1;
     padding: 8px 9px;
-    background: var(--surface, Canvas);
-    border-bottom: 1px solid var(--border);
-    color: var(--fg-dim, inherit);
+    background: var(--color-card-base);
+    border-bottom: 1px solid var(--color-border-base);
+    color: var(--color-text-dim);
     font-size: 0.74rem;
     font-weight: 600;
     white-space: nowrap;
   }
 
-  .validation-table td {
+  .s1k-validation-table td {
     padding: 8px 9px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--color-border-base);
     vertical-align: middle;
   }
 
-  .validation-table tbody tr:last-child td {
+  .s1k-validation-table tbody tr:last-child td {
     border-bottom: 0;
   }
 
-  .validation-table tbody tr.is-selected {
-    background: color-mix(in srgb, currentColor 6%, transparent);
+  .s1k-validation-table tbody tr.s1k-validation-is-selected {
+    background: color-mix(in srgb, var(--color-brand-blue) 6%, transparent);
   }
 
-  .validation-table tbody tr[tabindex="0"] {
+  .s1k-validation-table tbody tr[tabindex="0"] {
     cursor: pointer;
   }
 
-  .validation-table tbody tr[tabindex="0"]:focus-visible {
-    outline: 2px solid var(--accent, currentColor);
+  .s1k-validation-table tbody tr[tabindex="0"]:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
 
-  .validation-table .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-  }
-
-  .validation-row-select {
+  .s1k-validation-row-select {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 2px;
     max-width: 240px;
     padding: 0;
@@ -208,87 +197,82 @@
     cursor: pointer;
   }
 
-  .validation-row-select strong,
-  .validation-row-select small {
+  .s1k-validation-row-select strong,
+  .s1k-validation-row-select small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .validation-row-select small {
-    color: var(--fg-dim, inherit);
+  .s1k-validation-row-select small {
+    color: var(--color-text-dim);
     opacity: 0.75;
   }
 
-  .validation-issue-select {
+  .s1k-validation-issue-select {
     width: 104px;
     min-width: 104px;
     padding: 4px 6px;
   }
 
-  .validation-error-type {
+  .s1k-validation-error-type {
     max-width: 150px;
     overflow-wrap: anywhere;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-mono);
     font-size: 0.8rem;
   }
 
-  .validation-count-cell {
+  .s1k-validation-count-cell {
     text-align: center;
   }
 
-  .validation-empty-list,
-  .validation-empty-detail {
+  .s1k-validation-empty-list,
+  .s1k-validation-empty-detail {
     display: flex;
     flex: 1;
     align-items: center;
     justify-content: center;
     gap: 10px;
     min-height: 260px;
-    color: var(--fg-dim, inherit);
+    color: var(--color-text-dim);
     text-align: center;
   }
 
-  .validation-empty-drop {
+  .s1k-validation-empty-drop {
     padding: 16px;
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--color-border-base);
     border-radius: 4px;
     transition: border-color 120ms ease, background-color 120ms ease;
   }
 
-  .validation-empty-drop.is-dragging {
-    border-color: var(--accent, currentColor);
-    background: color-mix(in srgb, currentColor 6%, transparent);
+  .s1k-validation-empty-drop.s1k-validation-is-dragging {
+    border-color: var(--color-brand-blue);
+    background: color-mix(in srgb, var(--color-brand-blue) 6%, transparent);
   }
 
-  .validation-detail-panel {
+  .s1k-validation-detail-panel {
     position: sticky;
     top: 12px;
   }
 
-  .validation-detail-heading {
+  .s1k-validation-detail-heading {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
     padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--color-border-base);
   }
 
-  .validation-detail-title .card-title {
-    margin: 3px 0 0;
-    overflow-wrap: anywhere;
-  }
-
-  .validation-filename {
+  .s1k-validation-filename {
     overflow-wrap: anywhere;
     text-transform: none;
   }
 
-  .validation-remove {
+  .s1k-validation-remove {
     flex: 0 0 auto;
   }
 
-  .validation-state-message {
+  .s1k-validation-state-message {
     display: flex;
     align-items: flex-start;
     gap: 9px;
@@ -296,78 +280,78 @@
     line-height: 1.45;
   }
 
-  .validation-state-message.is-valid {
+  .s1k-validation-is-valid {
     font-weight: 600;
   }
 
-  .validation-violations {
+  .s1k-validation-violations {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin-top: 16px;
   }
 
-  .validation-violations h3 {
+  .s1k-validation-violations h3 {
     margin: 0 0 2px;
   }
 
-  .validation-violation {
+  .s1k-validation-violation {
     padding: 10px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border-base);
     border-left-width: 3px;
     border-radius: 3px;
   }
 
-  .validation-violation-meta {
+  .s1k-validation-violation-meta {
     flex-wrap: wrap;
     justify-content: space-between;
     gap: 8px;
   }
 
-  .validation-violation p {
+  .s1k-validation-violation p {
     margin: 8px 0 0;
     overflow-wrap: anywhere;
   }
 
-  .validation-error-path {
+  .s1k-validation-error-path {
     display: block;
     margin-top: 6px;
     overflow-wrap: anywhere;
-    color: var(--fg-dim, inherit);
+    color: var(--color-text-dim);
     white-space: normal;
   }
 
-  .validation-spin {
-    animation: validation-spin 1s linear infinite;
+  .s1k-validation-spin {
+    animation: s1k-validation-spin 1s linear infinite;
   }
 
-  @keyframes validation-spin {
+  @keyframes s1k-validation-spin {
     to { transform: rotate(360deg); }
   }
 }
 
 @media (max-width: 1000px) {
-  .validation-grid {
+  .s1k-validation-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .validation-detail-panel {
+  .s1k-validation-detail-panel {
     position: static;
     min-height: 220px;
   }
 }
 
 @media (max-width: 700px) {
-  .validation-import {
+  .s1k-validation-import {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .validation-import-actions {
+  .s1k-validation-import-actions {
     justify-content: flex-start;
   }
 
-  .validation-clear {
+  .s1k-validation-clear {
     margin-left: 0;
   }
 }

@@ -2,6 +2,7 @@ import { render, screen, type RenderResult } from "@testing-library/react";
 import type userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
+import { DemoModeProvider } from "@internal/ui";
 
 import { WorkflowProvider } from "../hooks/WorkflowProvider";
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
@@ -69,7 +70,11 @@ export function mockWorkspaceApi(initialPreset = emptyPreset) {
 }
 
 export function renderWorkflow(ui: ReactElement): RenderResult {
-  return render(<WorkflowProvider>{ui}</WorkflowProvider>);
+  return render(
+    <DemoModeProvider mode="normal" isReady>
+      <WorkflowProvider>{ui}</WorkflowProvider>
+    </DemoModeProvider>,
+  );
 }
 
 export async function selectExcelPartInHome(

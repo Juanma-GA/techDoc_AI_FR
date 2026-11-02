@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
 from app.api.preparation_common import get_preparation_context
-from app.checks.thales_rules.preparation_checklist import (
+from app.checks.thales_rules.ata100.preparation_checklist import (
     checksum,
     compile_preparation_checklist,
 )

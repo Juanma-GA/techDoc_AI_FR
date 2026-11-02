@@ -5,7 +5,7 @@ if (-not (Test-Path -LiteralPath $index -PathType Leaf)) { exit 1 }
 $builtAt = (Get-Item -LiteralPath $index).LastWriteTimeUtc
 $repo = [IO.Path]::GetFullPath((Join-Path $FrontendDir '..\..\..'))
 $roots = @('src', 'public', 'index.html', 'package.json', 'tsconfig.json',
-    'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js') |
+    'vite.config.ts', 'tailwind.config.ts', 'postcss.config.js', '.env.production') |
     ForEach-Object { Join-Path $FrontendDir $_ }
 $roots += @('packages\ui\src', 'design-tokens', 'pnpm-lock.yaml',
     'pnpm-workspace.yaml', 'tsconfig.base.json') |

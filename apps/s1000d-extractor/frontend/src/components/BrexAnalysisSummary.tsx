@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { Alert, Badge } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import { brexApi } from "../lib/api";
 import { getBrexRuleCoverage } from "../lib/brexCoverage";
+import { formatApiError } from "../lib/migrationUtils";
 import type { DmValidationViolation, WizardDm } from "../lib/wizardTypes";
 
 type DmSummary = Pick<WizardDm, "dm_id" | "title" | "has_xml" | "brex_violations">;
@@ -43,8 +45,8 @@ function groupWarnings(dms: DmSummary[]): WarningGroup[] {
   return [...groups.values()];
 }
 
-function severityClass(severity: DmValidationViolation["severity"]): string {
-  return severity === "info" ? "info" : "warn";
+function severityVariant(severity: DmValidationViolation["severity"]): "info" | "warning" {
+  return severity === "info" ? "info" : "warning";
 }
 
 export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
@@ -78,50 +80,48 @@ export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
   const coverageError = !profileId
     ? t("migration.generate.brexProfileIdMissing")
     : t("migration.generate.brexCoverageError", {
-        message: profileQuery.error instanceof Error
-          ? profileQuery.error.message
-          : String(profileQuery.error),
+        message: formatApiError(t, profileQuery.error),
       });
 
   return (
-    <section className="validation-violations" aria-labelledby="brex-analysis-summary-title">
-      <h3 id="brex-analysis-summary-title" className="label">
+    <section className="s1k-validation-violations" aria-labelledby="brex-analysis-summary-title">
+      <h3 id="brex-analysis-summary-title" className="text-label font-mono uppercase text-fg-dim">
         {t("migration.generate.brexAnalysisTitle")}
       </h3>
 
       {coverage ? (
-        <div className="row" role="status" style={{ flexWrap: "wrap", gap: 8 }}>
-          <span className="badge ok">
+        <div className="flex flex-wrap gap-2" role="status">
+          <Badge variant="success">
             {t("migration.brex.coverageAutomatic", { count: coverage.automatic })}
-          </span>
-          <span className="badge info">
+          </Badge>
+          <Badge variant="info">
             {t("migration.brex.coverageContextual", { count: coverage.contextual })}
-          </span>
-          <span className={`badge ${coverage.unsupported ? "warn" : "ok"}`}>
+          </Badge>
+          <Badge variant={coverage.unsupported ? "warning" : "success"}>
             {t("migration.brex.coverageUnsupported", { count: coverage.unsupported })}
-          </span>
+          </Badge>
         </div>
       ) : null}
 
       {profileQuery.isLoading ? (
-        <p className="label" role="status">{t("migration.generate.brexCoverageLoading")}</p>
+        <p className="text-sm text-fg-dim" role="status">{t("migration.generate.brexCoverageLoading")}</p>
       ) : null}
       {profileQuery.isError || !profileId ? (
-        <div className="alert error" role="alert">{coverageError}</div>
+        <Alert variant="danger">{coverageError}</Alert>
       ) : null}
 
       {!analysisComplete ? (
-        <div className="banner warn" role="status">
+        <Alert variant="warning">
           {t("migration.generate.brexAnalysisPending", {
             completed: completedDms.length,
             total: dms.length,
           })}
-        </div>
+        </Alert>
       ) : null}
 
       {analysisComplete && coverage ? (
         errors.length ? (
-          <div className="alert error" role="alert">
+          <Alert variant="danger">
             <strong>
               {t("migration.generate.brexViolationsFound", {
                 count: errors.length,
@@ -131,14 +131,14 @@ export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
             {partial ? (
               <p>{t("migration.generate.brexPartialStatus")}</p>
             ) : null}
-          </div>
+          </Alert>
         ) : (
-          <div className={partial ? "banner warn" : "banner"} role="status">
+          <Alert variant={partial ? "warning" : "success"}>
             <strong>{t("migration.generate.brexNoViolations")}</strong>
             {partial ? (
               <p>{t("migration.generate.brexPartialStatus")}</p>
             ) : null}
-          </div>
+          </Alert>
         )
       ) : null}
 
@@ -147,10 +147,10 @@ export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
           <summary>
             {t("migration.generate.brexWarningGroupCount", { count: warningGroups.length })}
           </summary>
-          <div className="validation-violations">
+          <div className="s1k-validation-violations">
             {warningGroups.map(({ violation, affectedDmIds }) => (
               <article
-                className="validation-violation"
+                className="s1k-validation-violation"
                 key={JSON.stringify([
                   violation.rule,
                   violation.brex_rule_id,
@@ -158,22 +158,22 @@ export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
                   violation.message,
                 ])}
               >
-                <div className="validation-violation-meta">
-                  <span className={`badge ${severityClass(violation.severity)}`}>
+                <div className="s1k-validation-violation-meta">
+                  <Badge variant={severityVariant(violation.severity)}>
                     {t(`migration.generate.brexSeverity.${violation.severity}`)}
-                  </span>
-                  <span className="badge info">{violation.rule}</span>
+                  </Badge>
+                  <Badge variant="info">{violation.rule}</Badge>
                   {violation.brex_rule_id ? (
-                    <code style={{ overflowWrap: "anywhere" }}>
+                    <code className="break-all">
                       {t("migration.generate.brexRuleId")}: {violation.brex_rule_id}
                     </code>
                   ) : null}
                   {violation.brex_severity_level ? (
-                    <span className="label">
+                    <span className="text-label font-mono uppercase text-fg-dim">
                       {t("migration.generate.brexSeverityLevel")}: {violation.brex_severity_level}
                     </span>
                   ) : null}
-                  <span className="label">
+                  <span className="text-label font-mono uppercase text-fg-dim">
                     {t("migration.generate.brexAffectedDms", {
                       count: affectedDmIds.size,
                       total: completedDms.length,
@@ -182,7 +182,7 @@ export function BrexAnalysisSummary({ hasProfile, profileId, dms }: Props) {
                 </div>
                 <p>{violation.message}</p>
                 {violation.path && violation.path !== "/" ? (
-                  <code className="validation-error-path" style={{ overflowWrap: "anywhere" }}>
+                  <code className="s1k-validation-error-path break-all">
                     {violation.path}
                   </code>
                 ) : null}

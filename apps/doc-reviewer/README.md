@@ -14,7 +14,8 @@ validation remain environment-dependent.
 
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
 - Prepare PDFs using the native text layer where it is legible and Mistral OCR
-  only for pages that need it; preparation rule results are shown per page.
+  only for pages that need it; final verification runs enabled THALES rules on
+  modified pages and uses validated OCR boxes to position scan findings.
 - Configure recognized THALES preparation titles in Rules > Page titles.
   Pages without a new recognized title continue the previous section; titles
   outside the list are ignored. Rerun detection to apply catalog changes to
@@ -75,6 +76,30 @@ the demo mapping. Demo mode uses only the isolated `demo_rules` catalog and its
 demo address; normal rule activation states remain unchanged. Place the PDF at
 that path locally. If a demo PDF is intentionally tracked, its filename must
 contain `anonyme` to pass the content-policy check.
+
+In demo mode, Comparison offers **Load both demo PDFs**. This replaces the draft
+selection with the original and `DEMO_CMM_PDF_revision_anonyme.pdf`, selects the
+original as reference, and leaves **Compare and save** as an explicit action.
+Both PDFs retain the same two pages, embedded fonts, layout, and text order.
+The revision contains exactly four localized text changes:
+
+| PDF page | Original | Demo revision |
+| --- | --- | --- |
+| 1 | `REVISION No. 01 DATED JUL 27/26` | `REVISION No. 02 DATED JUL 27/26` |
+| 1 | `New presentation and new date.` | `New presentation and new data.` |
+| 1 | `Page 701 to 704` | `Page 701 to 702` |
+| 2 | `1-900-SB` | `1-901-SB` |
+
+These are synthetic comparison examples, not operational maintenance changes.
+The real comparison engine detects four removed lines and four added lines,
+with both pages paired. Loading is atomic: a missing/invalid asset reports an
+error without replacing the existing selection. The button is absent in normal
+mode. Comparisons continue to use their existing saved-comparison library;
+unlike document uploads, that library is not separated into normal/demo scopes.
+
+Comparison downloads remain native links and use the shared secondary button
+variant at its normal size with a download icon. They are excluded from the
+app's generic link-color rule so text contrast stays readable in both themes.
 
 ## Port
 

@@ -4,7 +4,7 @@ This guide describes the reusable frontend contract and the template backend set
 
 ## Shared Contract
 
-`@internal/ui` exports `DemoModeProvider`, `useDemoMode`, `DemoModeSelector`, `DemoModeBadge`, and `DemoScenarioPanel`. Scenario types and the in-memory file helper are exported as `DemoScenario`, `DemoInputField`, `DemoSampleFile`, `DemoScenarioContext`, `DemoScenarioResult`, and `createDemoFile`.
+`@internal/ui` exports `DemoModeProvider`, `useDemoMode`, `DemoModeSelector`, `DemoModeSettingsCard`, `DemoModeBadge`, and `DemoScenarioPanel`. Scenario types and the in-memory file helper are exported as `DemoScenario`, `DemoInputField`, `DemoSampleFile`, `DemoScenarioContext`, `DemoScenarioResult`, and `createDemoFile`.
 
 The application reads its persisted `demo_enabled` setting and supplies the mode once near the app root:
 
@@ -19,7 +19,7 @@ const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 </DemoModeProvider>
 ```
 
-Use `DemoModeSelector` in Settings and update the app's Settings API. Use `useDemoMode` in routes, `DemoModeBadge` in the application shell, and mount `DemoScenarioPanel` only for a ready demo mode. The selector, badge, input editing, run action, result display, and scenario reset are shared; an application registers only its own scenario definitions and local runner.
+Use `DemoModeSettingsCard` in Settings (it wraps `DemoModeSelector` with the title, hint and save-error message; the app keeps the mutation that persists `demo_enabled`, see `apps/_template/frontend/src/routes/DemoModeSettings.tsx`) and update the app's Settings API. Use `useDemoMode` in routes, `DemoModeBadge` in the application shell, and mount `DemoScenarioPanel` only for a ready demo mode. The settings card, selector, badge, input editing, run action, result display, and scenario reset are shared; an application registers only its own scenario definitions and local runner.
 
 ## Register Scenarios
 

@@ -33,7 +33,7 @@ export const DialogOverlay = forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-40 bg-black/60 backdrop-blur-sm", className)}
+    className={cn("fixed inset-0 z-40 bg-overlay backdrop-blur-sm", className)}
     {...props}
   />
 ));
@@ -53,7 +53,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
         ref={ref}
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
-          "rounded-lg border bg-card p-6 shadow-card focus:outline-none",
+          "rounded-lg border bg-card p-6 shadow-popover focus:outline-none",
           className,
         )}
         {...props}
@@ -61,7 +61,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
         {children}
         <DialogPrimitive.Close
           aria-label={closeLabel}
-          className="absolute right-3 top-3 rounded-sm p-1 text-fg-dim hover:bg-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light"
+          className="absolute right-3 top-3 rounded-sm p-1 text-fg-dim hover:bg-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <X size={16} aria-hidden="true" />
         </DialogPrimitive.Close>

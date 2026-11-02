@@ -1,0 +1,16 @@
+/*
+ * fonts.css - self-hosted brand fonts (local-first: never a font CDN).
+ *
+ * Imported by base.css; apps do not import @fontsource themselves. Weights are
+ * the only ones the design system uses. @fontsource declares font-display: swap,
+ * and the --font-* stacks in theme.css fall back to system fonts while loading.
+ */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/orbitron/500.css";
+@import "@fontsource/orbitron/700.css";

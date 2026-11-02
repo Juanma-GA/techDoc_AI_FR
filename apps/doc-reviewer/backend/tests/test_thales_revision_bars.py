@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import fitz
 
 from app.checks.demo_rules import operations as demo_operations
-from app.checks.thales_rules import operations
-from app.checks.thales_rules.revision_engine import HighlightsEntry, RevisionState
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100 import operations
+from app.checks.thales_rules.ata100.revision_engine import HighlightsEntry, RevisionState
+from app.checks.thales_rules.ata100.rules import (
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_TP1_REVISION_BAR_FOOTER,
@@ -314,12 +314,58 @@ def test_tp1_modified_bar_spans_revision_first_issue_and_full_copyright() -> Non
     )
     stops_inside_copyright = _execute(
         "revision_bar_tp1_footer",
-        _context("R", [_bar(75.65, 718.0, 761.0)], page_number=3, page_type="TP1", spans=spans),
+        _context("R", [_bar(75.65, 718.0, 754.0)], page_number=3, page_type="TP1", spans=spans),
     )
 
     assert valid.status == "PASS"
     assert misses_revision.status == "FAIL"
     assert stops_inside_copyright.status == "FAIL"
+
+
+def test_tp1_revision_bar_accepts_small_top_and_bottom_gaps() -> None:
+    spans = [
+        Span("Revision No.0", (86.66, 718.54, 153.31, 730.54), 3, "Arial", 10.0),
+        Span("First issue: JUL 30/26", (86.42, 735.46, 180.0, 747.46), 3, "Arial", 10.0),
+        Span(
+            "\uFFFD 1973-2026 THALES AVS FRANCE SAS. This document and any data",
+            (85.94, 751.98, 312.51, 759.74),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span(
+            "included are the property of THALES AVS FRANCE SAS.",
+            (85.94, 760.02, 316.80, 767.78),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span("TP 1", (500.0, 751.2, 560.0, 763.2), 3, "Arial", 9.0),
+        Span("JUL 30/26", (500.0, 765.4, 560.0, 777.4), 3, "Arial", 9.0),
+    ]
+    slightly_short = _execute(
+        "revision_bar_tp1_footer",
+        _context(
+            "R",
+            [_bar(75.65, 725.0, 761.0)],
+            page_number=3,
+            page_type="TP1",
+            spans=spans,
+        ),
+    )
+    clearly_short = _execute(
+        "revision_bar_tp1_footer",
+        _context(
+            "R",
+            [_bar(75.65, 728.0, 759.0)],
+            page_number=3,
+            page_type="TP1",
+            spans=spans,
+        ),
+    )
+
+    assert slightly_short.status == "PASS"
+    assert clearly_short.status == "FAIL"
 
 
 def test_missing_tp1_footer_bar_creates_compiled_suggestion() -> None:

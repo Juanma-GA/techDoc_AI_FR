@@ -67,6 +67,7 @@ describe("Home replacement box offsets", () => {
     const reapplySpy = vi.spyOn(imageReplaceApi, "reapplyReplacements").mockResolvedValue({
       edited_image: imageData,
       replacement_counts: [1, 0],
+      partial_line_indices: [[0], []],
       replacement_font_size: null,
     });
     const source = new File(["synthetic image"], "source.png", { type: "image/png" });
@@ -99,6 +100,9 @@ describe("Home replacement box offsets", () => {
     await user.click(screen.getByRole("button", { name: "Recalculer les remplacements" }));
 
     await waitFor(() => expect(reapplySpy).toHaveBeenCalledOnce());
+    expect(await screen.findByText(
+      "Une ligne contient cette référence dans un repère plus long ; elle ne sera pas remplacée.",
+    )).toBeInTheDocument();
     const form = reapplySpy.mock.calls[0]?.[0];
     expect(form?.get("image")).toMatchObject({ name: "source.png" });
     expect(JSON.parse(String(form?.get("lines_json")))).toEqual([{

@@ -8,8 +8,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.checks.client_registry import LoadedClientConfiguration
-from app.checks.thales_rules.section_detection import page_types_for_titles
-from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
+from app.checks.thales_rules.ata100.section_detection import page_types_for_titles
+from app.checks.thales_rules.ata100.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import CompiledRule
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
@@ -24,8 +24,47 @@ from app.core.preparation_state import (
     load_preparation_mapping,
 )
 from app.db.models import Document
-from app.db.preparation_models import PreparationChecklist
+from app.db.preparation_models import DocumentPreparation, PreparationChecklist
 from app.parsers.pdf_parser import ParsedPdf, PdfLine, Span, parse_pdf
+
+
+def apply_preparation_ocr(parsed: ParsedPdf, record: DocumentPreparation) -> None:
+    page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
+    if not isinstance(page_metadata, list) or any(
+        not isinstance(item, dict) or type(item.get("page")) is not int
+        for item in page_metadata
+    ):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "L'état de préparation (page_metadata_json) est illisible.",
+            status_code=500,
+        )
+    if record.selected_provider != "mistral":
+        raise AppError(
+            "OCR_PROVIDER_NOT_SELECTED",
+            "Mistral OCR doit être exécuté sur tout le document avant l'analyse.",
+            status_code=409,
+        )
+    required_pages = [page["page"] for page in page_metadata if page.get("needs_ocr")]
+    validated_by_provider = _load_validation_map(record)
+    validated = set(validated_by_provider.get("mistral", []))
+    missing_pages = [page for page in required_pages if page not in validated]
+    if missing_pages:
+        raise AppError(
+            "OCR_VALIDATION_REQUIRED",
+            "Validez les résultats Mistral OCR de toutes les pages avant l'analyse de préparation.",
+            status_code=409,
+            detail={"pages": missing_pages},
+        )
+    ocr_results = _load_json(record.ocr_results_json, "ocr_results_json")
+    mistral_results = ocr_results.get("mistral", {}) if isinstance(ocr_results, dict) else None
+    if not isinstance(mistral_results, dict):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "L'état de préparation (ocr_results_json) est illisible.",
+            status_code=500,
+        )
+    _apply_ocr_text(parsed, page_metadata, mistral_results)
 
 
 def detect_preparation_pages(
@@ -37,23 +76,6 @@ def detect_preparation_pages(
 ) -> list[dict]:
     record = get_or_create_record(db, document)
     previous_decisions = _load_json(record.page_decisions_json, "page_decisions_json")
-    page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
-    required_pages = [page["page"] for page in page_metadata if page.get("needs_ocr")]
-    if record.selected_provider != "mistral":
-        raise AppError(
-            "OCR_PROVIDER_NOT_SELECTED",
-            "Mistral OCR doit être exécuté sur tout le document avant l'analyse.",
-            status_code=409,
-        )
-    validated_by_provider = _load_validation_map(record)
-    validated = set(validated_by_provider.get("mistral", []))
-    if any(page not in validated for page in required_pages):
-        raise AppError(
-            "OCR_VALIDATION_REQUIRED",
-            "Validez les résultats Mistral OCR de toutes les pages avant l'analyse de préparation.",
-            status_code=409,
-            detail={"pages": [page for page in required_pages if page not in validated]},
-        )
     rules = [
         definition.compiled_rule
         for definition in client_configuration.bundle.rules
@@ -72,8 +94,7 @@ def detect_preparation_pages(
             status_code=409,
         )
     parsed = parse_pdf(current_path(document.storage_dir, document.current_version))
-    ocr_results = _load_json(record.ocr_results_json, "ocr_results_json").get("mistral", {})
-    _apply_ocr_text(parsed, page_metadata, ocr_results)
+    apply_preparation_ocr(parsed, record)
     metadata = preparation_metadata(
         client_configuration.bundle.mapping.fields,
         load_preparation_mapping(record),

@@ -13,10 +13,12 @@ ce module ne fait que l'assemblage de l'arbre.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from app.core import structure_heuristics as heur
 from app.core import zone_classifier
-from app.core.ir import IRNode, InlineRun, RawBlock
+from app.core.ir import InlineRun, IRNode, RawBlock
+from app.core.progress import progress_items
 
 _NUMBERED_NOTE_ITEM_RE = re.compile(r"(?m)(?<!\S)(?P<number>\d{1,3})[.)][ \t]+")
 _ORDERED_ITEM_NUMBER_RE = re.compile(r"^\s*(?P<number>\d{1,3})[.)]\s+")
@@ -230,7 +232,9 @@ def _is_touching_continuation(previous: RawBlock, current: RawBlock) -> bool:
     return True
 
 
-def build_ir(blocks: list[RawBlock]) -> IRNode:
+def build_ir(
+    blocks: list[RawBlock], *, progress_cb: Callable[[int, int], None] | None = None,
+) -> IRNode:
     """Transforme une liste de blocs bruts en un arbre IR a racine unique."""
     zone_classifier.classify_zones(blocks)   # tague les zones avant toute fusion
     blocks = _merge_touching_continuation(blocks)
@@ -260,7 +264,7 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         pending_attention_list = None
         pending_attention_number = 1
 
-    for block in blocks:
+    for block in progress_items(blocks, progress_cb):
         text = (block.text or "").strip()
         if not text and not block.is_table:
             continue

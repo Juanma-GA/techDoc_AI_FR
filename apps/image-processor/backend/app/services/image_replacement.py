@@ -280,7 +280,23 @@ def apply_replacements(
 
     for line_index, line in enumerate(lines):
         text = str(line["text"])
+        line_matched_references = line.get("matched_references")
+        if line_matched_references is not None:
+            if not isinstance(line_matched_references, list) or any(
+                not isinstance(reference, str) for reference in line_matched_references
+            ):
+                raise ValueError("Les références OCR associées à une ligne sont invalides.")
+            normalized_line_references = {
+                normalize_reference(reference) for reference in line_matched_references
+            }
+        else:
+            normalized_line_references = None
         for normalized_reference, pair_indices in pair_indices_by_reference.items():
+            if (
+                normalized_line_references is not None
+                and normalized_reference not in normalized_line_references
+            ):
+                continue
             reference = replacement_pairs[pair_indices[0]]["reference"]
             for start, end in find_reference_occurrences(text, reference):
                 segment = _replacement_segment(

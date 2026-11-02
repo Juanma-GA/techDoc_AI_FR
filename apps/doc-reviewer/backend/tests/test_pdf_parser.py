@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import fitz
 
-from app.parsers.pdf_parser import locate_with_search_for, parse_pdf
+from app.parsers.pdf_parser import PdfLink, locate_with_search_for, parse_pdf
 
 
 def _build_pdf_with_two_occurrences(tmp_path) -> str:
@@ -127,3 +127,32 @@ def test_parse_pdf_reports_progress_per_page(tmp_path) -> None:
     parse_pdf(out, progress_cb=lambda current, total: progress.append((current, total)))
 
     assert progress == [(1, 2), (2, 2)]
+
+
+def test_parse_pdf_exposes_link_annotations_and_flags_broken_ones(tmp_path) -> None:
+    doc = fitz.open()
+    doc.new_page(width=400, height=300)
+    doc.new_page(width=400, height=300)
+    first = doc[0]
+    first.insert_text((50, 100), "See Figure 1 and the website", fontsize=12)
+    first.insert_link(
+        {"kind": fitz.LINK_GOTO, "from": fitz.Rect(50, 90, 120, 105), "page": 1, "to": fitz.Point(0, 0)}
+    )
+    first.insert_link(
+        {"kind": fitz.LINK_URI, "from": fitz.Rect(130, 90, 200, 105), "uri": "https://example.com"}
+    )
+    out = tmp_path / "links.pdf"
+    doc.save(str(out))
+    doc.close()
+
+    links = parse_pdf(out).pages[0].links
+
+    assert [(link.kind, link.target_page, link.broken) for link in links] == [
+        ("internal", 2, False),
+        ("external", None, False),
+    ]
+    assert links[1].uri == "https://example.com"
+    assert "See" in links[0].text
+    assert PdfLink(bbox=(0.0, 0.0, 1.0, 1.0), kind="internal", target_page=None).broken
+    assert PdfLink(bbox=(0.0, 0.0, 1.0, 1.0), kind="none").broken
+    assert not PdfLink(bbox=(0.0, 0.0, 1.0, 1.0), kind="external", uri="https://x").broken

@@ -113,6 +113,7 @@ def serialize_with_brex_guidance(
     reference_index: ReferenceIndex | None = None,
     reference_dm_id: str = "",
     created_at: datetime | None = None,
+    image_name_map: dict[str, str] | None = None,
 ) -> tuple[str, SerializationDiagnostics, int]:
     if reference_index is None:
         reference_metadata = dict(dm_metadata or {})
@@ -137,6 +138,7 @@ def serialize_with_brex_guidance(
             reference_dm_id=reference_dm_id,
             created_at=created_at,
             diagnostics=diagnostics,
+            image_name_map=image_name_map,
         )
 
     return apply_brex_candidate_guidance(root, rules, render)

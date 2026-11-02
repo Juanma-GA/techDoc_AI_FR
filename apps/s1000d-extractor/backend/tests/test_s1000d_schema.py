@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from app.core import xml_safe
-from app.core import s1000d_schema
+from app.core import s1000d_schema, xml_safe
 from app.core.ir import IRNode
 from app.core.resolver import resolve
 from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields, serialize
@@ -121,9 +120,7 @@ def test_compiled_xsd_is_reused_for_validations_in_the_same_thread(monkeypatch) 
         dm_type="descriptive",
         dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-040A-D"},
     )
-    cached_schemas = getattr(s1000d_schema._SCHEMA_CACHE, "schemas", None)
-    if cached_schemas is not None:
-        cached_schemas.clear()
+    monkeypatch.setattr(s1000d_schema, "_SCHEMA_CACHE", {})
     original_compiler = s1000d_schema.etree.XMLSchema
     compile_count = 0
 

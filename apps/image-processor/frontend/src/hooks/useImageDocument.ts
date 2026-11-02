@@ -133,13 +133,17 @@ export function useImageDocument(t: TFunction) {
     });
   }
 
+  function restoreDocument(nextDocument: DocumentState | null) {
+    setDocument(nextDocument);
+  }
+
   return {
     document, currentFile, result,
     imageFile: source ?? null,
     imageUrl: revision?.image.data_url || sourceUrl,
     manuallyEdited: Boolean(revision?.kind.startsWith("brush-")),
     canUndo: Boolean(document?.revisions.length),
-    chooseImage, applyOcr, applyTextReplacement, applyBrush, undo, restore,
+    chooseImage, applyOcr, applyTextReplacement, applyBrush, undo, restore, restoreDocument,
     clear: () => setDocument(null),
   };
 }

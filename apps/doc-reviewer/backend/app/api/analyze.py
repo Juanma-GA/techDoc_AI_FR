@@ -15,6 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
+from app.checks.client_registry import active_standard_versions
 from app.checks.mode_registry import (
     analysis_standard_version_ids,
     get_request_client_configuration,
@@ -34,6 +35,7 @@ from app.core.page_range import (
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
 from app.core.preparation_classification import load_page_classification
+from app.core.preparation_check_service import apply_preparation_ocr
 from app.core.preparation_state import load_preparation_mapping
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.core.security import read_upload_bounded
@@ -237,6 +239,7 @@ def analyze_stream(
     client_bundle = client_configuration.bundle
     analysis_metadata = dict(doc.client_metadata or {})
     preparation_page_classification: dict[str, dict[str, str | None]] = {}
+    preparation_record: DocumentPreparation | None = None
     if preparation_context:
         if (
             doc.working_format != "pdf"
@@ -247,19 +250,19 @@ def analyze_stream(
                 "Le mapping de préparation est réservé aux PDF THALES.",
                 status_code=422,
             )
-        preparation = db.scalar(
+        preparation_record = db.scalar(
             select(DocumentPreparation).where(
                 DocumentPreparation.document_id == document_id
             )
         )
-        if preparation is None:
+        if preparation_record is None:
             raise AppError(
                 "PREPARATION_CONTEXT_MISSING",
                 "L'état de préparation de ce document est indisponible.",
                 status_code=409,
             )
-        saved_preparation_mapping = load_preparation_mapping(preparation)
-        preparation_page_classification = load_page_classification(preparation)
+        saved_preparation_mapping = load_preparation_mapping(preparation_record)
+        preparation_page_classification = load_page_classification(preparation_record)
         analysis_metadata = {
             name: saved_preparation_mapping[name]
             for name in client_configuration.mapping.fields
@@ -420,6 +423,12 @@ def analyze_stream(
         sv_ids_list,
         sv_id,
     )
+    if preparation_context:
+        active_catalog_ids = [
+            str(version.id)
+            for version in active_standard_versions(db, client_configuration)
+        ]
+        sv_ids_list = list(dict.fromkeys([*active_catalog_ids, *sv_ids_list]))
     if sv_ids_list and (sv_id is None or str(sv_id) not in sv_ids_list):
         try:
             sv_id = uuid.UUID(str(sv_ids_list[0]))
@@ -653,6 +662,8 @@ def analyze_stream(
             async for event in _progress_events_until_done(parse_task):
                 yield event
             parsed = await parse_task
+            if preparation_record is not None:
+                apply_preparation_ocr(parsed, preparation_record)
             if is_docx_value:
                 parsed = filter_docx(parsed, first_page_value, last_page_value)
             previous_parsed = None
@@ -725,7 +736,7 @@ def analyze_stream(
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
                     if preparation_context:
-                        from app.checks.thales_rules.section_detection import (
+                        from app.checks.thales_rules.ata100.section_detection import (
                             apply_preparation_page_types,
                         )
 

@@ -1,24 +1,26 @@
 """Routes /api/v1/admin - stats globales + reset.
 
-La cle Mistral (app_config) ET les profils BREX sont preserves par les resets
-(le BREX est une config projet, pas de la donnee jetable).
+Le mode de fonctionnement (app_config) et les profils BREX sont preserves par les
+resets (le BREX est une config projet, pas de la donnee jetable).
 """
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.errors import AppError
+from app.core.fs import remove_files
+from app.core.pdf_cut import previews_dir
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
 
-log = logging.getLogger("s1000d_extractor.admin")
+log = structlog.get_logger("s1000d_extractor.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -34,8 +36,8 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
     for (path,) in db.execute(select(Document.storage_path)).all():
         try:
             total_size += Path(path).stat().st_size
-        except OSError:
-            pass
+        except OSError as exc:
+            log.warning("document_size_failed", path=path, error_type=type(exc).__name__, exc_info=True)
     return AdminStatsOut(
         documents=docs, extracted=extracted, brex_profiles=brex, total_size_bytes=total_size
     )
@@ -82,11 +84,14 @@ def reset_documents(
 
 def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
     """Purge documents + fichiers (PDF/DOCX/XML). Preserve app_config + BREX."""
-    import shutil
-
     from app.core.wizard import images_dir
 
-    docs = db.scalars(select(Document)).all()
+    docs = db.scalars(select(Document).options(load_only(
+        Document.id, Document.storage_path, Document.pdf_cut_path, Document.xml_path,
+        Document.dmrl_path, Document.dm_header_path, Document.cir_path, Document.brex_rules_path,
+    ))).all()
+    paths: list[Path] = []
+    directories: list[Path] = []
     for d in docs:
         for p in (
             d.storage_path,
@@ -98,18 +103,14 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
             d.brex_rules_path,
         ):
             if p:
-                try:
-                    Path(p).unlink(missing_ok=True)
-                except OSError:
-                    pass
-        try:
-            shutil.rmtree(images_dir(d.id), ignore_errors=True)  # illustrations extraites
-        except OSError:
-            pass
+                paths.append(Path(p))
+        directories.append(images_dir(d.id, root=Path(d.storage_path).parent))
+        directories.append(previews_dir(d))
     count = len(docs)
     db.query(DmDocumentLink).delete()
     db.query(DmVersion).delete()
     db.query(Document).delete()
     db.commit()
-    log.info("admin reset scope=%s documents=%d", scope, count)
+    remove_files(paths, directories=directories)
+    log.info("admin_reset", scope=scope, documents=count)
     return AdminResetOut(scope=scope, deleted={"documents": count})

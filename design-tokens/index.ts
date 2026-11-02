@@ -4,12 +4,13 @@
  * Use this when you need a token value in code (e.g. Recharts colors,
  * inline SVG fills, charting libraries that don't read CSS variables).
  *
- *     import { tokens, color, colorByTheme } from "@internal/design-tokens";
- *     <Bar fill={color.brand.blue} />                 // dark default
- *     <Bar fill={colorByTheme(theme, "brand.blue")} /> // theme-aware
+ *     import { tokens, color, colorByTheme, currentTheme } from "@internal/design-tokens";
+ *     <Bar fill={color.brand.blue} />                                // dark default
+ *     <Bar fill={colorByTheme(currentTheme(), "brand.blue")} />      // theme-aware
  *
  * Backward compat: `color.*` returns the dark/default values flat. For
- * theme-aware code, use `colorByTheme(theme, path)`.
+ * theme-aware code, use `colorByTheme(theme, path)` / `shadowByTheme`.
+ * In markup and CSS, prefer Tailwind utilities or `var(--color-*)`.
  *
  * Never duplicate hex values in your code. The check_standard.sh
  * script will fail any commit that introduces a literal hex outside
@@ -21,13 +22,30 @@ import tokensJson from "./tokens.json";
 export const tokens = tokensJson;
 export const color = tokensJson.color;
 export const font = tokensJson.font;
+export const fontSize = tokensJson.fontSize;
 export const radius = tokensJson.radius;
 export const shadow = tokensJson.shadow;
+export const motion = tokensJson.motion;
 export const layout = tokensJson.layout;
 
 export type Theme = "dark" | "light";
 
 export type DesignTokens = typeof tokensJson;
+
+/** Current theme as applied on <html> by the anti-flash script / ThemeToggle. */
+export function currentTheme(root: Element = document.documentElement): Theme {
+  return root.classList.contains("dark") ? "dark" : "light";
+}
+
+/**
+ * Resolve a shadow token (`"card"`, `"popover"`) for a given theme.
+ * Prefer the `--shadow-*` CSS variables / `shadow-card` utility in markup.
+ */
+export function shadowByTheme(theme: Theme, name: keyof typeof tokensJson.shadow): string {
+  if (theme === "dark") return tokensJson.shadow[name];
+  const light = tokensJson.themes.light.shadow as Partial<typeof tokensJson.shadow>;
+  return light[name] ?? tokensJson.shadow[name];
+}
 
 /**
  * Resolve a color path (`"brand.blue"`, `"text.base"`) for a given theme.

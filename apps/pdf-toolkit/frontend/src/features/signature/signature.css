@@ -178,7 +178,7 @@
   background: transparent;
   padding: 2px 4px;
   color: black;
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-sans);
   font-weight: 500;
   line-height: 1.2;
   text-align: left;

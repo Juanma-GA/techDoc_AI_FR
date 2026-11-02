@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
+import uuid
+
 import fitz
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 
 def _upload_document(client: TestClient, pdf_bytes: bytes) -> str:
@@ -267,3 +272,133 @@ def test_preparation_state_loads_after_provider_selection(
     body = response.json()
     assert body["page_count"] == 1
     assert body["validated_pages"] == []
+
+
+def test_preparation_review_runs_verification_rules_with_ocr_boxes(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from app.core import preparation_ocr_service
+    from app.core.ocr_types import OcrBox, OcrPageResult
+    from app.db.models import AnalysisRun
+    from app.db.session import SessionLocal
+
+    client_config = client.get("/api/v1/client-config").json()
+    catalogs = client_config["catalogs"]
+    thales_catalog = next(catalog for catalog in catalogs if catalog["code"] == "THALES-CUSTOM")
+    ste_catalog = next(catalog for catalog in catalogs if catalog["code"] == "ASD-STE100")
+    upload = client.post(
+        "/api/v1/documents",
+        params={
+            "target": "imperial",
+            "standard_version_ids": ste_catalog["standard_version_id"],
+        },
+        files={"file": ("current.pdf", _readable_and_blank_pdf(), "application/pdf")},
+    )
+    assert upload.status_code == 201, upload.text
+    document_id = upload.json()["id"]
+
+    mapping = {
+        "meta_revision_date": "AUG 03/26",
+        "meta_cmm_number": "79-30-02",
+        "meta_first_issue_date": "JUL 1966",
+        "meta_revision_number": "02",
+        "meta_pnr_number": ["1-900-SB"],
+        "meta_manufacturer": "Airbus",
+        "document_language": "en",
+    }
+    mapped = client.patch(
+        f"/api/v1/documents/{document_id}/preparation/mapping",
+        json={"mapping": mapping},
+    )
+    assert mapped.status_code == 200, mapped.text
+
+    def fake_run_ocr(provider, _image_bytes, _width, _height, _db):
+        return OcrPageResult(
+            text="79-33-02\nFirst Issue",
+            boxes=[
+                OcrBox(0.1, 0.9, 0.4, 0.92, "79-33-02"),
+                OcrBox(0.1, 0.93, 0.3, 0.95, "First Issue"),
+            ],
+            provider=provider,
+            elapsed_ms=1234,
+        )
+
+    monkeypatch.setattr(preparation_ocr_service, "run_ocr", fake_run_ocr)
+    ocr = client.post(
+        f"/api/v1/documents/{document_id}/preparation/ocr/pages/2",
+        json={"provider": "mistral"},
+    )
+    assert ocr.status_code == 200, ocr.text
+    validated = client.post(
+        f"/api/v1/documents/{document_id}/preparation/ocr/validation"
+    )
+    assert validated.status_code == 200, validated.text
+    detected = client.post(f"/api/v1/documents/{document_id}/preparation/detect")
+    assert detected.status_code == 200, detected.text
+    for page, is_modified in ((1, False), (2, True)):
+        decision = client.patch(
+            f"/api/v1/documents/{document_id}/preparation/decisions/{page}",
+            json={"is_modified": is_modified},
+        )
+        assert decision.status_code == 200, decision.text
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params={
+            "preparation_context": "true",
+            "modified_only": "true",
+            "checklist": "false",
+            "page_overrides": json.dumps({"1": False, "2": True}),
+        },
+    ) as stream:
+        assert stream.status_code == 200, stream.read().decode("utf-8")
+        body = b"".join(stream.iter_bytes())
+    assert b"event: done" in body
+
+    all_rules = client.get("/api/v1/client-rules").json()
+    verification_rules = [
+        rule for rule in all_rules if rule["scope"] == "verification"
+    ]
+    assert len(verification_rules) > 70
+    enabled_verification_codes = {
+        rule["code"] for rule in verification_rules if rule["active"]
+    }
+    disabled_verification_codes = {
+        rule["code"] for rule in verification_rules if not rule["active"]
+    }
+    with SessionLocal() as session:
+        run = session.scalar(
+            select(AnalysisRun)
+            .where(AnalysisRun.document_id == uuid.UUID(document_id))
+            .order_by(AnalysisRun.started_at.desc())
+            .limit(1)
+        )
+        assert run is not None
+        snapshot = json.loads(run.compiled_rules_snapshot_json)
+    compiled_rule_codes = {rule["id"] for rule in snapshot["rules"]}
+    assert enabled_verification_codes <= compiled_rule_codes
+    assert disabled_verification_codes.isdisjoint(compiled_rule_codes)
+    assert thales_catalog["standard_version_id"] in run.standard_version_ids
+
+    rule_results = client.get(
+        f"/api/v1/documents/{document_id}/rule-results"
+    ).json()
+    assert any(
+        result["rule_id"] == "CUSTOM_CMM_NUMBER" and result["status"] == "FAIL"
+        for result in rule_results
+    )
+    suggestions = client.get(
+        f"/api/v1/documents/{document_id}/suggestions"
+    ).json()
+    cmm_suggestion = next(
+        suggestion
+        for suggestion in suggestions
+        if suggestion["rule_code"] == "CUSTOM_CMM_NUMBER"
+    )
+    assert cmm_suggestion["page"] == 2
+    assert cmm_suggestion["bbox"]["x0"] == pytest.approx(40)
+    assert cmm_suggestion["bbox"]["y0"] == pytest.approx(540)
+    assert cmm_suggestion["bbox"]["x1"] == pytest.approx(160)
+    assert cmm_suggestion["bbox"]["y1"] == pytest.approx(552)

@@ -14,8 +14,9 @@ def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     body = resp.json()
     codes = {s["code"] for s in body}
     # Les normes purement XML/données (S1000D, ATA2200, S2000M) ont été
-    # retirées du catalogue — seules restent les normes texte/rendu.
-    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "THALES-CUSTOM"}
+    # retirées du catalogue — seules restent les normes texte/rendu. THALES-S1000D
+    # est le catalogue client des règles THALES sur le rendu PDF S1000D.
+    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "THALES-CUSTOM", "THALES-S1000D"}
     for std in body:
         assert std["builtin"] is True
         assert len(std["versions"]) >= 1
@@ -128,6 +129,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES": "error",
         "CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE": "error",
         "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM": "error",
+        "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE": "error",
         "CUSTOM_REVISION_BAR_NEW_PAGE": "error",
         "CUSTOM_REVISION_BAR_MODIFIED_PAGE": "error",
         "CUSTOM_REVISION_BAR_MARGIN_POSITION": "error",

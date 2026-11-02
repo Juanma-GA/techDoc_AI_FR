@@ -6,7 +6,7 @@ import fitz
 import pytest
 from fastapi.testclient import TestClient
 
-from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
+from app.checks.thales_rules.ata100.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import RuleTarget
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
@@ -340,7 +340,7 @@ def test_new_pdf_version_discards_manual_classification(client: TestClient) -> N
 
 def test_ocr_text_and_boxes_feed_the_section_detection() -> None:
     from app.core.preparation_check_service import _apply_ocr_text
-    from app.checks.thales_rules.section_detection import classify_preparation_sections
+    from app.checks.thales_rules.ata100.section_detection import classify_preparation_sections
     from app.parsers.pdf_parser import parse_pdf
 
     pdf = fitz.open()
@@ -496,10 +496,10 @@ def test_detector_manual_type_selects_rules_and_keeps_detected_type(monkeypatch)
         return [SimpleNamespace(rule_id="TP2-CHECK", status="PASS")], []
 
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.execute_pdf_rules", fake_execute
+        "app.checks.thales_rules.ata100.preparation_detector.execute_pdf_rules", fake_execute
     )
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.map_preparation_pages_to_toc",
+        "app.checks.thales_rules.ata100.preparation_detector.map_preparation_pages_to_toc",
         lambda *_args, **_kwargs: None,
     )
 
@@ -538,7 +538,7 @@ def test_detector_manual_type_selects_rules_and_keeps_detected_type(monkeypatch)
 
 def test_detector_document_page_only_override_keeps_detected_type(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.map_preparation_pages_to_toc",
+        "app.checks.thales_rules.ata100.preparation_detector.map_preparation_pages_to_toc",
         lambda *_args, **_kwargs: None,
     )
 

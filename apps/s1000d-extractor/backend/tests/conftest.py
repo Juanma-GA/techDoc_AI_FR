@@ -18,41 +18,60 @@ import pytest
 _TEST_DIRECTORY = tempfile.TemporaryDirectory(prefix="s1000d-extractor-tests-")
 _TMP = Path(_TEST_DIRECTORY.name)
 _DB = _TMP / "s1000d_extractor_test.db"
+_DEMO_DB = _TMP / "s1000d_extractor_demo_test.db"
 _STORAGE = _TMP / "s1000d_extractor_test_storage"
+_DEMO_STORAGE = _TMP / "s1000d_extractor_demo_test_storage"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
+os.environ["S1000D_ENV_FILE"] = ""
+os.environ["DEMO_DATABASE_URL"] = f"sqlite:///{_DEMO_DB}"
 os.environ["STORAGE_DIR"] = str(_STORAGE)
-os.environ["MISTRAL_API_KEY"] = ""  # Synthetic tests must never use a real provider key.
-
-
+os.environ["DEMO_STORAGE_DIR"] = str(_DEMO_STORAGE)
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
-    for f in (_DB, _DB.with_suffix(".db-wal"), _DB.with_suffix(".db-shm")):
+    for f in (
+        _DB, _DB.with_suffix(".db-wal"), _DB.with_suffix(".db-shm"),
+        _DEMO_DB, _DEMO_DB.with_suffix(".db-wal"), _DEMO_DB.with_suffix(".db-shm"),
+    ):
         f.unlink(missing_ok=True)
     _STORAGE.mkdir(parents=True, exist_ok=True)
+    _DEMO_STORAGE.mkdir(parents=True, exist_ok=True)
     import app.db.models  # noqa: F401  (enregistre les tables)
-    from app.db.session import Base, engine
+    from app.db.session import Base, demo_engine, engine
 
     Base.metadata.create_all(engine)
+    Base.metadata.create_all(demo_engine)
     yield
     engine.dispose()
+    demo_engine.dispose()
     _TEST_DIRECTORY.cleanup()
 
 
 @pytest.fixture(autouse=True)
 def _clean_tables():
     """Purge les tables metier avant chaque test (isolation)."""
-    from app.db.models import BrexProfile, Document
-    from app.db.session import SessionLocal
+    from app.core.demo_mode import reset_demo_cache, set_demo_enabled
+    from app.db.models import AppConfig, BrexProfile, DmDocumentLink, DmVersion, Document
+    from app.db.session import DemoSessionLocal, SessionLocal
 
-    db = SessionLocal()
-    try:
-        db.query(Document).delete()
-        db.query(BrexProfile).delete()
-        db.commit()
-    finally:
-        db.close()
+    reset_demo_cache()
+    for factory in (SessionLocal, DemoSessionLocal):
+        db = factory()
+        try:
+            db.query(DmDocumentLink).delete()
+            db.query(DmVersion).delete()
+            db.query(Document).delete()
+            db.query(BrexProfile).delete()
+            if factory is DemoSessionLocal:
+                db.query(AppConfig).delete()
+            if factory is SessionLocal:
+                set_demo_enabled(db, False)
+            else:
+                db.commit()
+        finally:
+            db.close()
     yield
+    reset_demo_cache()
 
 
 @pytest.fixture

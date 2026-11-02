@@ -3,16 +3,27 @@ import type { TFunction } from "i18next";
 import type { useExcelMapping } from "../hooks/useExcelMapping";
 import type { ReplacementPair } from "./workspace-api";
 
+function enteredPairs(pairs: ReplacementPair[]) {
+  return pairs.filter((pair) => pair.enabled)
+    .map(({ reference, replacement }) => ({
+      reference: reference.trim(), replacement: replacement.trim(),
+    })).filter(({ reference, replacement }) => reference || replacement);
+}
+
+export function hasValidManualPairs(pairs: ReplacementPair[]) {
+  const selected = enteredPairs(pairs);
+  return selected.length > 0 && selected.every(({ reference, replacement }) =>
+    reference && replacement,
+  );
+}
+
 function selectedPairs(
   pairs: ReplacementPair[],
   t: TFunction,
   skipEmptyReferences = false,
   comparisonOnly = false,
 ) {
-  const selected = pairs.filter((pair) => pair.enabled)
-    .map(({ reference, replacement }) => ({
-      reference: reference.trim(), replacement: replacement.trim(),
-    })).filter(({ reference, replacement }) => reference || replacement);
+  const selected = enteredPairs(pairs);
   const applicable = skipEmptyReferences || comparisonOnly
     ? selected.filter(({ reference }) => reference)
     : selected;
@@ -27,13 +38,14 @@ function selectedPairs(
 export function imageForm(
   image: File, sourceName: string,
   excel: ReturnType<typeof useExcelMapping>, t: TFunction,
+  includeExcel = true,
 ): FormData {
-  if (excel.excelFile && !excel.excelSelectionReady) {
+  if (includeExcel && excel.excelFile && !excel.excelSelectionReady) {
     throw new Error(t("image.errorExcelSelection"));
   }
   const form = new FormData();
   form.append("image", image, sourceName);
-  if (excel.excelFile) {
+  if (includeExcel && excel.excelFile) {
     form.append("workbook", excel.excelFile);
     form.append("excel_sheet", excel.excelSheet);
     form.append("excel_reference_column", excel.excelReferenceColumn);
@@ -51,7 +63,11 @@ export function analysisForm(
   replacementFontSize?: number | null,
   comparisonOnly = false,
 ): FormData {
-  const form = imageForm(image, sourceName, excel, t);
+  const includeExcel = !excel.excelFile || excel.excelSelectionReady;
+  if (!includeExcel && !hasValidManualPairs(pairs)) {
+    throw new Error(t("image.errorExcelSelection"));
+  }
+  const form = imageForm(image, sourceName, excel, t, includeExcel);
   if (replacementFontSize != null) {
     form.append("replacement_font_size", String(replacementFontSize));
   }

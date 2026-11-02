@@ -52,6 +52,66 @@ describe("Image Processor home workflow", () => {
     expect(screen.queryByRole("textbox", { name: "Référence à remplacer 1" })).not.toBeInTheDocument();
   });
 
+  it("runs OCR with a manual pair when no Excel piece is selected", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Home />);
+    await screen.findByText("Sauvegarde locale à jour.");
+    const imageInput = container.querySelector<HTMLInputElement>(
+      'input[type="file"][accept^="image/"]',
+    );
+    const excelInput = container.querySelector<HTMLInputElement>(
+      'input[type="file"][accept=".xlsx,.xlsm"]',
+    );
+    if (!imageInput || !excelInput) throw new Error("Expected image and Excel inputs.");
+
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:synthetic-image"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    vi.spyOn(imageReplaceApi, "excelSheets").mockResolvedValue({ sheets: ["Parts"] });
+    const ocrSpy = vi.spyOn(imageReplaceApi, "runOcr").mockResolvedValue({
+      width: 2480,
+      height: 3508,
+      source_width: 1,
+      source_height: 1,
+      full_text: "R-001",
+      lines: [],
+      references: [],
+      edited_image: "data:image/png;base64,AA==",
+      filename: "source.png",
+    });
+
+    await user.upload(imageInput, new File(["synthetic image"], "source.png", { type: "image/png" }));
+    await user.upload(
+      excelInput,
+      new File(["synthetic workbook"], "mapping.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+    await waitFor(() => expect(imageReplaceApi.excelSheets).toHaveBeenCalledOnce());
+    const runOcrButton = screen.getByRole("button", { name: "Lancer l’OCR sur CPU" });
+    expect(runOcrButton).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Ajouter un couple" }));
+    await user.type(screen.getByRole("textbox", { name: "Référence à remplacer 1" }), "R-001");
+    await user.type(screen.getByRole("textbox", { name: "Nouveau repère 1" }), "N-001");
+
+    await waitFor(() => expect(runOcrButton).toBeEnabled());
+    await user.click(runOcrButton);
+
+    await waitFor(() => expect(ocrSpy).toHaveBeenCalledOnce());
+    const form = ocrSpy.mock.calls[0]?.[0];
+    expect(form?.get("workbook")).toBeNull();
+    expect(form?.get("excel_sheet")).toBeNull();
+    expect(JSON.parse(String(form?.get("replacement_pairs")))).toEqual([
+      { reference: "R-001", replacement: "N-001" },
+    ]);
+  });
+
   it("shows an empty state when the selected Excel part has no pairs", async () => {
     const user = userEvent.setup();
     const { container } = render(<Home />);

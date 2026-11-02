@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
+from app.checks.thales_rules.ata100.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import RuleTarget
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
@@ -27,11 +27,11 @@ def test_page_decision_includes_successful_rule_results(monkeypatch) -> None:
         is_signed=False,
     )
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.execute_pdf_rules",
+        "app.checks.thales_rules.ata100.preparation_detector.execute_pdf_rules",
         lambda *_args, **_kwargs: ([SimpleNamespace(rule_id="TP1-CHECK", status="PASS")], []),
     )
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.map_preparation_pages_to_toc",
+        "app.checks.thales_rules.ata100.preparation_detector.map_preparation_pages_to_toc",
         lambda *_args, **_kwargs: None,
     )
 
@@ -75,11 +75,11 @@ def test_ocr_page_font_size_failure_is_inconclusive_without_font_metadata(monkey
         is_signed=False,
     )
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.execute_pdf_rules",
+        "app.checks.thales_rules.ata100.preparation_detector.execute_pdf_rules",
         lambda *_args, **_kwargs: ([SimpleNamespace(rule_id="TP1-FONT", status="FAIL")], []),
     )
     monkeypatch.setattr(
-        "app.checks.thales_rules.preparation_detector.map_preparation_pages_to_toc",
+        "app.checks.thales_rules.ata100.preparation_detector.map_preparation_pages_to_toc",
         lambda *_args, **_kwargs: None,
     )
 

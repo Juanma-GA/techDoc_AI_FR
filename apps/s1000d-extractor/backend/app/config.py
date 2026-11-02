@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,7 +25,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 's1000d-extractor.db'}"
+    demo_database_url: str = ""
     storage_dir: str = str(BASE_DIR / "data" / "storage")
+    demo_storage_dir: str = ""
 
     # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
     # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les
@@ -37,18 +40,8 @@ class Settings(BaseSettings):
         "http://localhost:8006",
     ]
     max_upload_size_mb: int = 50
+    max_validation_files: int = Field(default=20, ge=1)
     pdf_cut_requires_validation: bool = True
-
-    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
-    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
-    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
-    encryption_key: str = ""
-
-    mistral_api_key: str = ""
-    mistral_base_url: str = "https://api.mistral.ai"
-    mistral_chat_model: str = "mistral-small-latest"
-    mistral_embed_model: str = "mistral-embed"
-    mistral_ocr_model: str = "mistral-ocr-latest"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -61,14 +54,5 @@ class Settings(BaseSettings):
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
 
-    @property
-    def llm_configured(self) -> bool:
-        return bool(self.mistral_api_key)
-
-    @property
-    def encryption_configured(self) -> bool:
-        """Cle de chiffrement presente et assez longue pour Fernet."""
-        return bool(self.encryption_key and len(self.encryption_key) >= 32)
-
-
-settings = Settings()
+_env_file = os.environ.get("S1000D_ENV_FILE")
+settings = Settings(_env_file=BASE_DIR / ".env" if _env_file is None else _env_file or None)
