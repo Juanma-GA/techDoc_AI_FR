@@ -173,6 +173,20 @@ func (p *PDFCPU) Rotate(ctx context.Context, input, output string, pages []int, 
 	return ctx.Err()
 }
 
+// Collect writes the given pages, in the given order, to output.
+func (p *PDFCPU) Collect(ctx context.Context, input, output string, pages []int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(pages) == 0 {
+		return fmt.Errorf("pdfcpu collect: page list is required")
+	}
+	if err := api.CollectFile(input, output, pageSpecs(pages), model.NewDefaultConfiguration()); err != nil {
+		return fmt.Errorf("pdfcpu collect: %w", err)
+	}
+	return ctx.Err()
+}
+
 func pageSpecs(pages []int) []string {
 	if len(pages) == 0 {
 		return nil

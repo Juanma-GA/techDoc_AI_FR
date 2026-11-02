@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
 import {
   Combine,
+  FilePlus2,
   Grip,
   Image,
   ImagePlus,
@@ -31,6 +32,7 @@ import { DeleteTool } from "./features/delete/DeleteTool";
 import { ExtractTool } from "./features/extract/ExtractTool";
 import { MergeTool } from "./features/merge/MergeTool";
 import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
+import { InsertTool } from "./features/insert/InsertTool";
 import { PdfToImagesTool } from "./features/pdf-to-images/PdfToImagesTool";
 import { RotateTool } from "./features/rotate/RotateTool";
 import { SignatureTool } from "./features/signature/SignatureTool";
@@ -46,6 +48,7 @@ const tools = [
   { id: "merge", icon: Combine },
   { id: "extract", icon: Scissors },
   { id: "split", icon: Split },
+  { id: "insert", icon: FilePlus2 },
   { id: "delete", icon: Trash2 },
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
@@ -243,6 +246,7 @@ export function App() {
               {activeTool === "merge" ? <MergeTool /> : null}
               {activeTool === "extract" ? <ExtractTool /> : null}
               {activeTool === "split" ? <SplitTool /> : null}
+              {activeTool === "insert" ? <InsertTool /> : null}
               {activeTool === "delete" ? <DeleteTool /> : null}
               {activeTool === "reorder" ? (
                 <Suspense

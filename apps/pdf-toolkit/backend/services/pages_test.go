@@ -41,6 +41,10 @@ func TestParsePageSelection(t *testing.T) {
 
 type fakeProcessor struct {
 	pageCount    int
+	pageCounts   map[string]int
+	merged       []string
+	collected    []int
+	collectErr   error
 	deleted      []int
 	reordered    []int
 	rotated      []int
@@ -48,14 +52,24 @@ type fakeProcessor struct {
 	compressCall bool
 }
 
-func (p *fakeProcessor) Merge(context.Context, []string, string) error       { return nil }
+func (p *fakeProcessor) Merge(_ context.Context, inputs []string, _ string) error {
+	p.merged = append([]string(nil), inputs...)
+	return nil
+}
 func (p *fakeProcessor) ImagesToPDF(context.Context, []string, string) error { return nil }
 func (p *fakeProcessor) Compress(context.Context, string, string) error {
 	p.compressCall = true
 	return nil
 }
-func (p *fakeProcessor) PageCount(context.Context, string) (int, error) {
+func (p *fakeProcessor) PageCount(_ context.Context, input string) (int, error) {
+	if count, ok := p.pageCounts[input]; ok {
+		return count, nil
+	}
 	return p.pageCount, nil
+}
+func (p *fakeProcessor) Collect(_ context.Context, _, _ string, pages []int) error {
+	p.collected = append([]int(nil), pages...)
+	return p.collectErr
 }
 func (p *fakeProcessor) Extract(context.Context, string, string, []int) error { return nil }
 func (p *fakeProcessor) Delete(_ context.Context, _, _ string, pages []int) error {

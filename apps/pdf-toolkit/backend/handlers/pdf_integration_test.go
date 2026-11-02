@@ -20,6 +20,7 @@ import (
 type routeProcessor struct {
 	pageCount int
 	inputPath string
+	collected []int
 	rotated   []int
 	rotation  int
 }
@@ -72,6 +73,12 @@ func (p *routeProcessor) Delete(_ context.Context, input, output string, _ []int
 
 func (p *routeProcessor) Reorder(_ context.Context, input, output string, _ []int) error {
 	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Collect(_ context.Context, input, output string, pages []int) error {
+	p.inputPath = input
+	p.collected = append([]int(nil), pages...)
 	return writeRoutePDF(output)
 }
 

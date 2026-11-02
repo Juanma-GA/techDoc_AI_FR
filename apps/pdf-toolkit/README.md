@@ -29,6 +29,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Extraire des pages avec des sélections comme `1`, `1-5`, `1,3,7` ou `2-4,8` vers `extract.pdf`.
 - Découper un PDF en plusieurs documents téléchargés dans un dossier ZIP. Découpage simple : un document toutes les N pages ou par plages personnalisées (`1-4 ; 5-8 ; 9-12`, un PDF par plage ; retour à la ligne également accepté, virgules pour réunir des pages dans un même PDF), fichiers numérotés `<nom>_01.pdf`, `<nom>_02.pdf`… Le panneau repliable « Découpage avancé » (« Advanced split ») regroupe le découpage par valeur : tableau pages / valeur, modèle de nom, collage `pages;valeur` depuis Excel et détection automatique (relancée à l'export si la zone ou les réglages ont changé) : l'utilisateur trace une zone sur l'aperçu (ou la saisit en %, décimales libres), ou cherche sur la page entière, et choisit le type de valeur (texte, nombre, code/référence, expression régulière) ; un nouveau document commence à chaque changement de valeur, ou les pages de même valeur sont regroupées. Les noms suivent un modèle paramétrable avec les balises `{valeur}`, `{n}`, `{pages}` et `{nom}` (ex. `DOC_{valeur}_rev1`), nettoyés et dédoublonnés. La lecture de zone se fait dans le navigateur et exige un PDF avec couche texte (pas d'OCR pour les scans). La progression affiche le nombre de PDF extraits puis ajoutés au ZIP.
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
+- Insérer des pages d'un PDF source A dans un PDF de destination B vers `inserted.pdf` : sélection des pages de A (vide = toutes, ordre saisi conservé, par exemple `5,1-3`) et position dans B (au début, après une page donnée ou à la fin). Les nombres de pages sont lus dans le navigateur pour valider la saisie avant l'envoi.
 - Découper par signets dans le découpage simple : choisir le niveau (niveau 1 par défaut, sinon premier niveau utilisable). Chaque signet commence un PDF jusqu'à la page précédant le suivant, dans l'ordre des pages ; les pages avant le premier signet sont conservées séparément. Les signets sur une même page ne créent qu'une coupure, avec le premier titre. Les titres donnent les noms des fichiers, nettoyés et dédoublonnés ; les sections sans titre utilisent un nom numéroté. Les signets externes ou sans destination utilisable sont signalés et ignorés. La lecture se fait dans le navigateur, sans OCR ; un PDF sans signets utilisables nécessite un autre mode.
 - Réorganiser toutes les pages par glisser-déposer de miniatures vers `reordered.pdf`.
 - Faire pivoter toutes les pages ou une sélection vers `rotated.pdf`, de 90°, 180° ou 270° dans le sens horaire ; l'aperçu affiche la première page concernée.
@@ -36,14 +37,14 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Renommer les fichiers exportés (et le dossier/ZIP de découpage) depuis chaque onglet. Au lancement de l'export, le sélecteur « Enregistrer sous » permet de choisir le nom et l'emplacement ; si le navigateur ne le prend pas en charge, le téléchargement standard est utilisé.
 - En mode bureau Tauri, les PDF intermédiaires du découpage apparaissent dans le dossier du ZIP pendant le traitement, puis sont supprimés après création de l’archive ou en cas d’échec. Le ZIP choisi reste le seul résultat.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
-- Shell et thème visuel repris de `apps/_template` et `packages/ui` : dix onglets, modes clair/sombre et interface française/anglaise.
+- Shell et thème visuel repris de `apps/_template` et `packages/ui` : onze onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
 ```text
 frontend/
   src/App.tsx
-  src/features/{merge,compress,extract,split,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
+  src/features/{merge,compress,extract,split,insert,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
   src/shared
   src/locales/{fr,en}.json
 backend/
@@ -186,6 +187,7 @@ Toutes les réponses de traitement réussies sont des téléchargements `applica
 | `POST` | `/api/v1/extract` | `file`, `pages` | `extract.pdf` |
 | `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 5000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |
 | `POST` | `/api/v1/delete` | `file`, `pages` | `trimmed.pdf` |
+| `POST` | `/api/v1/insert` | `files` ×2 (destination B puis source A), `pages` (facultatif, ordre conservé), `after` (0 à nombre de pages de B) | `inserted.pdf` |
 | `POST` | `/api/v1/reorder` | `file`, `order` (tableau JSON de pages 1-based) | `reordered.pdf` |
 | `POST` | `/api/v1/rotate` | `file`, `rotation` (90, 180 ou 270), `pages` (facultatif; vide pour toutes les pages) | `rotated.pdf` |
 

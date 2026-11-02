@@ -138,6 +138,17 @@ func assertPageCount(t *testing.T, processor *PDFCPU, file string, want int) {
 
 func testPDF(t *testing.T, pageCount int) []byte {
 	t.Helper()
+	widths := make([]int, pageCount)
+	for index := range widths {
+		widths[index] = 612
+	}
+	return testPDFWithWidths(t, widths...)
+}
+
+// testPDFWithWidths builds one page per width so tests can identify pages after reordering.
+func testPDFWithWidths(t *testing.T, widths ...int) []byte {
+	t.Helper()
+	pageCount := len(widths)
 	var output bytes.Buffer
 	output.WriteString("%PDF-1.7\n")
 	offsets := []int{0}
@@ -155,7 +166,7 @@ func testPDF(t *testing.T, pageCount int) []byte {
 	}
 	writeObject(2, fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), pageCount))
 	for page := 1; page <= pageCount; page++ {
-		writeObject(page+2, fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>"))
+		writeObject(page+2, fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d 792] /Resources << >> >>", widths[page-1]))
 	}
 
 	xrefOffset := output.Len()

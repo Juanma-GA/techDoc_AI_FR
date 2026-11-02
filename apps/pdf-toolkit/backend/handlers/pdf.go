@@ -36,6 +36,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/compress", h.Compress)
 	router.POST("/extract", h.Extract)
 	router.POST("/delete", h.Delete)
+	router.POST("/insert", h.Insert)
 	router.POST("/reorder", h.Reorder)
 	router.POST("/rotate", h.Rotate)
 	router.POST("/split", h.Split)
@@ -158,6 +159,49 @@ func (h *PDFHandler) Delete(c *gin.Context) {
 		return
 	}
 	h.sendPDF(c, output, "trimmed.pdf")
+}
+
+func (h *PDFHandler) Insert(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	// files[0] is the target document (B), files[1] the source of the inserted pages (A).
+	upload, err := parseMultipart(c.Request, tempDir, "files", 0, "pages", "after")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) != 2 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez le PDF de destination puis le PDF source.")
+		return
+	}
+	selection, err := optionalSingleField(upload.fields, "pages")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	rawAfter, err := singleField(upload.fields, "after")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	after, err := strconv.Atoi(rawAfter)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "La position d'insertion est invalide.")
+		return
+	}
+
+	output := filepath.Join(tempDir, "inserted.pdf")
+	if err := h.service.InsertPages(
+		c.Request.Context(), upload.files[0].path, upload.files[1].path, output, selection, after,
+	); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	h.sendPDF(c, output, "inserted.pdf")
 }
 
 func (h *PDFHandler) Reorder(c *gin.Context) {

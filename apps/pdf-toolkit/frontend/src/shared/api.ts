@@ -113,6 +113,7 @@ export async function processPDF(
     | "compress"
     | "extract"
     | "delete"
+    | "insert"
     | "reorder"
     | "rotate"
     | "signature",
