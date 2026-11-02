@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.errors import AppError
+from app.core.fs import atomic_output_path, atomic_write_bytes
 from app.core.pdf_cut_scoring import dmrl_data_module_titles
 from app.core.pdf_cut_scoring import score_page as _score_page
 from app.db.models import Document
@@ -135,6 +136,20 @@ def preview_page(doc: Document, page_number: int) -> bytes:
         source.close()
 
 
+def previews_dir(doc: Document) -> Path:
+    return Path(doc.storage_path).parent / f"document_{doc.id}_previews"
+
+
+def preview_path(doc: Document, page_number: int) -> Path:
+    if page_number < 1:
+        raise AppError("PDF_PAGE_INVALID", "Numero de page invalide.", 422)
+    stat = Path(doc.storage_path).stat()
+    path = previews_dir(doc) / f"{stat.st_mtime_ns}_{stat.st_size}" / f"page_{page_number}_z15.png"
+    if not path.is_file():
+        atomic_write_bytes(path, preview_page(doc, page_number))
+    return path
+
+
 def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -> str:
     path = Path(doc.storage_path)
     source = fitz.open(str(path))
@@ -145,12 +160,13 @@ def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -
         selected_end_page = total_pages if end_page is None else end_page
         if not 1 <= selected_end_page <= total_pages or start_page > selected_end_page:
             raise AppError("PDF_PAGE_INVALID", "La plage de pages est invalide.", 422)
-        output = Path(settings.storage_dir) / f"document_{doc.id}_cut.pdf"
+        output = Path(doc.storage_path).parent / f"document_{doc.id}_cut.pdf"
         output.parent.mkdir(parents=True, exist_ok=True)
         cut = fitz.open()
         try:
             cut.insert_pdf(source, from_page=start_page - 1, to_page=selected_end_page - 1)
-            cut.save(str(output))
+            with atomic_output_path(output) as temporary:
+                cut.save(str(temporary))
         finally:
             cut.close()
     finally:

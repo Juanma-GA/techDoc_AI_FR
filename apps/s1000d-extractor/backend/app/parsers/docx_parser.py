@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import structlog
 from docx import Document
 from docx.oxml.ns import qn
 from docx.table import Table
@@ -20,6 +21,7 @@ from docx.text.paragraph import Paragraph
 from app.core.ir import InlineRun, RawBlock
 
 _HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.IGNORECASE)
+log = structlog.get_logger(__name__)
 
 
 def _heading_level(style_name: str) -> int | None:
@@ -42,7 +44,8 @@ def _numbering_map(doc: Document) -> dict[tuple[str, str], str]:
     try:
         num_part = doc.part.numbering_part
         root = num_part.element
-    except Exception:
+    except (KeyError, NotImplementedError, ValueError, OSError) as exc:
+        log.warning("docx_numbering_unavailable", error_type=type(exc).__name__, exc_info=True)
         return out
 
     abstract_fmt: dict[str, dict[str, str]] = {}

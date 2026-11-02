@@ -79,12 +79,13 @@ def score_page(text: str, title: str) -> tuple[float, list[str]]:
             score += 70
             reasons.append("dmrl_title_prefix")
         elif title_match:
+            # A DMRL title in body text should beat a generic score on the next page.
             score += (45 + 80) if any(
                 _NUMBERED_SECTION.search(line)
                 and not _TOC_LINE.search(line)
                 and normalized_title in normalized
                 for line, normalized in zip(lines, normalized_lines, strict=True)
-            ) else 45
+            ) else 65
             reasons.append("dmrl_title_contains")
 
     if any(_CHAPTER.search(line) for line in lines):

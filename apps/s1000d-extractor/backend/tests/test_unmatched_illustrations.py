@@ -34,7 +34,7 @@ def test_image_without_figure_caption_is_saved_as_pictogram(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=[chapter])
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 2
     pictograms = [node for node in root.walk() if node.is_pictogram]
 
     assert figure.icn == "figure-1-overview.jpg"

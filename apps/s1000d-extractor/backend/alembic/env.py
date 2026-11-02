@@ -12,7 +12,8 @@ from app.db import models  # noqa: F401  — register tables on Base.metadata
 from app.db.session import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+database_url = config.attributes.get("database_url", settings.database_url)
+config.set_main_option("sqlalchemy.url", str(database_url).replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

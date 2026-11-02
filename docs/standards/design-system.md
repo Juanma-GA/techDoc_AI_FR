@@ -137,6 +137,7 @@ All primitives come from `@internal/ui`, use tokens only, support both themes an
 |---|---|---|
 | Page title + description + actions | `PageHeader` | Orbitron title (`text-page-title`), optional `eyebrow`, actions wrap on mobile. Keeps the legacy `page-header` class names. |
 | Labeled form control | `FormField` | Wires `htmlFor`/`id`, `aria-describedby` (hint/error), `aria-invalid`, `aria-required`; sets `state="error"` on `Input`/`Select`/`Textarea`. |
+| Themed single choice menu | `SelectMenu` | Popover listbox using design tokens; use when native `<option>` popup colors are not themeable. Supports click and keyboard selection. |
 | Optional or advanced block | `CollapsibleSection` | Disclosure button with `aria-expanded`/`aria-controls`; controlled or uncontrolled. |
 | LLM / Mistral settings (profile `llm`) | `LlmSettingsPanel` | Collapsible (open until a key is configured, collapsed afterwards), status badge + LLM switch visible even collapsed, write-only key (sent only when typed, cleared after a successful save), base URL, configurable model fields (`modelFields`: `chat`, `embed`, `vision`, `ocr`; `optionalModelFields`), provider models from the connection test offered via `datalist` (free text kept), feedback `Alert`, unreadable-key warning, and `children` for app-specific LLM options. Presentational: the app keeps its queries/mutations and invalidates `health`. |
 | Operating mode card (demo) | `DemoModeSettingsCard` | Title, hint, `DemoModeSelector`, save error. The app persists `demo_enabled`. |
@@ -145,6 +146,7 @@ All primitives come from `@internal/ui`, use tokens only, support both themes an
 | Tabular data | `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableCaption` | Scroll container with border; `data-state="selected"` rows use `brand.soft`. |
 | Hint on hover/focus | `Tooltip` (or `TooltipRoot`/`TooltipTrigger`/`TooltipContent`) | Child must be focusable; icon-only buttons still need `aria-label`. |
 | Loading placeholder | `Skeleton` | `aria-hidden`; respects `prefers-reduced-motion`. Pair with a `role="status"` label for screen readers. |
+| Determinate task progress | `ProgressBar` | Tokenized track and fill, clamped 0–100 value, visible label/percentage and accessible `role="progressbar"`. |
 | Empty list | `EmptyState` | |
 | Blocking action confirmation | `Dialog` | Never `alert()`/`confirm()`. |
 | Transient feedback | `Toast` | Opaque card with a colored left edge per variant. |

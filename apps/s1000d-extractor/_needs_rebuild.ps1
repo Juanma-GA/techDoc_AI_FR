@@ -18,6 +18,7 @@ $distTime = (Get-Item $dist).LastWriteTime
 # 'pnpm build' explicite ou supprime dist.
 $roots = @(
     (Join-Path $FrontendDir 'src'),
+    (Join-Path $FrontendDir 'public'),
     (Join-Path $FrontendDir 'index.html'),
     (Join-Path $FrontendDir 'package.json'),
     (Join-Path $FrontendDir 'vite.config.ts'),

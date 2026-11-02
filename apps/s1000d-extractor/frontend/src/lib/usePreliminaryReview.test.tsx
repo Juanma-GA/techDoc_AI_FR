@@ -14,6 +14,12 @@ vi.mock("./preliminaryApi", () => ({
   preliminaryApi: { save: vi.fn(), read: vi.fn() },
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+  }),
+}));
+
 const initial: PreliminaryState = {
   revision: 1, active_dm_id: "proc", source_format: "docx", source_changed: false,
   reviews: { proc: {

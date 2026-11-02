@@ -7,12 +7,156 @@ Bug 2 : duplication des illustrations.
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from app.core import xml_safe
 from app.core.ir import IRNode
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
 from app.core.wizard import images_dir
+
+
+@pytest.mark.parametrize("operation", ["delete", "reset"])
+def test_commit_failure_preserves_document_files(client, pdf_bytes, monkeypatch, operation) -> None:
+    from app.api.admin import _reset_documents
+    from app.api.extract import delete_document
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload(client, pdf_bytes)
+    with SessionLocal() as db:
+        doc = db.get(Document, doc_id)
+        source = Path(doc.storage_path)
+        directory = images_dir(doc.id, root=source.parent)
+        directory.mkdir(parents=True, exist_ok=True)
+        image = directory / "old.jpg"
+        image.write_bytes(b"synthetic illustration")
+
+        def fail_commit():
+            raise RuntimeError("Synthetic commit failure")
+
+        monkeypatch.setattr(db, "commit", fail_commit)
+        with pytest.raises(RuntimeError, match="Synthetic commit failure"):
+            if operation == "delete":
+                delete_document(doc_id, confirm_token="confirmed-token", db=db)
+            else:
+                _reset_documents(db, scope="documents")
+        db.rollback()
+        assert db.get(Document, doc_id) is not None
+        assert source.read_bytes() == pdf_bytes
+        assert image.read_bytes() == b"synthetic illustration"
+
+
+@pytest.mark.parametrize("failure", ["reported", "raised"])
+def test_failed_illustration_rebuild_keeps_previous_images_and_ir(tmp_path, monkeypatch, failure) -> None:
+    from types import SimpleNamespace
+
+    from app.core import illustrations, wizard
+    from app.core.ir import to_dict
+
+    doc = SimpleNamespace(id="synthetic", storage_path=str(tmp_path / "source.pdf"), pdf_cut_path=None)
+    directory = images_dir(doc.id, root=tmp_path)
+    directory.mkdir()
+    (directory / "old.jpg").write_bytes(b"previous")
+    root = IRNode(id="root", kind="section", children=[
+        IRNode(id="figure", kind="figure", icn="old.jpg"),
+    ])
+    before = to_dict(root)
+
+    def fail_extract(staged_root, *, out_dir, **_kwargs):
+        (out_dir / "new.jpg").write_bytes(b"partial")
+        staged_root.children[0].icn = "new.jpg"
+        if failure == "raised":
+            raise RuntimeError("Synthetic extraction failure")
+        return illustrations.IllustrationResult(saved_count=1, illustration_errors=1)
+
+    monkeypatch.setattr(illustrations, "attach_illustrations", fail_extract)
+    result = wizard._extract_illustrations(doc, root)
+    assert result.illustration_errors == 1
+    assert result.saved_count == 0
+    assert to_dict(root) == before
+    assert (directory / "old.jpg").read_bytes() == b"previous"
+    assert list(directory.iterdir()) == [directory / "old.jpg"]
+    assert list(tmp_path.iterdir()) == [directory]
+
+
+def test_wizard_reports_and_persists_illustration_errors(client, pdf_bytes_image, monkeypatch) -> None:
+    from app.core import illustrations
+
+    doc_id = _upload(client, pdf_bytes_image)
+    monkeypatch.setattr(
+        illustrations, "attach_illustrations",
+        lambda *_args, **_kwargs: illustrations.IllustrationResult(illustration_errors=2),
+    )
+    response = client.post(f"/api/v1/documents/{doc_id}/wizard/start")
+    assert response.status_code == 200, response.text
+    assert response.json()["illustration_errors"] == 2
+    assert client.get(f"/api/v1/documents/{doc_id}/wizard").json()["illustration_errors"] == 2
+
+
+def test_successful_illustration_rebuild_replaces_previous_directory(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.core import illustrations, wizard
+
+    doc = SimpleNamespace(id="synthetic", storage_path=str(tmp_path / "source.pdf"), pdf_cut_path=None)
+    directory = images_dir(doc.id, root=tmp_path)
+    directory.mkdir()
+    (directory / "old.jpg").write_bytes(b"previous")
+    root = IRNode(id="root", kind="section", children=[IRNode(id="figure", kind="figure")])
+
+    def extract(staged_root, *, out_dir, **_kwargs):
+        (out_dir / "new.jpg").write_bytes(b"new")
+        staged_root.children[0].icn = "new.jpg"
+        return illustrations.IllustrationResult(saved_count=1)
+
+    monkeypatch.setattr(illustrations, "attach_illustrations", extract)
+    result = wizard._extract_illustrations(doc, root)
+    assert result.saved_count == 1
+    assert result.illustration_errors == 0
+    assert root.children[0].icn == "new.jpg"
+    assert (directory / "new.jpg").read_bytes() == b"new"
+    assert list(directory.iterdir()) == [directory / "new.jpg"]
+    assert list(tmp_path.iterdir()) == [directory]
+
+
+@pytest.mark.parametrize("operation", ["delete", "reset"])
+def test_cleanup_failure_does_not_undo_committed_deletion(
+    client, pdf_bytes, monkeypatch, operation,
+) -> None:
+    import structlog
+    from structlog.testing import capture_logs
+
+    from app.api.admin import _reset_documents
+    from app.api.extract import delete_document
+    from app.core import fs
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload(client, pdf_bytes)
+    with SessionLocal() as db:
+        source = Path(db.get(Document, doc_id).storage_path)
+        unlink = Path.unlink
+
+        def fail_unlink(self, *args, **kwargs):
+            if self == source:
+                raise PermissionError("Synthetic locked file")
+            return unlink(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", fail_unlink)
+        with capture_logs() as logs:
+            monkeypatch.setattr(fs, "log", structlog.get_logger())
+            if operation == "delete":
+                result = delete_document(doc_id, confirm_token="confirmed-token", db=db)
+                assert result["status"] == "deleted"
+            else:
+                result = _reset_documents(db, scope="documents")
+                assert result.deleted["documents"] == 1
+        assert db.get(Document, doc_id) is None
+        assert source.exists()
+        assert any(item["event"] == "file_cleanup_failed" for item in logs)
 
 
 def _upload(client, data: bytes, name: str = "manual.pdf") -> str:
@@ -94,7 +238,7 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
     assert all(d["has_xml"] for d in state["dms"])
 
 
-def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
+def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     dmrl = [
         {"DMC": "DMC-PUMP-A-00-00-00-00A-040A-D", "Titre": "Description"},
@@ -105,12 +249,18 @@ def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
         files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
     )
     assert response.status_code == 200, response.text
-    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
-    for params in ({}, {"types": {}}, {"overrides": []}, {}):
-        response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)
-        assert response.status_code == 200, response.text
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False}
+    ).json()
+    assert state["step"] == "dmrl"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "split"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    if state["step"] == "preliminary":
+        state = complete_preliminary(doc_id, state)
+    assert state["step"] == "generate"
 
-    dm_id = response.json()["dms"][0]["dm_id"]
+    dm_id = state["dms"][0]["dm_id"]
     from app.db.models import Document
     from app.db.session import SessionLocal
 

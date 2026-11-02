@@ -17,7 +17,13 @@ export function DemoModeSettings() {
   const { mode, isReady } = useDemoMode();
   const modeMutation = useMutation({
     mutationFn: (enabled: boolean) => settingsApi.write({ demo_enabled: enabled }),
-    onSuccess: (settings) => queryClient.setQueryData(["settings"], settings),
+    onSuccess: async (settings) => {
+      await queryClient.cancelQueries();
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== "settings",
+      });
+      queryClient.setQueryData(["settings"], settings);
+    },
   });
 
   return (

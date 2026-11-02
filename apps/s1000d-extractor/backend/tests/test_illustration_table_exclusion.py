@@ -64,7 +64,7 @@ def test_table_illustration_is_not_exported_or_attached(
         pdf_path=str(pdf_path),
         out_dir=out_dir,
         doc_id="doc",
-    ) == int(reuse_image_outside_table)
+    ).saved_count == int(reuse_image_outside_table)
     if reuse_image_outside_table:
         assert figure.icn == "figure-7-1-separate-illustration.jpg"
         assert (out_dir / figure.icn).exists()

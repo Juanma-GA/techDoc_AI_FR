@@ -102,6 +102,7 @@
     "tabTable": "Tableau",
     "tabKpi": "Indicateurs",
     "tabLoading": "Chargement",
+    "progressLabel": "Analyse du document",
     "columnName": "Nom",
     "columnStatus": "Statut",
     "columnSize": "Taille",

@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { Alert, Badge } from "@internal/ui";
 
 import { getBrexRuleCoverage } from "../lib/brexCoverage";
 import type { BrexProfileDetail, BrexRule } from "../lib/api";
@@ -26,36 +27,36 @@ function supportReasonLabel(reason: string, t: TFunction) {
 
 function RuleItem({ rule }: { rule: BrexRule }) {
   const { t } = useTranslation();
-  const badgeClass = rule.support_status === "unsupported"
-    ? "warn"
+  const badgeVariant = rule.support_status === "unsupported"
+    ? "warning"
     : rule.support_status === "contextual"
       ? "info"
-      : "ok";
+      : "success";
   return (
-    <li className="brex-rule-item">
-      <div className="row">
-        <span className={`badge ${badgeClass}`}>
+    <li className="s1k-brex-rule-item">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={badgeVariant}>
           {t(`migration.brex.supportStatus.${rule.support_status}`)}
-        </span>
-        <span className="badge info">{flagLabel(rule.allowed_flag, t)}</span>
+        </Badge>
+        <Badge variant="info">{flagLabel(rule.allowed_flag, t)}</Badge>
         {rule.rule_id ? <code>{rule.rule_id}</code> : null}
       </div>
       <code
-        className="brex-rule-path"
-        style={{ display: "block", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
+        className="s1k-brex-rule-path block break-words whitespace-pre-wrap"
       >
         {rule.object_path}
       </code>
       {rule.support_reason ? (
-        <p className="label">{supportReasonLabel(rule.support_reason, t)}</p>
+        <p className="text-label font-mono uppercase text-fg-dim">
+          {supportReasonLabel(rule.support_reason, t)}
+        </p>
       ) : null}
       {rule.object_use ? <p>{rule.object_use}</p> : null}
       {rule.rules_context ? (
         <p>
-          <span className="label">{t("migration.brex.context")}: </span>
+          <span className="text-label font-mono uppercase text-fg-dim">{t("migration.brex.context")}: </span>
           <code
-            className="brex-rule-path"
-            style={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
+            className="s1k-brex-rule-path break-words whitespace-pre-wrap"
           >
             {rule.rules_context}
           </code>
@@ -63,7 +64,9 @@ function RuleItem({ rule }: { rule: BrexRule }) {
       ) : null}
       {rule.object_values.length ? (
         <div>
-          <span className="label">{t("migration.brex.allowedValues")}</span>
+          <span className="text-label font-mono uppercase text-fg-dim">
+            {t("migration.brex.allowedValues")}
+          </span>
           <ul>
             {rule.object_values.map((value, index) => (
               <li key={`${value.value_allowed}-${index}`}>
@@ -81,23 +84,23 @@ export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
   const { t } = useTranslation();
   const coverage = getBrexRuleCoverage(profile);
   return (
-    <div className="brex-rules-preview">
-      <div className="label">
+    <div className="s1k-brex-rules-preview">
+      <div className="text-label font-mono uppercase text-fg-dim">
         {profile.dmc} — {t("migration.upload.issueValue", { issue: profile.s1000d_issue })}
       </div>
       <details>
         <summary>{t("migration.brex.rulesSummary", { count: coverage.total })}</summary>
-        <div className="brex-rule-list">
-          <div className="row" role="status">
-            <span className="badge ok">
+        <div className="s1k-brex-rule-list">
+          <div className="flex flex-wrap items-center gap-2" role="status">
+            <Badge variant="success">
               {t("migration.brex.coverageAutomatic", { count: coverage.automatic })}
-            </span>
-            <span className="badge info">
+            </Badge>
+            <Badge variant="info">
               {t("migration.brex.coverageContextual", { count: coverage.contextual })}
-            </span>
-            <span className={`badge ${coverage.unsupported ? "warn" : "ok"}`}>
+            </Badge>
+            <Badge variant={coverage.unsupported ? "warning" : "success"}>
               {t("migration.brex.coverageUnsupported", { count: coverage.unsupported })}
-            </span>
+            </Badge>
           </div>
           {profile.rules.length ? (
             <ul>
@@ -106,10 +109,12 @@ export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
               ))}
             </ul>
           ) : (
-            <p className="label">{t("migration.brex.noStructuredRules")}</p>
+            <p className="text-label font-mono uppercase text-fg-dim">
+              {t("migration.brex.noStructuredRules")}
+            </p>
           )}
           {profile.unsupported_rules.length ? (
-            <div className="banner warn" role="note">
+            <Alert variant="warning" role="note">
               <div>
                 {t("migration.brex.unsupportedCount", {
                   count: profile.unsupported_rules.length,
@@ -124,7 +129,7 @@ export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
                   </li>
                 ))}
               </ul>
-            </div>
+            </Alert>
           ) : null}
         </div>
       </details>

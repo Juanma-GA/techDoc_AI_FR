@@ -11,9 +11,10 @@ Aucune ressource n'est obligatoire : absente, l'etape est simplement sautee
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+import structlog
 
 from app.core import brex_rules as brex_rules_mod
 from app.core import cir as cir_mod
@@ -23,7 +24,7 @@ from app.core.dmrl import DmrlEntry, entry_from_dict
 from app.core.dmrl_rules import data_module_entries, is_pm_title
 from app.db.models import Document
 
-log = logging.getLogger("s1000d_extractor.resources")
+log = structlog.get_logger("s1000d_extractor.resources")
 
 
 @dataclass
@@ -90,7 +91,7 @@ def _safe(fn, default, label: str, errors: list[str]):
     try:
         return fn()
     except Exception as exc:
-        log.warning("ressource %s ignoree : %s", label, exc)
+        log.warning("resource_load_failed", resource=label, error_type=type(exc).__name__, exc_info=True)
         errors.append(f"{label} : {exc}")
         return default
 
