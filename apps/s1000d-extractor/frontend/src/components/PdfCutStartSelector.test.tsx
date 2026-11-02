@@ -1,5 +1,7 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+// @vitest-environment jsdom
+
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PdfCutDetection } from "../lib/api";
@@ -14,7 +16,7 @@ vi.mock("react-i18next", () => ({
 import { PdfCutStartSelector } from "./PdfCutStartSelector";
 
 describe("PDF start selector", () => {
-  it("offers only the detected DM titles and retains manual page selection", () => {
+  it("offers only the detected DM titles and retains manual page selection", async () => {
     const detection: PdfCutDetection = {
       validation_required: true,
       selected_page: null,
@@ -24,25 +26,42 @@ describe("PDF start selector", () => {
       dmrl_titles: ["Hydraulic system", "Pump assembly"],
       candidates: [],
     };
-    const markup = renderToStaticMarkup(
-      createElement(PdfCutStartSelector, {
+    Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true, configurable: true });
+    const onTitleChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(PdfCutStartSelector, {
         docId: "doc-id",
         detection,
         selectedTitle: "Hydraulic system",
         startPage: 2,
         endPage: 10,
         busy: false,
-        onTitleChange: vi.fn(),
+        onTitleChange,
         onDetect: vi.fn(),
         onStartPageChange: vi.fn(),
         onEndPageChange: vi.fn(),
         onConfirm: vi.fn(),
-      }),
-    );
+      })));
 
-    expect(markup).toContain("Hydraulic system");
-    expect(markup).toContain("Pump assembly");
-    expect(markup).toContain('value="2"');
-    expect(markup).toContain("migration.upload.pdfCut.detectWithTitle");
+      expect(container.textContent).toContain("Hydraulic system");
+      expect(container.querySelector<HTMLInputElement>('input[name="startPage"]')?.value).toBe("2");
+      expect(container.textContent).toContain("migration.upload.pdfCut.detectWithTitle");
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')?.click();
+      });
+      expect([...document.body.querySelectorAll('[role="option"]')]
+        .map((option) => option.textContent?.trim())).toEqual(["Hydraulic system", "Pump assembly"]);
+      await act(async () => {
+        [...document.body.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+          .find((option) => option.textContent?.trim() === "Pump assembly")?.click();
+      });
+      expect(onTitleChange).toHaveBeenCalledWith("Pump assembly");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 });

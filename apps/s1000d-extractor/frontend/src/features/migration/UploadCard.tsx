@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select } from "@internal/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, SelectMenu } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { BrexProfileControl } from "../../components/BrexProfileControl";
 import type { MigrationInputs } from "./useMigrationInputs";
@@ -49,14 +49,25 @@ export function UploadCard({ inputs, wizard }: { inputs: MigrationInputs; wizard
         <label className="block space-y-2">
           <span>{t("migration.upload.issue")}</span>
           <Controller control={control} name="issue" render={({ field }) =>
-            <Select {...field} aria-label={t("migration.upload.issue")} disabled={disabled} options={["4.2", "4.1"].map((issue) => ({
-              value: issue, label: t("migration.upload.issueValue", { issue }),
-            }))} onChange={(event) => {
-              field.onChange(event.target.value);
-              if (event.target.value === "4.1" || event.target.value === "4.2") {
-                inputs.setIssue(event.target.value);
-              }
-            }} />} />
+            <SelectMenu
+              id={field.name}
+              name={field.name}
+              ref={field.ref}
+              label={t("migration.upload.issue")}
+              value={field.value}
+              onBlur={field.onBlur}
+              disabled={disabled}
+              options={["4.2", "4.1"].map((issue) => ({
+                value: issue, label: t("migration.upload.issueValue", { issue }),
+              }))}
+              onValueChange={(issue) => {
+                field.onChange(issue);
+                if (issue === "4.1" || issue === "4.2") {
+                  inputs.setIssue(issue);
+                }
+              }}
+            />
+          } />
           {formState.errors.issue ? <span role="alert" className="text-danger">
             {t("migration.ui.invalidIssue")}
           </span> : null}

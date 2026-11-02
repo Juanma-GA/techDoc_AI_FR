@@ -1,4 +1,4 @@
-import { Button, Card, CardContent, Checkbox, Select } from "@internal/ui";
+import { Button, Card, CardContent, Checkbox, SelectMenu } from "@internal/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -140,9 +140,9 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
         {review.state.source_changed ? <p className="text-warning">{t("preliminary.sourceChanged")}</p> : null}
         <label className="block">
           <span>{t("preliminary.procedure")}</span>
-          <Select aria-label={t("preliminary.procedure")} value={active} disabled={disabled}
+          <SelectMenu label={t("preliminary.procedure")} value={active} disabled={disabled}
             options={procedures.map((dm) => ({ value: dm.dm_id, label: dm.title }))}
-            onChange={(event) => void changeProcedure(event.target.value)} />
+            onValueChange={(value) => void changeProcedure(value)} />
         </label>
         <div className="flex gap-3 flex-wrap">
           <Button variant="secondary" disabled={disabled || index <= 0}
@@ -180,10 +180,10 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
               <section className="min-w-0 space-y-3" aria-label={t("preliminary.classification")}>
                 <label className="block">
                   <span>{t("preliminary.filter")}</span>
-                  <Select aria-label={t("preliminary.filter")} value={filter}
+                  <SelectMenu label={t("preliminary.filter")} value={filter}
                     options={["all", "pending", ...reviewDestinations].map((value) => ({
                       value, label: t(`preliminary.category.${value}`),
-                    }))} onChange={(event) => setFilter(event.target.value)} />
+                    }))} onValueChange={setFilter} />
                 </label>
                 <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
                 <div data-testid="passage-list" className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">

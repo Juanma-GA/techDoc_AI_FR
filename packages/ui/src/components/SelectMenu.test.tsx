@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SelectMenu } from "./SelectMenu";
@@ -69,5 +70,36 @@ describe("SelectMenu", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(onValueChange).not.toHaveBeenCalled();
     expect(trigger).toHaveFocus();
+  });
+
+  it("forwards the form ref, blur event, and accessibility attributes", () => {
+    const ref = createRef<HTMLButtonElement>();
+    const onBlur = vi.fn();
+    render(
+      <>
+        <SelectMenu
+          ref={ref}
+          name="issue"
+          label="Issue"
+          value="4.2"
+          options={[{ value: "4.2", label: "Issue 4.2" }]}
+          onValueChange={vi.fn()}
+          onBlur={onBlur}
+          aria-describedby="issue-help"
+          aria-required="true"
+          aria-invalid="true"
+        />
+        <span id="issue-help">Choose an issue</span>
+      </>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Issue" });
+    expect(ref.current).toBe(trigger);
+    expect(trigger).toHaveAttribute("aria-describedby", "issue-help");
+    expect(trigger).toHaveAttribute("aria-required", "true");
+    expect(trigger).toHaveAttribute("aria-invalid", "true");
+    expect(document.querySelector<HTMLInputElement>('input[name="issue"]')?.value).toBe("4.2");
+    fireEvent.blur(trigger);
+    expect(onBlur).toHaveBeenCalledOnce();
   });
 });

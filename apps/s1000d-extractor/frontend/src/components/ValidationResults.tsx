@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
-  Select,
+  SelectMenu,
 } from "@internal/ui";
 
 import type {
@@ -203,12 +203,12 @@ export function ValidationResults({
                         </td>
                         <td>
                           {item.status === "needs_issue" ? (
-                            <Select
-                              className="s1k-validation-issue-select"
+                            <SelectMenu
+                              triggerClassName="s1k-validation-issue-select"
                               value={item.issue ?? ""}
-                              aria-label={t("validation.chooseIssueFor", { filename: item.displayName })}
-                              onChange={(event) => {
-                                if (event.target.value) onChooseIssue(item, event.target.value);
+                              label={t("validation.chooseIssueFor", { filename: item.displayName })}
+                              onValueChange={(issue) => {
+                                if (issue) onChooseIssue(item, issue);
                               }}
                               options={[
                                 { value: "", label: t("validation.chooseIssue") },
