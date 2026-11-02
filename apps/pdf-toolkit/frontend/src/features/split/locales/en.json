@@ -11,7 +11,6 @@
     "stepFileDescription": "Choose the document to split.",
     "pageCount_one": "{{count}} page",
     "pageCount_other": "{{count}} pages",
-    "privacy": "The area is read in the browser; splitting runs locally and the temporary workspace is then deleted.",
     "stepValues": "Define the values",
     "stepValuesDescription": "Enter a pages / value table, paste a list or let the tool read the value from an area of each page.",
     "advancedToggle": "Advanced split",

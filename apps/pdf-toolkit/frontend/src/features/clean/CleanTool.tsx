@@ -111,7 +111,6 @@ export function CleanTool() {
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("clean.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

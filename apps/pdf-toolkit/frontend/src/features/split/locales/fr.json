@@ -11,7 +11,6 @@
     "stepFileDescription": "Choisissez le document à découper.",
     "pageCount_one": "{{count}} page",
     "pageCount_other": "{{count}} pages",
-    "privacy": "La lecture de la zone se fait dans le navigateur ; le découpage est traité localement puis l'espace temporaire est supprimé.",
     "stepValues": "Définir les valeurs",
     "stepValuesDescription": "Saisissez un tableau pages / valeur, collez une liste ou laissez l'outil lire la valeur dans une zone de chaque page.",
     "advancedToggle": "Découpage avancé",

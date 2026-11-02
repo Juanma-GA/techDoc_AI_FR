@@ -140,7 +140,6 @@ export function ChangePasswordTool() {
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("protect.changePrivacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

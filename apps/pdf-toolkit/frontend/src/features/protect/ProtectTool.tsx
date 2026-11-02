@@ -179,7 +179,6 @@ function ProtectPDFForm() {
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("protect.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

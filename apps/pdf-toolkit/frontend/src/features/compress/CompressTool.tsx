@@ -111,7 +111,6 @@ export function CompressTool() {
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("compress.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

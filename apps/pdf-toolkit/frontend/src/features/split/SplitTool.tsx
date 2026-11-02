@@ -168,7 +168,6 @@ export function SplitTool() {
               </Button>
             </div>
           ) : null}
-          <p className="privacy-hint">{t("split.privacy")}</p>
           {document.error === "split.documentFailed" ? (
             <p className="feedback feedback-error" role="alert">{t(document.error)}</p>
           ) : null}

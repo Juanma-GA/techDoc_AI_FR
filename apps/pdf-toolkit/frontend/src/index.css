@@ -299,13 +299,6 @@ a {
   color: var(--danger);
 }
 
-.privacy-hint {
-  margin: 14px 0 0;
-  color: var(--color-text-dim);
-  font-size: 0.72rem;
-  line-height: 1.6;
-}
-
 .action-panel {
   display: flex;
   flex-direction: column;
