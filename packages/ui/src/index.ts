@@ -24,6 +24,7 @@ export {
   type SelectProps,
 } from "./components/Select";
 export { SelectMenu, type SelectMenuProps } from "./components/SelectMenu";
+export { ProgressBar, type ProgressBarProps } from "./components/ProgressBar";
 export { Spinner, type SpinnerProps } from "./components/Spinner";
 export { Switch, type SwitchProps } from "./components/Switch";
 export {

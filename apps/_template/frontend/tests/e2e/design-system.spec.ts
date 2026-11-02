@@ -37,6 +37,10 @@ for (const theme of THEMES) {
 
         const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
         expect(isDark).toBe(theme === "dark");
+        await page.getByRole("tab").nth(2).click();
+        await expect(page.getByRole("progressbar", {
+          name: language === "fr" ? "Analyse du document" : "Document analysis",
+        })).toHaveAttribute("aria-valuenow", "42");
 
         // Self-hosted faces are really loaded (no CDN, no silent system fallback).
         const loadedFamilies = await page.evaluate(async () => {

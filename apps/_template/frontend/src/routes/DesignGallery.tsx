@@ -15,6 +15,7 @@ import {
   KpiCard,
   LlmSettingsPanel,
   PageHeader,
+  ProgressBar,
   SelectMenu,
   Skeleton,
   Switch,
@@ -232,6 +233,7 @@ export function DesignGallery() {
           </TabsContent>
           <TabsContent value="loading">
             <div className="flex flex-col gap-2">
+              <ProgressBar value={42} label={t("design.progressLabel")} />
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-24 w-full rounded-lg" />

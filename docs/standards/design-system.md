@@ -146,6 +146,7 @@ All primitives come from `@internal/ui`, use tokens only, support both themes an
 | Tabular data | `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableCaption` | Scroll container with border; `data-state="selected"` rows use `brand.soft`. |
 | Hint on hover/focus | `Tooltip` (or `TooltipRoot`/`TooltipTrigger`/`TooltipContent`) | Child must be focusable; icon-only buttons still need `aria-label`. |
 | Loading placeholder | `Skeleton` | `aria-hidden`; respects `prefers-reduced-motion`. Pair with a `role="status"` label for screen readers. |
+| Determinate task progress | `ProgressBar` | Tokenized track and fill, clamped 0–100 value, visible label/percentage and accessible `role="progressbar"`. |
 | Empty list | `EmptyState` | |
 | Blocking action confirmation | `Dialog` | Never `alert()`/`confirm()`. |
 | Transient feedback | `Toast` | Opaque card with a colored left edge per variant. |
