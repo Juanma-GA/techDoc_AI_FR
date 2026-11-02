@@ -21,7 +21,7 @@
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   font-size: 0.9rem;
 }
 
@@ -113,7 +113,7 @@
 .comparison-difference-detail h3,
 .comparison-difference-detail h4 {
   margin: 0 0 8px;
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   font-size: 0.85rem;
 }
 
@@ -152,7 +152,7 @@
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 

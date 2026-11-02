@@ -16,9 +16,6 @@
     "tauri:build": "node scripts/prepare-desktop.mjs build && tauri build"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.1.0",
-    "@fontsource/jetbrains-mono": "^5.1.1",
-    "@fontsource/orbitron": "^5.1.0",
     "@hookform/resolvers": "^3.9.0",
     "@internal/design-tokens": "workspace:*",
     "@internal/ui": "workspace:*",

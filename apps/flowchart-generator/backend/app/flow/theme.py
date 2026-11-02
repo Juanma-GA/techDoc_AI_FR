@@ -63,7 +63,8 @@ def palette() -> dict[str, tuple[int, int, int]]:
     except (OSError, ValueError, KeyError):
         return pal
     mapping = {
-        "bg": light["bg"]["base"],
+        # Printable pages keep a white background: the light app background is tinted.
+        "bg": light["card"]["base"],
         "panel": light["card"]["hover"],
         "text": light["text"]["base"],
         "dim": light["text"]["dim"],

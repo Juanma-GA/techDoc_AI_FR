@@ -302,7 +302,7 @@ export function TemplateFillPreviewModal({
               <h3
                 style={{
                   marginTop: 0,
-                  fontFamily: "'Orbitron',sans-serif",
+                  fontFamily: "var(--font-display)",
                   fontSize: "0.9rem",
                 }}
               >

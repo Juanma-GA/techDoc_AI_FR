@@ -144,7 +144,7 @@ export function Settings() {
                   </label>
                 </div>
 
-                <p className="hint" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                <p className="hint" style={{ fontFamily: "var(--font-mono)" }}>
                   {mistral.data?.api_key_set
                     ? t("settings.mistral.keySet", { preview: mistral.data.api_key_preview })
                     : t("settings.mistral.keyMissing")}

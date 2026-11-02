@@ -87,7 +87,7 @@ export function FileDropzone({
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-md bg-card p-6 text-center transition-colors",
         "hover:border-bright hover:bg-card-hover",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         isDragOver && "border-bright bg-card-hover",
         disabled && "cursor-not-allowed opacity-50",
         className,

@@ -13,6 +13,8 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "check-standard": "bash scripts/check_standard.sh",
+    "tokens:build": "node design-tokens/scripts/build-theme.mjs",
+    "tokens:check": "node design-tokens/scripts/build-theme.mjs --check",
     "new:poc": "node scripts/new_poc.mjs",
     "sync:apps": "node scripts/sync_app_registry.mjs",
     "test:tooling": "node --test scripts/tests/*.test.mjs",

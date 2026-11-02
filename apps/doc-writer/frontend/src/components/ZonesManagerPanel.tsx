@@ -269,7 +269,7 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
       </div>
 
       {/* Apercu structure : SVG positionne pour PPTX, note + liste pour Word/PDF. */}
-      <h3 style={{ fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>
+      <h3 style={{ fontFamily: "var(--font-display)", fontSize: "0.95rem" }}>
         {t("zones.previewTitle")}
       </h3>
       <small style={{ display: "block", color: "var(--fg-dim)", fontSize: "0.78rem", marginBottom: 6 }}>
@@ -365,7 +365,7 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
       )}
 
       {/* Liste */}
-      <h3 style={{ marginTop: 18, fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>
+      <h3 style={{ marginTop: 18, fontFamily: "var(--font-display)", fontSize: "0.95rem" }}>
         {t("zones.listTitle")}
       </h3>
       <div className="row" style={{ marginBottom: 8, gap: 8 }}>
@@ -552,7 +552,7 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
       {/* Corbeille */}
       {removed.length > 0 ? (
         <>
-          <h3 style={{ marginTop: 18, fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>
+          <h3 style={{ marginTop: 18, fontFamily: "var(--font-display)", fontSize: "0.95rem" }}>
             {t("zones.removedTitle")}
           </h3>
           <small style={{ display: "block", color: "var(--fg-dim)", fontSize: "0.78rem", marginBottom: 6 }}>
@@ -585,7 +585,7 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
       ) : null}
 
       {/* Ajouter */}
-      <h3 style={{ marginTop: 18, fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>
+      <h3 style={{ marginTop: 18, fontFamily: "var(--font-display)", fontSize: "0.95rem" }}>
         {t("zones.addTitle")}
       </h3>
       {availableShapes.length === 0 ? (
