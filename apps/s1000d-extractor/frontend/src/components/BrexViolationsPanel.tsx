@@ -13,10 +13,18 @@ function severityVariant(severity: DmValidationViolation["severity"]): "info" | 
   return severity === "info" ? "info" : "warning";
 }
 
+function reportableViolations(violations: DmValidationViolation[]): DmValidationViolation[] {
+  return violations.filter((violation) => violation.severity === "error");
+}
+
+export function hasBrexViolationsToShow({ hasProfile, isComplete, violations }: Props): boolean {
+  return hasProfile && isComplete && reportableViolations(violations).length > 0;
+}
+
 export function BrexViolationsPanel({ hasProfile, isComplete, violations }: Props) {
   const { t } = useTranslation();
-  const actualViolations = violations.filter((violation) => violation.severity === "error");
-  if (!hasProfile || !isComplete || !actualViolations.length) return null;
+  const actualViolations = reportableViolations(violations);
+  if (!hasBrexViolationsToShow({ hasProfile, isComplete, violations })) return null;
 
   const hasWarnings = actualViolations.some((violation) => violation.severity !== "info");
   const badgeVariant = hasWarnings ? "warning" : "info";

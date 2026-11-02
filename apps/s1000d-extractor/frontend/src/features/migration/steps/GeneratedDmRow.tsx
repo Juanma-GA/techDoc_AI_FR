@@ -1,6 +1,6 @@
 import { Badge, Button, buttonVariants } from "@internal/ui";
 import { useTranslation } from "react-i18next";
-import { BrexViolationsPanel } from "../../../components/BrexViolationsPanel";
+import { BrexViolationsPanel, hasBrexViolationsToShow } from "../../../components/BrexViolationsPanel";
 import { wizardApi, type WizardDm } from "../../../lib/api";
 
 export function GeneratedDmRow({ dm, docId, commonFields, hasBrex }: {
@@ -8,6 +8,7 @@ export function GeneratedDmRow({ dm, docId, commonFields, hasBrex }: {
 }) {
   const { t } = useTranslation();
   const missing = (dm.missing_fields ?? []).filter((field) => !commonFields.has(field));
+  const brexProps = { hasProfile: hasBrex, isComplete: dm.has_xml === true, violations: dm.brex_violations ?? [] };
   return <div className="space-y-3 border-b border-md py-3 [content-visibility:auto]">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span>{dm.is_orphan ? t("migration.dm.orphan") : dm.title}{" "}
@@ -34,11 +35,10 @@ export function GeneratedDmRow({ dm, docId, commonFields, hasBrex }: {
         </li>)}
       </ul> : <p>{t("migration.generate.xsdNoDetails")}</p>}
     </details> : null}
-    <details>
+    {hasBrexViolationsToShow(brexProps) ? <details>
       <summary>{t("migration.ui.brexDetails")}</summary>
-      <BrexViolationsPanel hasProfile={hasBrex} isComplete={dm.has_xml === true}
-        violations={dm.brex_violations ?? []} />
-    </details>
+      <BrexViolationsPanel {...brexProps} />
+    </details> : null}
     {missing.length ? <details>
       <summary>{t("migration.generate.missingFields", { count: missing.length })}</summary>
       <ul className="space-y-1 py-2">{missing.map((field) => <li className="break-all" key={field}>{field}</li>)}</ul>
