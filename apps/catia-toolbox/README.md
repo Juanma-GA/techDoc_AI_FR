@@ -11,6 +11,8 @@ Identify and compare CATIA delivery data, prepare Composer assets, and run confi
 ## Features
 
 - Identify parts from nomenclature and delivery inputs.
+- Automatic column detection prefers an exact `SIN` header over combined headers
+  such as `SIN & Application`; explicit manual column mappings remain unchanged.
 - Nomenclature and Materials previews and analyses are started explicitly.
   Selecting another file clears the previous preview, column mapping, and active
   result; the new mapping is detected from that file, not reused from another one.
