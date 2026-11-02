@@ -31,8 +31,8 @@
 
 .ui-sidebar-brand {
   overflow: hidden;
-  color: var(--color-brand-blue-light);
-  font-family: "Orbitron", sans-serif;
+  color: var(--color-brand-text);
+  font-family: var(--font-display);
   font-size: 1.15rem;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -103,7 +103,7 @@
 .ui-nav-group-title {
   padding: 8px 12px 4px;
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -115,14 +115,20 @@
 }
 
 .ui-nav-item-active {
-  background: var(--color-brand-blue);
-  color: var(--color-text-base);
+  background: var(--color-nav-active-bg);
+  color: var(--color-nav-active-fg);
+  font-weight: 600;
+}
+
+.ui-nav-item-active:hover {
+  background: var(--color-nav-active-bg);
+  color: var(--color-nav-active-fg);
 }
 
 .ui-nav-item:focus-visible,
 .ui-sidebar-collapse-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-brand-blue-light);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .ui-sidebar-collapsible {

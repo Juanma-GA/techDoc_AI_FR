@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle, DemoModeSelector, useDemoMode } from "@internal/ui";
+import { DemoModeSettingsCard, useDemoMode } from "@internal/ui";
 
 import { settingsApi } from "../lib/api";
 
@@ -14,25 +14,18 @@ export function DemoModeSettings() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("settings.demo.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm text-fg-dim">{t("settings.demo.hint")}</p>
-        <DemoModeSelector
-          mode={mode}
-          labels={{ normal: t("settings.demo.normal"), demo: t("settings.demo.demo") }}
-          ariaLabel={t("settings.demo.title")}
-          disabled={!isReady || modeMutation.isPending}
-          onModeChange={(nextMode) => modeMutation.mutate(nextMode === "demo")}
-        />
-        {modeMutation.isError ? (
-          <p role="alert" className="text-danger">
-            {t("settings.demo.saveError")}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+    <DemoModeSettingsCard
+      mode={mode}
+      labels={{
+        title: t("settings.demo.title"),
+        hint: t("settings.demo.hint"),
+        normal: t("settings.demo.normal"),
+        demo: t("settings.demo.demo"),
+        saveError: t("settings.demo.saveError"),
+      }}
+      disabled={!isReady || modeMutation.isPending}
+      error={modeMutation.isError}
+      onModeChange={(nextMode) => modeMutation.mutate(nextMode === "demo")}
+    />
   );
 }

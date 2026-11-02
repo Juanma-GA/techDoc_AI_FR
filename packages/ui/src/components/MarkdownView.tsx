@@ -24,7 +24,7 @@ export function MarkdownView({ content, className }: MarkdownViewProps) {
         "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
         "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
         "[&_li]:my-0.5",
-        "[&_a]:text-brand-blue-light [&_a]:underline",
+        "[&_a]:text-brand-text [&_a]:underline",
         "[&_code]:rounded-sm [&_code]:bg-bg-3 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm",
         "[&_pre]:my-3 [&_pre]:overflow-auto [&_pre]:rounded-sm [&_pre]:bg-bg-3 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-sm",
         "[&_pre_code]:bg-transparent [&_pre_code]:p-0",

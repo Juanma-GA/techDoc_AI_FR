@@ -395,8 +395,8 @@ export function Conversion() {
                             aria-label={it.source_path}
                           />
                         </td>
-                        <td style={{ fontFamily: '"JetBrains Mono", monospace' }}>{it.source_path}</td>
-                        <td style={{ fontFamily: '"JetBrains Mono", monospace' }}>{it.target_path}</td>
+                        <td style={{ fontFamily: "var(--font-mono)" }}>{it.source_path}</td>
+                        <td style={{ fontFamily: "var(--font-mono)" }}>{it.target_path}</td>
                       </tr>
                     );
                   })}
@@ -461,7 +461,7 @@ export function Conversion() {
                     overflow: "auto",
                     background: "var(--bg-2)",
                     padding: "0.5rem",
-                    fontFamily: '"JetBrains Mono", monospace',
+                    fontFamily: "var(--font-mono)",
                     fontSize: "0.78rem",
                     whiteSpace: "pre-wrap",
                   }}

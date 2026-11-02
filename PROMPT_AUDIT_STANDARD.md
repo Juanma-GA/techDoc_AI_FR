@@ -129,6 +129,8 @@ Une case par règle de `STANDARD_POC.md`. Pour chaque ligne, statut + fichier:li
 ### Design system
 
 - [ ] Aucun hex en dur dans le code (sauf `tokens.json`, `tailwind-preset.ts`, `theme.css`)
+- [ ] `src/index.css` importe `@internal/design-tokens/base.css` ; aucun lien Google Fonts, aucune dépendance `@fontsource/*` dans l'app, aucune police nommée en dur (`var(--font-*)`)
+- [ ] `<meta name="color-scheme" content="dark light">` présent ; rendu vérifié en sombre **et** en clair (palette v2)
 - [ ] Tailwind preset partagé importé dans `tailwind.config.ts`
 - [ ] Composants `@internal/ui` utilisés partout, pas de réinvention
 - [ ] `tokens.json` : couleurs flat sous `color.*` (dark) + overrides light sous `themes.light.color.*`

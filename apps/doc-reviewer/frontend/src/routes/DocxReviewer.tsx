@@ -167,7 +167,7 @@ export function DocxReviewer({
                       border: `1px solid ${isSelected ? "var(--brand-light)" : "var(--border)"}`,
                       background: count > 0 ? "var(--card-hover)" : "var(--bg-2)",
                       fontFamily:
-                        b.kind === "heading" ? '"Orbitron", sans-serif' : "inherit",
+                        b.kind === "heading" ? "var(--font-display)" : "inherit",
                     }}
                   >
                     <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>

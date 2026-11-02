@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tokens.schema.json",
+  "title": "AI4TECHDOC design tokens",
+  "description": "Structure of design-tokens/tokens.json. `color` is the dark (default) palette; `themes.light` overrides it. theme.css is generated from this file by scripts/build-theme.mjs.",
+  "type": "object",
+  "required": ["color", "themes", "font", "fontSize", "lineHeight", "radius", "shadow", "motion", "layout"],
+  "$defs": {
+    "colorValue": {
+      "type": "string",
+      "pattern": "^(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgba?\\([^)]*\\))$"
+    },
+    "colorTree": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [{ "$ref": "#/$defs/colorValue" }, { "$ref": "#/$defs/colorTree" }]
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "fontStack": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string" }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "_comment": { "type": "string" },
+    "color": {
+      "allOf": [{ "$ref": "#/$defs/colorTree" }],
+      "required": ["bg", "card", "brand", "semantic", "accent", "text", "border", "surface", "focus", "nav", "overlay"]
+    },
+    "themes": {
+      "type": "object",
+      "required": ["light"],
+      "properties": {
+        "light": {
+          "type": "object",
+          "properties": {
+            "color": { "$ref": "#/$defs/colorTree" },
+            "shadow": { "$ref": "#/$defs/stringMap" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "font": {
+      "type": "object",
+      "required": ["sans", "mono", "display"],
+      "additionalProperties": { "$ref": "#/$defs/fontStack" }
+    },
+    "fontSize": { "$ref": "#/$defs/stringMap" },
+    "lineHeight": { "$ref": "#/$defs/stringMap" },
+    "radius": { "$ref": "#/$defs/stringMap" },
+    "shadow": { "$ref": "#/$defs/stringMap" },
+    "motion": { "$ref": "#/$defs/stringMap" },
+    "layout": { "$ref": "#/$defs/stringMap" }
+  },
+  "additionalProperties": false
+}

@@ -5,9 +5,9 @@ import { cn } from "../lib/utils";
 
 const selectVariants = cva(
   [
-    "block w-full rounded-sm border bg-bg-2 px-3 text-fg",
+    "block w-full rounded-sm border bg-surface-sunken px-3 text-fg",
     "appearance-none bg-no-repeat bg-right pr-8",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light",
+    "transition-colors duration-fast focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-focus/40",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ].join(" "),
   {
@@ -19,7 +19,7 @@ const selectVariants = cva(
       },
       state: {
         default: "border-md",
-        error: "border-danger",
+        error: "border-danger focus-visible:border-danger focus-visible:ring-danger/30",
       },
     },
     defaultVariants: {
