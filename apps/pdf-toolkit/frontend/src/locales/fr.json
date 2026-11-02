@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "Outils PDF pour traiter vos documents localement.",
     "documentTitle": "PDF Toolkit — outils PDF locaux",
-    "metaDescription": "Fusionnez, convertissez, nettoyez, extrayez, supprimez, réorganisez, compressez et faites pivoter des PDF localement.",
+    "metaDescription": "Fusionnez, convertissez, nettoyez, extrayez, recadrez, supprimez, réorganisez, compressez et faites pivoter des PDF localement.",
     "local": "Traitement local",
     "privacy": "Vos fichiers temporaires sont supprimés après chaque opération."
   },

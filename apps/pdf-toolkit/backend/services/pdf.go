@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 )
@@ -34,8 +35,17 @@ type PDFProcessor interface {
 	Reorder(ctx context.Context, input, output string, pages []int) error
 	Collect(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
+	Crop(ctx context.Context, input, output string, crops []PDFCropRect) error
 	StampSignature(ctx context.Context, input, image, output string, options SignatureStampOptions) error
 	AddComments(ctx context.Context, input, output string, comments []PDFComment) error
+}
+
+type PDFCropRect struct {
+	Page int     `json:"page"`
+	X1   float64 `json:"x1"`
+	Y1   float64 `json:"y1"`
+	X2   float64 `json:"x2"`
+	Y2   float64 `json:"y2"`
 }
 
 type PDFProtectionOptions struct {
@@ -208,6 +218,44 @@ func (s *PDFService) ExtractImages(ctx context.Context, input, output string) er
 	return nil
 }
 
+func (s *PDFService) Crop(ctx context.Context, input, output string, crops []PDFCropRect) error {
+	if input == "" || output == "" || len(crops) == 0 {
+		return fmt.Errorf("%w: input, output, and page crop rectangles are required", ErrInvalidInput)
+	}
+	pageCount, err := s.pageCount(ctx, input)
+	if err != nil {
+		return err
+	}
+	if len(crops) != pageCount {
+		return fmt.Errorf("%w: a crop rectangle is required for every page", ErrInvalidInput)
+	}
+
+	seen := make([]bool, pageCount+1)
+	for _, crop := range crops {
+		if crop.Page < 1 || crop.Page > pageCount || seen[crop.Page] ||
+			!isFinite(crop.X1) || !isFinite(crop.Y1) ||
+			!isFinite(crop.X2) || !isFinite(crop.Y2) ||
+			crop.X2 <= crop.X1 || crop.Y2 <= crop.Y1 {
+			return fmt.Errorf("%w: crop rectangles must be valid and cover each page once", ErrInvalidInput)
+		}
+		seen[crop.Page] = true
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Crop(ctx, input, output, crops); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrInvalidInput) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: crop PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
 func (s *PDFService) Extract(ctx context.Context, input, output, selection string) error {
 	pages, _, err := s.selectedPages(ctx, input, selection)
 	if err != nil {
@@ -318,6 +366,10 @@ func (s *PDFService) pageCount(ctx context.Context, input string) (int, error) {
 		return 0, fmt.Errorf("%w: PDF does not contain pages", ErrInvalidPDF)
 	}
 	return pageCount, nil
+}
+
+func isFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func isSupportedRotation(rotation int) bool {

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
 import {
   Combine,
+  Crop,
   Download,
   Eraser,
   FilePenLine,
@@ -24,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { CompressTool } from "./features/compress/CompressTool";
 import { CleanTool } from "./features/clean/CleanTool";
 import { CommentsTool } from "./features/comments/CommentsTool";
+import { CropTool } from "./features/crop/CropTool";
 import {
   AppShell,
   DemoModeBadge,
@@ -70,6 +72,7 @@ const tools = [
   { id: "metadata", icon: FilePenLine },
   { id: "protect", icon: LockKeyhole },
   { id: "rotate", icon: RotateCw },
+  { id: "crop", icon: Crop },
   { id: "comments", icon: MessageSquareText },
   { id: "signature", icon: PenTool },
   { id: "imagesToPdf", icon: ImagePlus },
@@ -288,6 +291,7 @@ export function App() {
               ) : null}
               {activeTool === "protect" ? <ProtectTool /> : null}
               {activeTool === "rotate" ? <RotateTool /> : null}
+              {activeTool === "crop" ? <CropTool /> : null}
               {activeTool === "comments" ? <CommentsTool /> : null}
               {activeTool === "signature" ? <SignatureTool /> : null}
               {activeTool === "imagesToPdf" ? <ImagesToPdfTool /> : null}

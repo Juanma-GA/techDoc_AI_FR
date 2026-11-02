@@ -34,6 +34,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/merge", h.Merge)
 	router.POST("/images-to-pdf", h.ImagesToPDF)
 	router.POST("/extract-images", h.ExtractImages)
+	router.POST("/crop", h.Crop)
 	router.POST("/compress", h.Compress)
 	router.POST("/clean", h.Clean)
 	router.POST("/edit-metadata", h.EditMetadata)

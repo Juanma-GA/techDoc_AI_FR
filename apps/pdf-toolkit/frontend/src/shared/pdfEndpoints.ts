@@ -11,5 +11,6 @@ export type PDFEndpoint =
   | "insert"
   | "reorder"
   | "rotate"
+  | "crop"
   | "comments"
   | "signature";

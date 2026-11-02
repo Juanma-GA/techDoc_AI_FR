@@ -6,6 +6,8 @@ import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 import extractImagesEn from "./features/extract-images/locales/en.json";
 import extractImagesFr from "./features/extract-images/locales/fr.json";
+import cropEn from "./features/crop/locales/en.json";
+import cropFr from "./features/crop/locales/fr.json";
 import insertEn from "./features/insert/locales/en.json";
 import insertFr from "./features/insert/locales/fr.json";
 import signatureEn from "./features/signature/locales/en.json";
@@ -28,11 +30,13 @@ void i18n
             ...splitFr.tools,
             ...insertFr.tools,
             ...extractImagesFr.tools,
+            ...cropFr.tools,
           },
           signature: signatureFr.signature,
           split: splitFr.split,
           insert: insertFr.insert,
           extractImages: extractImagesFr.extractImages,
+          crop: cropFr.crop,
         },
       },
       en: {
@@ -45,11 +49,13 @@ void i18n
             ...splitEn.tools,
             ...insertEn.tools,
             ...extractImagesEn.tools,
+            ...cropEn.tools,
           },
           signature: signatureEn.signature,
           split: splitEn.split,
           insert: insertEn.insert,
           extractImages: extractImagesEn.extractImages,
+          crop: cropEn.crop,
         },
       },
     },
