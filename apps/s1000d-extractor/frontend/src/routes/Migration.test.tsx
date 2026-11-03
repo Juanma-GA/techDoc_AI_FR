@@ -1,12 +1,69 @@
 import { describe, expect, it } from "vitest";
+import { createInstance } from "i18next";
+import { renderToStaticMarkup } from "react-dom/server";
+import { I18nextProvider } from "react-i18next";
 
+import en from "../locales/en.json";
+import fr from "../locales/fr.json";
 import type { DmrlRow, WizardState } from "../lib/api";
 import { hasUnmatchedDmrlDms, needsDmrlReview } from "../lib/wizardReview";
 import {
   generationFile,
   getCommonMissingFields,
   isRestorableMigrationInput,
-} from "./Migration";
+} from "../lib/migrationUtils";
+import { IllustrationWarning } from "../features/migration/WizardNotices";
+import { StartProgress } from "../features/migration/StartProgress";
+
+describe("conversion loading bar", () => {
+  it("uses a tokenized bar with accessible progress", () => {
+    const markup = renderToStaticMarkup(<StartProgress progress={{ pct: 42, label: "Analysis" }} />);
+    expect(markup).toContain("bg-bg-3");
+    expect(markup).toContain("bg-brand");
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).toContain('aria-label="Analysis"');
+    expect(markup).toContain('aria-valuenow="42"');
+    expect(markup).toContain('style="width:42%"');
+    expect(markup).not.toContain("<progress");
+  });
+
+  it.each([-10, 110])("keeps progress within bounds for %i", (pct) => {
+    const bounded = Math.max(0, Math.min(100, pct));
+    const markup = renderToStaticMarkup(<StartProgress progress={{ pct, label: "Analysis" }} />);
+    expect(markup).toContain(`aria-valuenow="${bounded}"`);
+    expect(markup).toContain(`style="width:${bounded}%"`);
+  });
+
+  it("does not display a bar when no operation is running", () => {
+    expect(renderToStaticMarkup(<StartProgress progress={null} />)).toBe("");
+  });
+});
+
+describe("illustration extraction warning", () => {
+  it.each([
+    ["fr", 1, "1 erreur."],
+    ["fr", 2, "2 erreurs."],
+    ["en", 1, "1 error."],
+    ["en", 2, "2 errors."],
+  ] as const)("shows %s diagnostics for %i error(s)", async (language, count, text) => {
+    const i18n = createInstance();
+    await i18n.init({ lng: language, resources: { en: { translation: en }, fr: { translation: fr } } });
+    const markup = renderToStaticMarkup(
+      <I18nextProvider i18n={i18n}><IllustrationWarning count={count} /></I18nextProvider>,
+    );
+    expect(markup).toContain(text);
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain('aria-live="polite"');
+  });
+
+  it("does not display a warning after a successful extraction", async () => {
+    const i18n = createInstance();
+    await i18n.init({ lng: "fr", resources: { fr: { translation: fr } } });
+    expect(renderToStaticMarkup(<I18nextProvider i18n={i18n}>
+      <IllustrationWarning count={0} />
+    </I18nextProvider>)).toBe("");
+  });
+});
 
 function wizardWithDmrl(dmrl: DmrlRow[]): WizardState {
   return { step: "dmrl", split_level: "chapter", dms: [], dmrl };
@@ -70,7 +127,7 @@ describe("DMRL wizard review", () => {
     expect(hasUnmatchedDmrlDms(wizardWithDmrl([title]))).toBe(false);
   });
 
-  it("pauses for unresolved InfoCode type conflicts and resumes after a choice", () => {
+  it("keeps the DMRL review visible for InfoCode warnings after a type fallback", () => {
     const conflict: DmrlRow = {
       index: 1,
       arbo: "1",
@@ -92,7 +149,10 @@ describe("DMRL wizard review", () => {
 
     expect(needsDmrlReview(wizardWithDmrl([conflict]))).toBe(true);
     expect(
-      needsDmrlReview(wizardWithDmrl([{ ...conflict, dm_type: "procedural" }])),
-    ).toBe(false);
+      needsDmrlReview(wizardWithDmrl([{ ...conflict, dm_type: "descriptive" }])),
+    ).toBe(true);
+    expect(needsDmrlReview(wizardWithDmrl([{
+      ...conflict, dm_type: "descriptive", type_conflict: false, type_issue: "",
+    }]))).toBe(false);
   });
 });

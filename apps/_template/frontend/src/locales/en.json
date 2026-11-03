@@ -102,6 +102,7 @@
     "tabTable": "Table",
     "tabKpi": "Indicators",
     "tabLoading": "Loading",
+    "progressLabel": "Document analysis",
     "columnName": "Name",
     "columnStatus": "Status",
     "columnSize": "Size",

@@ -65,9 +65,8 @@ describe("BREX violations panel", () => {
     expect(markup).toContain("<details>");
     expect(markup).not.toContain("<details open");
     expect(markup).toContain("migration.generate.brexViolations:1");
-    expect(markup).toContain(
-      'class="badge warn">migration.generate.brexViolations:1</span>',
-    );
+    expect(markup).toContain("border-warning/40");
+    expect(markup).toContain("migration.generate.brexViolations:1");
     expect(markup).toContain("migration.generate.brexSeverity.error");
     expect(markup).toContain("required-object");
     expect(markup).toContain("//required-object");

@@ -75,7 +75,7 @@
       "kind": "app",
       "backend": "fastapi",
       "targetPort": 8006,
-      "profiles": ["local-first", "llm", "files"],
+      "profiles": ["local-first", "files"],
       "desktop": false,
       "e2e": true,
       "openapi": true

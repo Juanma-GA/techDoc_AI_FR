@@ -1,6 +1,6 @@
 """SQLAlchemy 2.0 models pour s1000d-extractor.
 
-- `AppConfig`    : key/value runtime (cle Mistral). Preserve par les resets.
+- `AppConfig`    : key/value runtime (mode demo). Preserve par les resets.
 - `BrexProfile`  : un BREX projet reutilisable (uploade une fois, applique a
   tous les documents du projet -> evite le remapping par document).
 - `Document`     : un document source (PDF/DOCX) et le resultat de sa migration
@@ -57,6 +57,8 @@ class Document(Base):
         String(36), ForeignKey("brex_profiles.id", ondelete="SET NULL"), nullable=True
     )
     storage_path: Mapped[str] = mapped_column(String(1000))
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    resource_sha256_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_cut_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     pdf_cut_start_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pdf_cut_end_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -64,19 +66,19 @@ class Document(Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="uploaded", index=True)
     dm_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    ir_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ir_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     violations_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Wizard (configuration etape par etape) :
     wizard_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
     split_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    dms_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dms_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     # Pile d'annulation (undo) des editions de decoupage : liste JSON
     # d'instantanes `dms_json` successifs (bornee cote code).
-    dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    preliminary_review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    preliminary_review_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     # Ressources client optionnelles : DMRL (decoupage impose + PMC), CIR
     # (contenus partages), regles client BREX JSON.
-    dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     dmrl_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     dm_header_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     dm_header_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)

@@ -15,7 +15,8 @@ import {
   KpiCard,
   LlmSettingsPanel,
   PageHeader,
-  Select,
+  ProgressBar,
+  SelectMenu,
   Skeleton,
   Switch,
   Table,
@@ -78,6 +79,7 @@ export function DesignGallery() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(true);
   const [selected, setSelected] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("medium");
   const [demoMode, setDemoMode] = useState<DemoMode>("normal");
   const [llmValue, setLlmValue] = useState<LlmSettingsValue>({
     llmEnabled: true,
@@ -163,14 +165,19 @@ export function DesignGallery() {
           <FormField label={t("design.name")} hint={t("design.nameHint")} required>
             <Input defaultValue="AI4TECHDOC" />
           </FormField>
-          <FormField label={t("design.model")}>
-            <Select
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-fg">{t("design.model")}</span>
+            <SelectMenu
+              id="design-model"
+              label={t("design.model")}
+              value={selectedModel}
               options={[
                 { value: "medium", label: "mistral-medium-latest" },
                 { value: "small", label: "mistral-small-latest" },
               ]}
+              onValueChange={setSelectedModel}
             />
-          </FormField>
+          </div>
           <FormField label={t("design.email")} error={t("design.emailError")}>
             <Input defaultValue="not-an-email" />
           </FormField>
@@ -226,6 +233,7 @@ export function DesignGallery() {
           </TabsContent>
           <TabsContent value="loading">
             <div className="flex flex-col gap-2">
+              <ProgressBar value={42} label={t("design.progressLabel")} />
               <Skeleton className="h-4 w-2/3" />
               <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-24 w-full rounded-lg" />

@@ -37,7 +37,7 @@ if [[ ! -f .venv/.installed ]]; then
 fi
 
 echo "[setup] Migrations Alembic..."
-alembic upgrade head
+python -m app.db.migrations
 
 # Vérifier que le port est libre
 if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
@@ -55,7 +55,7 @@ need_build=0
 if [[ ! -f "$dist_index" ]]; then
     need_build=1
 else
-    newer="$(find "${FRONTEND_DIR}/src" "${FRONTEND_DIR}/index.html" \
+    newer="$(find "${FRONTEND_DIR}/src" "${FRONTEND_DIR}/public" "${FRONTEND_DIR}/index.html" \
         "${FRONTEND_DIR}/package.json" "${FRONTEND_DIR}/vite.config.ts" \
         -newer "$dist_index" -print -quit 2>/dev/null || true)"
     [[ -n "$newer" ]] && need_build=1

@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { preliminaryApi } from "./preliminaryApi";
 import { ApiRequestError } from "./api";
+import { formatApiError } from "./migrationUtils";
 import type { PreliminaryState, ReaderPosition, ReviewAction } from "./preliminaryTypes";
 import { preliminaryRulesApi, preliminaryRulesQueryKey } from "./preliminaryRules";
 
 export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
+  const { t } = useTranslation();
+  const translation = useRef(t);
+  translation.current = t;
   const rules = useQuery({
     queryKey: preliminaryRulesQueryKey, queryFn: preliminaryRulesApi.read, enabled: false,
   }).data;
@@ -38,7 +43,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       } catch (reason) {
         failed.current = action;
         invalid.current = reason instanceof ApiRequestError && reason.status === 422;
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(formatApiError(translation.current, reason));
         return false;
       }
     }).finally(() => {
@@ -122,7 +127,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       setError(null);
       return next;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(formatApiError(translation.current, reason));
       return null;
     } finally {
       setSaving(false);

@@ -1,33 +1,28 @@
-"""Ingestion robuste : document -> blocs IR, OCR si necessaire.
+"""Ingestion locale : document -> blocs IR.
 
 Couvre TOUS les PDF via une decision PAR PAGE :
 - page avec couche texte -> lue directement (PyMuPDF, police conservee) ;
-- page sans texte (scannee) -> OCR Mistral, markdown converti en blocs.
+- page scannee sans couche texte -> erreur demandant un OCR local prealable.
 
-Un PDF mixte (pages texte + pages scannees) est donc entierement couvert : on
-ne perd aucune page scannee et on ne re-OCR pas les pages texte. Un seul appel
-OCR par document (Mistral OCR traite toutes les pages). Sans cle Mistral, les
-pages scannees sont signalees : si TOUT est scanne -> erreur explicite, sinon on
-poursuit avec les pages texte en signalant les pages ignorees.
+Un PDF mixte n'est jamais traite partiellement : les pages scannees ne sont pas
+ignorees et aucun contenu n'est transmis a un service externe.
 """
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
 import pymupdf as fitz
-from sqlalchemy.orm import Session
+import structlog
 
-from app.core import ocr
 from app.core.errors import AppError
 from app.core.ir import RawBlock
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf_pages
 
-log = logging.getLogger("s1000d_extractor.ingest")
+log = structlog.get_logger("s1000d_extractor.ingest")
 
 ProgressCb = Callable[[str, int], None]
 
@@ -36,9 +31,8 @@ def extract_blocks(
     path: str | Path,
     *,
     fmt: str,
-    db: Session | None = None,
     progress_cb: ProgressCb | None = None,
-    local_only: bool = False,
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
 ) -> list[RawBlock]:
     if fmt == "docx":
         return parse_docx(path)
@@ -61,17 +55,18 @@ def extract_blocks(
         path,
         progress_cb=report_parse_progress if progress_cb is not None else None,
     )
+    if table_bboxes_by_page is not None:
+        table_bboxes_by_page.update({page.index: page.table_bboxes for page in pages})
     scanned = [p for p in pages if not p.has_text]
     log.info(
-        "pdf_parse_timing duration_ms=%.1f page_count=%d text_page_count=%d "
-        "scanned_page_count=%d block_count=%d",
-        (perf_counter() - parse_started) * 1000,
-        len(pages),
-        len(pages) - len(scanned),
-        len(scanned),
-        sum(len(page.blocks) for page in pages),
+        "document_ingest_done",
+        duration_ms=round((perf_counter() - parse_started) * 1000, 1),
+        page_count=len(pages),
+        text_page_count=len(pages) - len(scanned),
+        scanned_page_count=len(scanned),
+        block_count=sum(len(page.blocks) for page in pages),
     )
-    if local_only:
+    if scanned:
         with fitz.open(str(path)) as source:
             requires_ocr = [
                 page.index for page in scanned
@@ -81,61 +76,13 @@ def extract_blocks(
             ]
         if requires_ocr:
             raise AppError(
-                "LOCAL_OCR_REQUIRED",
-                "Wizard local : certaines pages necessitent une couche texte. "
-                "Fournissez un PDF avec OCR effectue localement ; aucun contenu n'a ete envoye.",
-                status_code=422, detail={"pages_in_analyzed_pdf": requires_ocr},
-            )
-        blocks = [block for page in pages for block in page.blocks]
-        if not any(block.text.strip() or block.table_rows for block in blocks):
-            raise AppError("EMPTY_SOURCE", "Aucun texte exploitable dans la source locale.", 422)
-        return blocks
-
-    # Cas 1 : tout est lisible en texte -> aucun OCR.
-    if not scanned:
-        return [b for p in pages for b in p.blocks]
-
-    # Cas 2 : au moins une page scannee, mais pas d'OCR disponible.
-    if not ocr.ocr_available(db):
-        text_blocks = [b for p in pages if p.has_text for b in p.blocks]
-        if not text_blocks:
-            raise AppError(
                 "OCR_UNAVAILABLE",
-                "PDF scanne : l'OCR necessite une cle Mistral (onglet Parametres).",
+                "Ce PDF contient des pages scannees. Effectuez un OCR local avant "
+                "de l'importer ; aucun contenu n'a ete transmis.",
                 status_code=422,
+                detail={"pages_in_analyzed_pdf": requires_ocr},
             )
-        log.warning(
-            "Pages scannees ignorees (pas de cle OCR) : %s",
-            [p.index for p in scanned],
-        )
-        return text_blocks
-
-    # Cas 3 : OCR des pages scannees, fusion avec les pages texte (ordre conserve).
-    if progress_cb:
-        progress_cb("ocr", 30)
-    scanned_page_numbers = [p.index for p in scanned]
-    ocr_started = perf_counter()
-    pages_md = ocr.run_ocr(path, db, page_numbers=scanned_page_numbers)  # type: ignore[arg-type]
-    log.info(
-        "pdf_ocr_timing duration_ms=%.1f scanned_page_count=%d result_page_count=%d",
-        (perf_counter() - ocr_started) * 1000,
-        len(scanned_page_numbers),
-        len(pages_md),
-    )
-    markdown_by_page = dict(zip(scanned_page_numbers, pages_md, strict=False))
-
-    blocks: list[RawBlock] = []
-    for p in pages:
-        if p.has_text:
-            blocks.extend(p.blocks)
-        else:
-            md = markdown_by_page.get(p.index, "")
-            blocks.extend(ocr.markdown_to_blocks(md, page=p.index))
-
-    if not blocks:
-        raise AppError(
-            "OCR_EMPTY",
-            "Aucun texte exploitable n'a pu etre extrait de ce PDF (meme par OCR).",
-            status_code=422,
-        )
+    blocks = [block for page in pages for block in page.blocks]
+    if not any(block.text.strip() or block.table_rows for block in blocks):
+        raise AppError("EMPTY_SOURCE", "Aucun texte exploitable dans le PDF.", 422)
     return blocks

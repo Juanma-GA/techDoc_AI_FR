@@ -15,9 +15,9 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: `pnpm exec vite --host 127.0.0.1 --port ${e2ePort}`,
+    command: "node scripts/e2e-dev.mjs",
     url: `http://127.0.0.1:${e2ePort}`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

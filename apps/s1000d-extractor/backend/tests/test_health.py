@@ -12,7 +12,7 @@ def test_health_ok(client) -> None:
     assert body["status"] == "ok"
     assert "version" in body
     assert "db" in body
-    assert "llm" in body
+    assert "llm" not in body
 
 
 def test_api_request_is_logged(capsys, client) -> None:

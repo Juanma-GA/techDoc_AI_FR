@@ -45,7 +45,11 @@ async function render(language: string, changes: Partial<ReviewPassage> = {}) {
       onAction, onSelect: vi.fn(), onEdit: vi.fn(),
     }),
   ));
-  return { element, onAction, select: element.querySelector("select") };
+  return {
+    element,
+    onAction,
+    select: element.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]'),
+  };
 }
 
 describe.each([
@@ -62,28 +66,25 @@ describe.each([
 ])("explicit classification proposals ($language)", (labels) => {
   it("shows a clear category without recording a human decision", async () => {
     const { select, onAction } = await render(labels.language);
-    expect(select?.value).toBe("");
-    expect(select?.selectedOptions[0]?.textContent).toBe(labels.proposed);
+    expect(select?.textContent?.trim()).toBe(labels.proposed);
     expect(onAction).not.toHaveBeenCalled();
   });
 
   it("does not label an unmatched body proposal as ambiguous", async () => {
     const { select, onAction } = await render(labels.language, { suggested: "body", rule: "unmatched" });
-    expect(select?.value).toBe("");
-    expect(select?.selectedOptions[0]?.textContent).toBe(labels.bodyPending);
+    expect(select?.textContent?.trim()).toBe(labels.bodyPending);
     expect(onAction).not.toHaveBeenCalled();
   });
 
   it("reserves the decision-needed label for ambiguous proposals", async () => {
     const { select, element } = await render(labels.language, { suggested: "review", rule: "multiple" });
-    expect(select?.selectedOptions[0]?.textContent).toBe(labels.ambiguous);
+    expect(select?.textContent?.trim()).toBe(labels.ambiguous);
     expect([...element.querySelectorAll("button")].some((button) => button.textContent === labels.accept)).toBe(false);
   });
 
   it("keeps a confirmed category distinct from the pending proposal", async () => {
     const { select, onAction } = await render(labels.language, { decision: "body" });
-    expect(select?.value).toBe("body");
-    expect(select?.selectedOptions[0]?.textContent).toBe(labels.body);
+    expect(select?.textContent?.trim()).toBe(labels.body);
     expect(onAction).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,47 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
+
+import pytest
+import structlog
+from structlog.testing import capture_logs
+
+
+def test_unreadable_pdf_reports_illustration_error(tmp_path, monkeypatch) -> None:
+    from app.core import illustrations
+    from app.core.ir import IRNode
+
+    with capture_logs() as logs:
+        monkeypatch.setattr(illustrations, "log", structlog.get_logger())
+        result = illustrations.attach_illustrations(
+            IRNode(id="root", kind="section"), pdf_path=str(tmp_path / "missing.pdf"),
+            out_dir=tmp_path / "images", doc_id="synthetic",
+        )
+    assert result.saved_count == 0
+    assert result.illustration_errors == 1
+    assert logs[0]["event"] == "illustration_document_open_failed"
+    assert logs[0]["exc_info"] is True
+
+
+@pytest.mark.parametrize("exception", [RuntimeError, ValueError, OSError])
+def test_image_save_failure_is_counted_and_logged(tmp_path, monkeypatch, exception) -> None:
+    from app.core import illustrations
+    from app.core.illustrations import IllustrationResult, _save_pixmap
+
+    def fail_extract(_xref):
+        raise exception("Synthetic image failure")
+
+    diagnostics = IllustrationResult()
+    with capture_logs() as logs:
+        monkeypatch.setattr(illustrations, "log", structlog.get_logger())
+        assert not _save_pixmap(
+            SimpleNamespace(extract_image=fail_extract), 1, tmp_path / "figure.jpg", diagnostics,
+        )
+    assert diagnostics.illustration_errors == 1
+    assert logs[0]["event"] == "illustration_save_failed"
+    assert logs[0]["error_type"] == exception.__name__
+    assert logs[0]["exc_info"] is True
 
 
 def _upload(client, data: bytes) -> str:
@@ -57,6 +98,7 @@ def test_rename_illustration_to_icn_png(tmp_path) -> None:
 
 def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path, monkeypatch) -> None:
     import hashlib
+
     import fitz
 
     from app.core.illustrations import _image_digest, _save_pixmap
@@ -90,6 +132,23 @@ def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path, monkeypatch
     embedded.close()
 
 
+@pytest.mark.parametrize("colorspace", ["csRGB", "csGRAY", "csCMYK"])
+def test_pixmap_with_alpha_is_converted_for_jpeg(colorspace) -> None:
+    import fitz
+
+    from app.core.illustrations import _to_jpeg_compatible
+
+    source = fitz.Pixmap(getattr(fitz, colorspace), fitz.IRect(0, 0, 8, 6), 1)
+    with pytest.raises(ValueError):
+        fitz.Pixmap(fitz.csRGB, source).tobytes("jpg")
+
+    converted = _to_jpeg_compatible(fitz, source)
+
+    assert not converted.alpha
+    assert converted.n in (1, 3)
+    assert converted.tobytes("jpg").startswith(b"\xff\xd8")
+
+
 def test_small_page_icon_does_not_replace_real_figure_image(tmp_path) -> None:
     import fitz
 
@@ -113,7 +172,7 @@ def test_small_page_icon_does_not_replace_real_figure_image(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=[figure])
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 1
     assert figure.is_pictogram is False
     assert figure.icn == "figure-6-2-real-figure.jpg"
     assert len(list(out_dir.glob("*.jpg"))) == 1
@@ -140,7 +199,7 @@ def test_single_image_figure_keeps_red_cross_overlay(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=[figure])
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 1
     assert figure.icn == "figure-5-2-incorrect-stacking.jpg"
     pixmap = fitz.Pixmap(str(out_dir / figure.icn))
     samples = pixmap.samples
@@ -251,7 +310,7 @@ def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     figures = [node for node in root.walk() if node.kind == "figure"]
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 2
     assert [figure.text for figure in figures] == [
         "Figure 4.1 Serrage correct",
         "Figure 4.2 Serrage incorrect",
@@ -289,7 +348,7 @@ def test_caption_overlap_does_not_assign_image_to_next_figure(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=figures)
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 2
     assert [figure.icn for figure in figures] == [
         "figure-4-10-first-image.jpg",
         "figure-4-11-second-image.jpg",
@@ -324,7 +383,7 @@ def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=figures)
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 2
     assert figures[0].icns == ["figure-5-3-first-panel.jpg"]
     assert figures[1].icns == [
         "figure-5-4-composite-panel.jpg",
@@ -367,7 +426,7 @@ def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) ->
     figure = next(node for node in root.walk() if node.kind == "figure")
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 1
     assert figure.icn == "figure-1-vector-nameplate.jpg"
     image = fitz.Pixmap(str(out_dir / figure.icn))
     assert image.width > 100
@@ -397,7 +456,7 @@ def test_large_pictogram_without_caption_is_attached_to_chapter(tmp_path) -> Non
     root = IRNode(id="root", kind="section", children=[chapter])
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 1
     pictos = [node for node in root.walk() if node.is_pictogram]
     assert len(pictos) == 1
     assert pictos[0].text == "Picto chapitre 6"
@@ -434,7 +493,7 @@ def test_pictogram_replaces_unmatched_figure_caption(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=[chapter])
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc").saved_count == 1
     assert figure.is_pictogram is True
     assert figure.text == "Picto chapitre 6"
     assert figure.icn == "picto_chapitre_6.jpg"
@@ -480,7 +539,7 @@ def test_pictogram_uses_dm_root_instead_of_nested_subsection(tmp_path) -> None:
         out_dir=out_dir,
         doc_id="doc",
         dm_level=2,
-    ) == 1
+    ).saved_count == 1
     picto = next(node for node in root.walk() if node.is_pictogram)
     assert picto.text == "Picto chapitre 6_1"
     assert picto in dm_section.children

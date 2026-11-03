@@ -15,13 +15,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy.orm import Session
-
 from app.core import context_classifier, dm_header, form_segmenter, ingest, resolver, structure_infer
 from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.ir import IRNode, to_dict
+from app.core.progress import scaled_progress
 
 ProgressCb = Callable[[str, int], None]
 
@@ -45,24 +44,23 @@ def run(
     fmt: str,
     issue: str,
     hint: str = "mixed",
-    db: Session | None = None,
     brex_xml: str | None = None,
     dm_metadata: dict | None = None,
     header_template: dict | None = None,
     progress_cb: ProgressCb = _noop,
 ) -> PipelineResult:
     progress_cb("parse", 10)
-    blocks = ingest.extract_blocks(path, fmt=fmt, db=db, progress_cb=progress_cb)
+    blocks = ingest.extract_blocks(path, fmt=fmt, progress_cb=progress_cb)
 
     progress_cb("infer", 30)
-    root: IRNode = structure_infer.build_ir(blocks)
+    root: IRNode = structure_infer.build_ir(blocks, progress_cb=scaled_progress(progress_cb, "infer", 30, 45))
 
     progress_cb("context", 45)
-    dm_type = context_classifier.classify(root, hint=hint, db=db)
+    dm_type = context_classifier.classify(root, hint=hint)
     context_classifier.apply_dm_type(root, dm_type)
 
     progress_cb("form", 60)
-    form_segmenter.segment(root, db=db, progress_cb=lambda pct: progress_cb("form", pct))
+    form_segmenter.segment(root, progress_cb=lambda pct: progress_cb("form", pct))
 
     progress_cb("resolve", 75)
     resolver.resolve(root)

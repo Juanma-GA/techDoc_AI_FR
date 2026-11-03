@@ -24,6 +24,8 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
         return root
     require_complete(doc, dm["dm_id"])
     review = load(doc)["reviews"][dm["dm_id"]]
+    if review["status"] == "skipped":
+        return from_dict(to_dict(root))
     rules = rules_for(doc)
     copy = from_dict(to_dict(root))
     nodes = {node.id: node for node in copy.walk()}

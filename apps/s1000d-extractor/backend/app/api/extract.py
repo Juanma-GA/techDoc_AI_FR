@@ -6,11 +6,13 @@ queue vers le flux SSE. Evenements : session -> progress* -> done | error.
 
 from __future__ import annotations
 
-import asyncio
+import hashlib
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+import pymupdf as fitz
+import structlog
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,17 +26,23 @@ from app.core import wizard_resources as wres
 from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
+from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
+from app.core.fs import atomic_write_text, publish_file, remove_files
+from app.core.pdf_cut import previews_dir
 from app.core.s1000d_schema import SELECTABLE_ISSUES
-from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields
-from app.core.validator import validate_document, xsd_is_valid
+from app.core.s1000d_serializer import missing_data_fields
+from app.core.sse import JobCancelled, stream_threaded_job
+from app.core.uploads import UPLOAD_LOCK, file_sha256, staged_upload
+from app.core.validator import has_blocking_violation, validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
-from app.db.session import SessionLocal, get_db
+from app.db.session import get_db, open_session, storage_directory
 from app.parsers import detect_format
 from app.parsers.pdf_parser import pdf_page_count
 from app.schemas import DocumentOut, ExtractDoneOut, NodeOverrideIn
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+log = structlog.get_logger(__name__)
 
 _HINTS = {"mixed", "descriptive", "procedural"}
 
@@ -48,8 +56,8 @@ def _require_single_document_workflow(doc: Document) -> None:
         )
 
 
-def _storage() -> Path:
-    p = Path(settings.storage_dir)
+def _storage(db: Session) -> Path:
+    p = storage_directory(db)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -89,26 +97,25 @@ def delete_document(
             422,
         )
     doc = _require(db, doc_id)
-    import shutil
-
     from app.core.wizard import images_dir
 
-    for path in (
+    paths = [Path(path) for path in (
         doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.dmrl_path,
         doc.dm_header_path, doc.cir_path, doc.brex_rules_path,
-    ):
-        if path:
-            Path(path).unlink(missing_ok=True)
-    shutil.rmtree(images_dir(doc.id), ignore_errors=True)
+    ) if path]
+    directory = images_dir(doc.id, root=Path(doc.storage_path).parent)
+    previews = previews_dir(doc)
     db.query(DmDocumentLink).filter(DmDocumentLink.doc_id == doc.id).delete()
     db.query(DmVersion).filter(DmVersion.doc_id == doc.id).delete()
     db.delete(doc)
     db.commit()
+    remove_files(paths, directories=[directory, previews])
     return {"id": doc_id, "status": "deleted"}
 
 
 @router.post("", response_model=DocumentOut, status_code=201)
-async def upload_document(
+def upload_document(
+    response: Response,
     file: UploadFile = File(...),
     s1000d_issue: str = Form("4.2"),
     context_hint: str = Form("mixed"),
@@ -119,10 +126,9 @@ async def upload_document(
         raise AppError("BAD_ISSUE", f"Issue non supportee : {s1000d_issue}", 422)
     if context_hint not in _HINTS:
         raise AppError("BAD_HINT", f"Hint invalide : {context_hint}", 422)
+    if brex_id and is_demo_mode(db):
+        raise AppError("DEMO_BREX_DISABLED", "Les profils BREX ne sont pas disponibles en mode démo.", 409)
     fmt = detect_format(file.filename or "")
-    raw = await file.read()
-    if len(raw) > settings.max_upload_size_bytes:
-        raise AppError("FILE_TOO_LARGE", "Document trop volumineux.", 413)
     if brex_id:
         profile = db.get(BrexProfile, brex_id)
         if profile is None:
@@ -134,66 +140,70 @@ async def upload_document(
                 422,
             )
 
-    doc = Document(
-        filename=file.filename or f"document.{fmt}", source_format=fmt,
-        s1000d_issue=s1000d_issue, context_hint=context_hint, brex_id=brex_id,
-        storage_path="", status="uploaded",
-    )
-    db.add(doc)
-    db.flush()
-    path = _storage() / f"document_{doc.id}.{fmt}"
-    path.write_bytes(raw)
-    doc.storage_path = str(path)
-    if fmt == "pdf":
-        try:
-            doc.page_count = pdf_page_count(path)
-        except Exception:
-            doc.page_count = None
-    migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
-    db.commit()
-    return _to_out(doc)
+    with staged_upload(file.file, _storage(db), settings.max_upload_size_bytes) as (staging, digest):
+        with UPLOAD_LOCK:
+            candidates = db.scalars(select(Document).where(
+                Document.sha256 == digest, Document.s1000d_issue == s1000d_issue,
+                Document.context_hint == context_hint, Document.brex_id == brex_id,
+            ).order_by(Document.created_at)).all()
+            doc = next((candidate for candidate in candidates if Path(candidate.storage_path).is_file()), None)
+            if doc is None:
+                saved = migration_inputs.saved_file(db, "document")
+                mapping = migration_inputs.load(db)
+                previous_path = mapping["files"].get("document", {}).get("path")
+                legacy = db.scalar(select(Document).where(
+                    Document.storage_path == previous_path, Document.sha256.is_(None),
+                    Document.s1000d_issue == s1000d_issue, Document.context_hint == context_hint,
+                    Document.brex_id == brex_id,
+                )) if saved and previous_path else None
+                if legacy is not None and saved:
+                    try:
+                        legacy.sha256 = file_sha256(saved[0])
+                        if legacy.sha256 == digest:
+                            doc = legacy
+                    except OSError as exc:
+                        log.warning("document_legacy_hash_failed", document_id=legacy.id,
+                                    error_type=type(exc).__name__, exc_info=True)
+            if doc is not None:
+                if doc.source_format != fmt:
+                    raise AppError("BAD_FORMAT", "L'extension ne correspond pas au document existant.", 422)
+                migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
+                db.commit()
+                response.headers["X-Reused"] = "true"
+                return _to_out(doc)
+            doc = Document(
+                filename=file.filename or f"document.{fmt}", source_format=fmt,
+                s1000d_issue=s1000d_issue, context_hint=context_hint, brex_id=brex_id,
+                storage_path="", status="uploaded", sha256=digest,
+            )
+            db.add(doc)
+            db.flush()
+            path = _storage(db) / f"document_{doc.id}.{fmt}"
+            publish_file(staging, path)
+            doc.storage_path = str(path)
+            if fmt == "pdf":
+                try:
+                    doc.page_count = pdf_page_count(path)
+                except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+                    log.warning("document_page_count_failed", document_id=doc.id,
+                                error_type=type(exc).__name__, exc_info=True)
+                    doc.page_count = None
+            migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
+            db.commit()
+            return _to_out(doc)
 
 
 @router.post("/{doc_id}/extract")
-async def extract(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResponse:
+async def extract(doc_id: str, request: Request, db: Session = Depends(get_db)) -> EventSourceResponse:
     doc = _require(db, doc_id)
     _require_single_document_workflow(doc)
+    demo_mode = is_demo_mode(db)
     doc_id = doc.id  # detache de la session avant le thread
 
-    async def event_gen():
-        queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
-        def cb(step: str, pct: int) -> None:
-            loop.call_soon_threadsafe(
-                queue.put_nowait, ("progress", {"step": step, "pct": pct})
-            )
-
-        def work() -> dict:
-            return _run_and_persist(doc_id, cb)
-
-        task = asyncio.create_task(asyncio.to_thread(work))
-        yield {"event": "session", "data": json.dumps({"document_id": doc_id})}
-        while True:
-            getter = asyncio.ensure_future(queue.get())
-            done, _ = await asyncio.wait(
-                {getter, task}, return_when=asyncio.FIRST_COMPLETED
-            )
-            if getter in done:
-                event, data = getter.result()
-                yield {"event": event, "data": json.dumps(data)}
-            else:
-                getter.cancel()
-            if task.done() and queue.empty():
-                break
-        try:
-            result = task.result()
-            yield {"event": "done", "data": json.dumps(result)}
-        except Exception as exc:
-            code = exc.code if isinstance(exc, AppError) else "EXTRACT_FAILED"
-            yield {"event": "error", "data": json.dumps({"code": code, "message": str(exc)})}
-
-    return EventSourceResponse(event_gen())
+    return stream_threaded_job(
+        request, lambda progress: _run_and_persist(doc_id, progress, demo_mode),
+        session_data={"document_id": doc_id}, error_code="EXTRACT_FAILED",
+    )
 
 
 @router.get("/{doc_id}/result", response_model=ExtractDoneOut)
@@ -218,52 +228,15 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
-    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
-    brex_rules = parse_brex(brex_xml) if brex_xml else []
-    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
-    serialization = SerializationDiagnostics()
-    if doc.ir_json:
-        root = ir_mod.from_dict(json.loads(doc.ir_json))
-        resources = wres.load_resources(doc)
-        entries = wres.dmrl_data_module_entries(doc)
-        metadata = entries[0].to_dict() if entries else None
-        xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
-            root,
-            brex_rules,
-            issue=doc.s1000d_issue,
-            dm_type=doc.dm_type or "descriptive",
-            dm_metadata=metadata,
-            header_template=dm_header_mod.with_brex_dm_code(
-                resources.header_template, brex_dm_code
-            ),
-        )
-        doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
-        Path(doc.xml_path).write_text(xml, encoding="utf-8")
-    violations = validate_document(
-        xml,
-        issue=doc.s1000d_issue,
-        dm_type=doc.dm_type or "descriptive",
-        brex_xml=brex_xml,
-    )
-    violations.extend(serialization.xsd_violations)
-    doc.violations_json = json.dumps(violations, ensure_ascii=False)
+    violations = json.loads(doc.violations_json or "[]")
     missing_fields = missing_data_fields(xml)
-    doc.status = (
-        "incomplete"
-        if (
-            not xsd_is_valid(violations)
-            or missing_fields
-            or any(v.get("severity") == "error" for v in violations)
-        )
-        else "extracted"
-    )
-    db.commit()
     return Response(
         content=xml, media_type="application/xml",
         headers={
             "Content-Disposition": f'attachment; filename="{doc.id}.xml"',
             "X-S1000D-XSD-Valid": str(xsd_is_valid(violations)).lower(),
             "X-S1000D-Missing-Fields": str(len(missing_fields)),
+            "ETag": f'"{hashlib.sha256(xml.encode("utf-8")).hexdigest()}"',
         },
     )
 
@@ -309,17 +282,8 @@ def override_node(
         brex_xml=brex_xml,
     )
     violations.extend(serialization.xsd_violations)
-    missing_fields = missing_data_fields(xml)
-    doc.status = (
-        "incomplete"
-        if (
-            not xsd_is_valid(violations)
-            or missing_fields
-            or any(v.get("severity") == "error" for v in violations)
-        )
-        else "extracted"
-    )
-    Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
+    doc.status = "incomplete" if has_blocking_violation(violations) else "extracted"
+    atomic_write_text(Path(doc.xml_path), xml)  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
     db.commit()
@@ -362,10 +326,10 @@ def _brex_xml(
         raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
-def _run_and_persist(doc_id: str, cb) -> dict:
+def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
     """Execute dans un thread : ouvre sa propre session, lance le pipeline,
     persiste l'arbre + le XML + les violations, renvoie le payload 'done'."""
-    db = SessionLocal()
+    db = open_session(demo_mode)
     try:
         doc = db.get(Document, doc_id)
         if doc is None:
@@ -375,30 +339,27 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         try:
             result = pipeline.run(
                 doc.storage_path, fmt=doc.source_format, issue=doc.s1000d_issue,
-                hint=doc.context_hint, db=db, brex_xml=brex_xml,
+                hint=doc.context_hint, brex_xml=brex_xml,
                 dm_metadata=(dmrl_entries[0].to_dict() if dmrl_entries else None),
                 header_template=wres.load_resources(doc).header_template,
                 progress_cb=cb,
             )
+        except JobCancelled:
+            db.rollback()
+            raise
         except Exception:
             doc.status = "extract_failed"
             db.commit()
             raise
-        xml_path = _storage() / f"document_{doc.id}.xml"
-        xml_path.write_text(result.xml, encoding="utf-8")
+        cb("persist", 100)
+        xml_path = _storage(db) / f"document_{doc.id}.xml"
+        atomic_write_text(xml_path, result.xml)
         doc.xml_path = str(xml_path)
         doc.dm_type = result.dm_type
         doc.ir_json = json.dumps(result.tree, ensure_ascii=False)
         doc.violations_json = json.dumps(result.violations, ensure_ascii=False)
-        missing_fields = missing_data_fields(result.xml)
         doc.status = (
-            "incomplete"
-            if (
-                not xsd_is_valid(result.violations)
-                or missing_fields
-                or any(v.get("severity") == "error" for v in result.violations)
-            )
-            else "extracted"
+            "incomplete" if has_blocking_violation(result.violations) else "extracted"
         )
         db.commit()
         return {
