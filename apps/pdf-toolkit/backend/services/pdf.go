@@ -4,25 +4,64 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
 	ErrInvalidInput = errors.New("invalid PDF operation input")
 	ErrInvalidPDF   = errors.New("invalid or unsupported PDF")
+	ErrNoImages     = errors.New("PDF contains no extractable images")
 	ErrOutputWrite  = errors.New("PDF output could not be written")
 )
 
 type PDFProcessor interface {
 	Merge(ctx context.Context, inputFiles []string, output string) error
 	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
+	ExtractImages(ctx context.Context, input, output string) error
 	Compress(ctx context.Context, input, output string) error
+	Clean(ctx context.Context, input, output string) error
+	EditMetadata(ctx context.Context, input, output string, metadata PDFMetadata) error
+	Protect(ctx context.Context, input, output string, options PDFProtectionOptions) error
+	ChangeUserPassword(
+		ctx context.Context,
+		input, output string,
+		options PDFPasswordChangeOptions,
+	) error
 	PageCount(ctx context.Context, input string) (int, error)
 	Extract(ctx context.Context, input, output string, pages []int) error
 	Delete(ctx context.Context, input, output string, pages []int) error
 	Reorder(ctx context.Context, input, output string, pages []int) error
+	Collect(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
+	Crop(ctx context.Context, input, output string, crops []PDFCropRect) error
 	StampSignature(ctx context.Context, input, image, output string, options SignatureStampOptions) error
+	AddComments(ctx context.Context, input, output string, comments []PDFComment) error
+}
+
+type PDFCropRect struct {
+	Page int     `json:"page"`
+	X1   float64 `json:"x1"`
+	Y1   float64 `json:"y1"`
+	X2   float64 `json:"x2"`
+	Y2   float64 `json:"y2"`
+}
+
+type PDFProtectionOptions struct {
+	UserPassword  string
+	OwnerPassword string
+	AllowPrint    bool
+	AllowCopy     bool
+	AllowModify   bool
+	AllowComments bool
+	AllowFormFill bool
+	AllowSign     bool
+}
+
+type PDFPasswordChangeOptions struct {
+	OwnerPassword   string
+	NewUserPassword string
 }
 
 type SplitDocument interface {
@@ -75,6 +114,70 @@ func (s *PDFService) Compress(ctx context.Context, input, output string) error {
 	return nil
 }
 
+func (s *PDFService) Clean(ctx context.Context, input, output string) error {
+	if input == "" || output == "" {
+		return fmt.Errorf("%w: input and output paths are required", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Clean(ctx, input, output); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: clean PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) Protect(
+	ctx context.Context,
+	input, output string,
+	options PDFProtectionOptions,
+) error {
+	if input == "" || output == "" ||
+		utf8.RuneCountInString(options.UserPassword) < 8 ||
+		utf8.RuneCountInString(options.OwnerPassword) < 8 ||
+		options.UserPassword == options.OwnerPassword {
+		return fmt.Errorf("%w: protection passwords or paths are invalid", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Protect(ctx, input, output, options); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: protect PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) ChangeUserPassword(
+	ctx context.Context,
+	input, output string,
+	options PDFPasswordChangeOptions,
+) error {
+	if input == "" || output == "" ||
+		options.OwnerPassword == "" ||
+		utf8.RuneCountInString(options.NewUserPassword) < 8 ||
+		options.OwnerPassword == options.NewUserPassword {
+		return fmt.Errorf("%w: password change options or paths are invalid", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.ChangeUserPassword(ctx, input, output, options); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: change PDF open password: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
 func (s *PDFService) ImagesToPDF(ctx context.Context, inputFiles []string, output string) error {
 	if len(inputFiles) == 0 || output == "" {
 		return fmt.Errorf("%w: images and output path are required", ErrInvalidInput)
@@ -92,6 +195,63 @@ func (s *PDFService) ImagesToPDF(ctx context.Context, inputFiles []string, outpu
 			return err
 		}
 		return fmt.Errorf("%w: convert images to PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) ExtractImages(ctx context.Context, input, output string) error {
+	if input == "" || output == "" {
+		return fmt.Errorf("%w: input and output paths are required", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.ExtractImages(ctx, input, output); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrNoImages) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: extract embedded images: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) Crop(ctx context.Context, input, output string, crops []PDFCropRect) error {
+	if input == "" || output == "" || len(crops) == 0 {
+		return fmt.Errorf("%w: input, output, and page crop rectangles are required", ErrInvalidInput)
+	}
+	pageCount, err := s.pageCount(ctx, input)
+	if err != nil {
+		return err
+	}
+	if len(crops) != pageCount {
+		return fmt.Errorf("%w: a crop rectangle is required for every page", ErrInvalidInput)
+	}
+
+	seen := make([]bool, pageCount+1)
+	for _, crop := range crops {
+		if crop.Page < 1 || crop.Page > pageCount || seen[crop.Page] ||
+			!isFinite(crop.X1) || !isFinite(crop.Y1) ||
+			!isFinite(crop.X2) || !isFinite(crop.Y2) ||
+			crop.X2 <= crop.X1 || crop.Y2 <= crop.Y1 {
+			return fmt.Errorf("%w: crop rectangles must be valid and cover each page once", ErrInvalidInput)
+		}
+		seen[crop.Page] = true
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Crop(ctx, input, output, crops); err != nil {
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrInvalidInput) ||
+			errors.Is(err, ErrOutputWrite) {
+			return err
+		}
+		return fmt.Errorf("%w: crop PDF: %w", ErrInvalidPDF, err)
 	}
 	return nil
 }
@@ -206,6 +366,10 @@ func (s *PDFService) pageCount(ctx context.Context, input string) (int, error) {
 		return 0, fmt.Errorf("%w: PDF does not contain pages", ErrInvalidPDF)
 	}
 	return pageCount, nil
+}
+
+func isFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func isSupportedRotation(rotation int) bool {

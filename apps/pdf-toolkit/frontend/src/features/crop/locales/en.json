@@ -1,0 +1,39 @@
+{
+  "tools": {
+    "crop": {
+      "tab": "Crop",
+      "title": "Crop a PDF",
+      "description": "Remove white margins manually or automatically."
+    }
+  },
+  "crop": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "Page 1 is used as the preview for manual cropping.",
+    "stepCrop": "Set crop area",
+    "stepCropDescription": "Choose a manual box or automatic margin detection.",
+    "modeLabel": "Cropping mode",
+    "manualMode": "Manual — draw a box",
+    "automaticMode": "Automatic — detect white margins",
+    "manualHelp": "Draw the area to keep on the preview. You can also adjust its coordinates below.",
+    "manualScope": "The box drawn on page 1 is applied proportionally to every page.",
+    "automaticHelp": "The preview shows page 1; detection analyzes every page in the document.",
+    "automaticScope": "Visible content is detected page by page with a small safety margin. Blank pages are unchanged.",
+    "previewPage": "Page {{page}} preview",
+    "previewLoading": "Loading preview…",
+    "previewFailed": "This PDF could not be read in the preview.",
+    "previewRequired": "Wait for the PDF preview to be ready before cropping.",
+    "noPages": "This PDF contains no pages.",
+    "leftLabel": "Left (%)",
+    "topLabel": "Top (%)",
+    "widthLabel": "Width (%)",
+    "heightLabel": "Height (%)",
+    "outputDescription": "Cropped PDF to download",
+    "analysisProgress": "Analyzing pages: {{completed}} / {{total}}",
+    "action": "Crop and download",
+    "working": "Cropping…",
+    "selectionRequired": "Draw or enter an area smaller than the full page.",
+    "noMarginsFound": "No removable margins were detected.",
+    "success": "Downloaded {{fileName}}.",
+    "failed": "PDF cropping failed."
+  }
+}

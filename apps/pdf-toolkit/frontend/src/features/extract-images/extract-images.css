@@ -1,0 +1,120 @@
+.extract-images-gallery {
+  grid-column: 1 / -1;
+}
+
+.extract-images-gallery-heading {
+  margin-bottom: 16px;
+}
+
+.extract-images-gallery-heading h2 {
+  margin: 0 0 4px;
+  font-family: "Orbitron", sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.extract-images-gallery-heading p {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+}
+
+.extract-images-category + .extract-images-category {
+  margin-top: 20px;
+}
+
+.extract-images-category h3 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.extract-images-category p {
+  margin: 0 0 10px;
+  color: var(--color-text-dim);
+  font-size: 0.75rem;
+}
+
+.extract-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+}
+
+.extract-images-download {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-base);
+  padding: 8px;
+  color: var(--color-text-base);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.extract-images-download:hover {
+  border-color: var(--color-border-bright);
+  background: var(--color-card-hover);
+}
+
+.extract-images-preview {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-card-hover);
+}
+
+.extract-images-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.extract-images-preview-unavailable {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  color: var(--color-text-dim);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.extract-images-preview-unavailable svg {
+  color: var(--color-brand-blue-light);
+}
+
+.extract-images-name {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extract-images-size {
+  color: var(--color-text-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+}
+
+.extract-images-occurrences {
+  color: var(--color-text-dim);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .extract-images-download {
+    transition: none;
+  }
+}

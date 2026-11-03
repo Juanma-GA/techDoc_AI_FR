@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -18,10 +19,16 @@ import (
 )
 
 type routeProcessor struct {
-	pageCount int
-	inputPath string
-	rotated   []int
-	rotation  int
+	pageCount   int
+	inputPath   string
+	collected   []int
+	rotated     []int
+	rotation    int
+	protected   services.PDFProtectionOptions
+	metadata    services.PDFMetadata
+	metadataErr error
+	comments    []services.PDFComment
+	imageErr    error
 }
 
 func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {
@@ -42,6 +49,49 @@ func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {
 	}
 }
 
+func TestExtractImagesRouteStreamsArchiveAndCleansTemporaryFiles(t *testing.T) {
+	processor := &routeProcessor{}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/extract-images", "file", "source.pdf", "%PDF-1.7\ninput", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/zip" {
+		t.Fatalf("Content-Type = %q, want application/zip", got)
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=extracted-images.zip" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if response.Body.String() != "zip archive" {
+		t.Fatalf("response body = %q", response.Body.String())
+	}
+	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary PDF still exists after response: %v", err)
+	}
+}
+
+func TestExtractImagesRouteReportsPDFWithoutImages(t *testing.T) {
+	processor := &routeProcessor{imageErr: services.ErrNoImages}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	request := multipartRequest(t, "/api/v1/extract-images", "file", "source.pdf", "%PDF-1.7\ninput", nil)
+	response := httptest.NewRecorder()
+	testRouter(handler).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "Le PDF ne contient aucune image à extraire.") {
+		t.Fatalf("body = %q, want no-images error", response.Body.String())
+	}
+	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary PDF still exists after response: %v", err)
+	}
+}
+
 func (p *routeProcessor) Merge(_ context.Context, _ []string, output string) error {
 	return writeRoutePDF(output)
 }
@@ -50,8 +100,49 @@ func (p *routeProcessor) ImagesToPDF(_ context.Context, _ []string, output strin
 	return writeRoutePDF(output)
 }
 
+func (p *routeProcessor) ExtractImages(_ context.Context, input, output string) error {
+	p.inputPath = input
+	if p.imageErr != nil {
+		return p.imageErr
+	}
+	return os.WriteFile(output, []byte("zip archive"), 0o600)
+}
+
 func (p *routeProcessor) Compress(_ context.Context, input, output string) error {
 	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Clean(_ context.Context, input, output string) error {
+	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) EditMetadata(_ context.Context, input, output string, metadata services.PDFMetadata) error {
+	p.inputPath = input
+	p.metadata = metadata
+	if p.metadataErr != nil {
+		return p.metadataErr
+	}
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Protect(
+	_ context.Context,
+	_ string,
+	output string,
+	options services.PDFProtectionOptions,
+) error {
+	p.protected = options
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) ChangeUserPassword(
+	_ context.Context,
+	_ string,
+	output string,
+	_ services.PDFPasswordChangeOptions,
+) error {
 	return writeRoutePDF(output)
 }
 
@@ -72,6 +163,12 @@ func (p *routeProcessor) Delete(_ context.Context, input, output string, _ []int
 
 func (p *routeProcessor) Reorder(_ context.Context, input, output string, _ []int) error {
 	p.inputPath = input
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Collect(_ context.Context, input, output string, pages []int) error {
+	p.inputPath = input
+	p.collected = append([]int(nil), pages...)
 	return writeRoutePDF(output)
 }
 
@@ -148,6 +245,28 @@ func TestCompressRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=compressed.pdf" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if response.Body.String() != "%PDF-1.7\nprocessed" {
+		t.Fatalf("response body = %q", response.Body.String())
+	}
+	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary input still exists after response: %v", err)
+	}
+}
+
+func TestCleanRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
+	processor := &routeProcessor{}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/clean", "file", "source.pdf", "%PDF-1.7\ninput", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=cleaned.pdf" {
 		t.Fatalf("Content-Disposition = %q", got)
 	}
 	if response.Body.String() != "%PDF-1.7\nprocessed" {

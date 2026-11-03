@@ -124,7 +124,6 @@ export function PdfToImagesTool() {
             </span>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("pdfToImages.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

@@ -1,0 +1,160 @@
+.workflow-grid.comments-workflow {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
+}
+
+.comments-preview-panel,
+.comments-action-panel {
+  min-width: 0;
+}
+
+.comments-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 8px;
+}
+
+.comments-page-label {
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+}
+
+.comments-page-input {
+  width: 76px;
+}
+
+.comments-pdf-page {
+  position: relative;
+  width: min(100%, 720px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-md);
+  border-radius: var(--radius-sm);
+  background: white;
+  touch-action: none;
+  user-select: none;
+}
+
+.comments-pdf-page.is-drawable {
+  cursor: crosshair;
+}
+
+.comments-pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.comments-pdf-page:not(.is-ready) {
+  cursor: progress;
+}
+
+.comments-highlight-box {
+  position: absolute;
+  border: 2px dashed var(--color-brand-blue);
+  background: color-mix(in srgb, var(--color-brand-blue) 14%, transparent);
+  pointer-events: none;
+}
+
+.comments-highlight-box.is-draft {
+  border-color: var(--color-semantic-warning);
+  background: color-mix(in srgb, var(--color-semantic-warning) 16%, transparent);
+}
+
+.comments-box-number {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 0 0 var(--radius-sm) 0;
+  background: var(--color-brand-blue);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.comments-center-button {
+  margin-top: 10px;
+}
+
+.comments-draft {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.comments-box-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.comments-box-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--color-text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.comments-list {
+  display: grid;
+  max-height: 340px;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.comments-list-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  padding: 5px 6px 5px 10px;
+}
+
+.comments-list-content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  color: var(--color-text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.comments-list-content span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comments-list-page {
+  color: var(--color-text-dim);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.comments-export {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .workflow-grid.comments-workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
