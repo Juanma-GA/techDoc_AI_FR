@@ -148,7 +148,6 @@ export function MergeTool() {
             ))}
           </ol>
         ) : null}
-        <p className="privacy-hint">{t("merge.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

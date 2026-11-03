@@ -32,7 +32,6 @@
       "bottomRight": "bottom right"
     },
     "unsupportedText": "The name or date contains a character that this PDF cannot display.",
-    "privacy": "The signature, name, and date stay in memory during this operation and are not retained after closing.",
     "canvasLabel": "Signature drawing area",
     "clear": "Clear",
     "save": "Save drawing",
