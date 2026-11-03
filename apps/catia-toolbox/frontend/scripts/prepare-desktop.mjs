@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFrontend, run } from "../../../../scripts/lib/frontend-build.mjs";
@@ -17,6 +17,12 @@ if (!existsSync(path.join(frontend, "dist", "src", "desktop-startup.html"))) {
 }
 if (config.adapter === "fastapi") {
   await prepareFastApi(frontend, mode);
+  if (mode === "build") {
+    rmSync(
+      path.join(frontend, "src-tauri/runtime/python/Lib/site-packages/PySide6/qml"),
+      { recursive: true, force: true },
+    );
+  }
 } else if (config.adapter === "command") {
   const commands = config.prepare?.[mode];
   if (!Array.isArray(commands) || commands.length === 0) throw new Error("Missing backend preparation commands.");
