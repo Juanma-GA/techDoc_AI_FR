@@ -67,7 +67,7 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Une DMRL chargee insere une etape de validation AVANT le decoupage.
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
     assert state["step"] == "dmrl"
-    assert state["steps"] == ["dmrl", "split", "type", "structure", "preliminary", "generate"]
+    assert state["steps"] == ["dmrl", "split", "preliminary", "generate"]
     assert [row["matched"] for row in state["dmrl"]] == [True, True]
 
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
@@ -76,6 +76,28 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Le type declare dans la DMRL fait foi.
     assert [d["dm_type"] for d in state["dms"]] == ["descriptive", "procedural"]
     assert state["resources"]["dmrl_count"] == 2
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "preliminary"
+
+
+def test_legacy_dmrl_type_and_structure_steps_resume_at_split(client, pdf_bytes) -> None:
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes)
+    _upload_resource(client, doc_id, "dmrl", "DMRL.json", json.dumps(_DMRL).encode())
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "split"
+
+    for legacy_step in ("type", "structure"):
+        with SessionLocal() as db:
+            doc = db.get(Document, doc_id)
+            doc.wizard_step = legacy_step
+            db.commit()
+        resumed = client.get(f"/api/v1/documents/{doc_id}/wizard").json()
+        assert resumed["step"] == "split"
+        assert resumed["steps"] == ["dmrl", "split", "preliminary", "generate"]
 
 
 def test_document_defaults_to_issue_4_2(client, pdf_bytes) -> None:
@@ -256,7 +278,7 @@ def test_cir_and_brex_rules_upload(client, pdf_bytes) -> None:
     }
 
 
-def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
+def test_client_dm_header_template_is_applied(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload_doc(client, pdf_bytes)
     template = {
         "security": {"securityClassification": "04"},
@@ -281,8 +303,11 @@ def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
         f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1}
     ).json()
     assert state["resources"]["has_dm_header"] is True
-    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
-        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "split"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    if state["step"] == "preliminary":
+        state = complete_preliminary(doc_id, state)
     xml = client.get(
         f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
     ).text

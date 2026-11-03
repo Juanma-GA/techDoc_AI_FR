@@ -1,11 +1,15 @@
 """Assistant guide (wizard) : configuration etape par etape d'une migration.
 
-Etapes bloquantes, l'utilisateur valide chacune avant la suivante :
+Parcours standard, avec validation de chaque etape :
 
     split     -> decoupage en Data Modules (choix du niveau)
     type      -> type de chaque DM (descriptive / procedural / ipd)
     structure -> arbre par DM + arbitrage des noeuds ambigus
     generate  -> XML S1000D par DM + validation
+
+Avec une DMRL contenant des Data Modules, le parcours est
+dmrl -> split -> preliminary (si procedural) -> generate : types et arbre sont
+resolus automatiquement depuis les donnees disponibles.
 
 L'etat vit sur le `Document` : `wizard_step`, `split_level`, `ir_json` (IR
 complet apres parse) et `dms_json` (liste de DM en cours de configuration).
@@ -18,7 +22,9 @@ merge / split / masquage entetes-pieds / undo / apercu) vit dans `wizard_split`.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import perf_counter
 
 import structlog
@@ -28,28 +34,32 @@ from app.core import (
     context_classifier,
     dm_header,
     form_segmenter,
+    illustrations,
     ingest,
     resolver,
     splitter,
     structure_infer,
     wizard_response,
 )
-from app.core import preliminary_review as preliminary
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
+from app.core import preliminary_review as preliminary
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
+from app.core.fs import replace_directory
 from app.core.preliminary_projection import reviewed_root, sync_mappings
+from app.core.progress import scaled_progress
 from app.core.s1000d_serializer import (
     ReferenceIndex,
     build_reference_index,
     missing_data_fields,
 )
-from app.core.validator import validate_document, xsd_is_valid
+from app.core.validator import has_blocking_violation, validate_document, xsd_is_valid
+from app.core.wizard_fingerprint import dm_xml_fingerprint, xml_context_fingerprint
 from app.core.wizard_zip_export import reference_index_documents
 from app.db.models import BrexProfile, Document
 
@@ -57,13 +67,21 @@ STEPS = ("split", "type", "structure", "generate")
 # Une DMRL chargee insere une etape de validation AVANT le decoupage : on ne
 # decoupe pas sur une liste de DM que l'utilisateur n'a pas encore validee.
 STEPS_WITH_DMRL = ("dmrl", *STEPS)
+STEPS_DMRL_DRIVEN = ("dmrl", "split", "generate")
 _DEFAULT_LEVEL = "section"
 
 log = structlog.get_logger("s1000d_extractor.wizard")
 
 
 def steps_for(doc: Document) -> tuple[str, ...]:
-    steps = STEPS_WITH_DMRL if doc.dmrl_json else STEPS
+    if doc.dmrl_json:
+        steps = (
+            STEPS_DMRL_DRIVEN
+            if wres.dmrl_data_module_entries(doc)
+            else STEPS_WITH_DMRL
+        )
+    else:
+        steps = STEPS
     if any(dm["dm_type"] == "procedural" for dm in ws.load_dms(doc)):
         return (*steps[:-1], "preliminary", "generate")
     return steps
@@ -94,33 +112,49 @@ def _brex_xml(
         raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
-def images_dir(doc_id: str) -> Path:
+def images_dir(doc_id: str, *, root: Path | None = None) -> Path:
     """Dossier des illustrations extraites d'un document."""
-    from app.config import settings
-    return Path(settings.storage_dir) / f"document_{doc_id}_images"
+    if root is None:
+        from app.config import settings
+
+        root = Path(settings.storage_dir)
+    return root / f"document_{doc_id}_images"
 
 
-def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
-    """Extrait les images du PDF en JPG et pose l'ICN sur les figures (no-op si
-    echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
-    doit pas empiler des doublons d'illustrations."""
-    from app.core import illustrations
-    out_dir = images_dir(doc.id)
+def _extract_illustrations(
+    doc: Document, root: ir_mod.IRNode, *, source_path: str | None = None,
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
+    progress_cb: Callable[[str, int], None] | None = None,
+) -> illustrations.IllustrationResult:
+    """Publish new images and IR links only after a successful extraction."""
+    out_dir = images_dir(doc.id, root=Path(doc.storage_path).parent)
+    staged_root = ir_mod.from_dict(ir_mod.to_dict(root))
     try:
-        if out_dir.exists():
-            for old in out_dir.iterdir():
-                if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                    old.unlink(missing_ok=True)
-        return illustrations.attach_illustrations(
-            root,
-            pdf_path=doc.pdf_cut_path or doc.storage_path,
-            out_dir=out_dir,
-            doc_id=doc.id,
-            dm_level=splitter.level_of(_DEFAULT_LEVEL),
-        )
-    except Exception as exc:  # jamais bloquant : le squelette reste generable sans images
-        log.warning("wizard_illustrations_failed", error_type=type(exc).__name__)
-        return 0
+        with TemporaryDirectory(prefix=f"{out_dir.name}-", suffix=".tmp", dir=out_dir.parent) as name:
+            staging = Path(name)
+            result = illustrations.attach_illustrations(
+                staged_root,
+                pdf_path=source_path or doc.pdf_cut_path or doc.storage_path,
+                out_dir=staging,
+                doc_id=doc.id,
+                dm_level=splitter.level_of(_DEFAULT_LEVEL),
+                table_bboxes_by_page=table_bboxes_by_page,
+            )
+            if result.illustration_errors:
+                log.warning("wizard_illustrations_not_published", document_id=doc.id,
+                            illustration_errors=result.illustration_errors)
+                return illustrations.IllustrationResult(illustration_errors=result.illustration_errors)
+            if progress_cb is not None:
+                progress_cb("infer", 55)
+            replace_directory(staging, out_dir)
+        root.children = staged_root.children
+        root.icn = staged_root.icn
+        root.icns = staged_root.icns
+        return result
+    except (OSError, RuntimeError, ValueError) as exc:
+        log.warning("wizard_illustrations_failed", document_id=doc.id,
+                    error_type=type(exc).__name__, exc_info=True)
+        return illustrations.IllustrationResult(illustration_errors=1)
 
 
 def _apply_dmrl_icns(
@@ -210,8 +244,10 @@ def start(
     )
     progress_cb("parse", 10)
     stage_started = perf_counter()
+    table_bboxes = {} if doc.source_format == "pdf" else None
     blocks = ingest.extract_blocks(
-        source_path, fmt=doc.source_format, progress_cb=progress_cb, local_only=True,
+        source_path, fmt=doc.source_format, progress_cb=progress_cb,
+        table_bboxes_by_page=table_bboxes,
     )
     log.info(
         "wizard_stage_timing",
@@ -227,22 +263,39 @@ def start(
     )
     progress_cb("infer", 40)
     stage_started = perf_counter()
-    root = structure_infer.build_ir(blocks)
+    root = structure_infer.build_ir(blocks, progress_cb=scaled_progress(progress_cb, "infer", 40, 55))
     log.info(
         "wizard_stage_timing",
         stage="structure_inference",
         duration_ms=round((perf_counter() - stage_started) * 1000, 1),
         block_count=len(blocks),
     )
+    illustration_result = illustrations.IllustrationResult()
     if doc.source_format == "pdf":
         stage_started = perf_counter()
-        illustration_count = _extract_illustrations(doc, root)
+        illustration_result = _extract_illustrations(
+            doc, root, source_path=str(source_path), table_bboxes_by_page=table_bboxes,
+            progress_cb=progress_cb,
+        )
         log.info(
             "wizard_stage_timing",
             stage="illustration_extraction",
             duration_ms=round((perf_counter() - stage_started) * 1000, 1),
-            image_count=illustration_count,
+            image_count=illustration_result.saved_count,
+            illustration_errors=illustration_result.illustration_errors,
         )
+    violations = [
+        item for item in json.loads(doc.violations_json or "[]")
+        if item.get("rule") != "ILLUSTRATION_EXTRACTION"
+    ]
+    if illustration_result.illustration_errors:
+        violations.append({
+            "rule": "ILLUSTRATION_EXTRACTION",
+            "severity": "warning",
+            "message": "Extraction des illustrations incomplete ; les anciens fichiers sont conserves.",
+            "count": illustration_result.illustration_errors,
+        })
+    doc.violations_json = json.dumps(violations, ensure_ascii=False)
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
@@ -287,7 +340,9 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     entries = wres.dmrl_data_module_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
-        _apply_dmrl_icns(units, entries, images_dir(doc.id))
+        _apply_dmrl_icns(
+            units, entries, images_dir(doc.id, root=Path(doc.storage_path).parent),
+        )
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     log.info(
         "wizard_stage_timing",
@@ -344,6 +399,8 @@ def update(db: Session, doc: Document, params: dict) -> dict:
             ws.push_history(doc)
             if op == "hide_zones":
                 ws.hide_zones(doc, params.get("zones") or ["header", "footer"])
+            elif op == "split_level":
+                _resplit(db, doc, params["split_level"])
             elif op:
                 ws.apply_split_op(doc, params)
             else:
@@ -380,7 +437,16 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
         new_level = params.get("split_level")
         if new_level and new_level != doc.split_level:
             _resplit(db, doc, new_level)
-        doc.wizard_step = "type"
+        if "type" not in steps_for(doc):
+            _apply_types(doc, {})
+            _resolve_all(doc)
+            if "preliminary" in steps_for(doc):
+                preliminary.prepare(doc)
+                doc.wizard_step = "preliminary"
+            else:
+                _finish_generation(db, doc)
+        else:
+            doc.wizard_step = "type"
     elif step == "type":
         _apply_types(doc, params.get("types") or {})
         _resolve_all(doc)
@@ -409,8 +475,7 @@ def _finish_generation(db: Session, doc: Document) -> None:
         "incomplete"
         if any(
             dm.get("xsd_valid") is not True
-            or dm.get("missing_fields")
-            or any(v.get("severity") == "error" for v in dm.get("violations") or [])
+            or has_blocking_violation(dm.get("violations") or [])
             for dm in ws.load_dms(doc)
         )
         else "extracted"
@@ -467,10 +532,19 @@ def _apply_overrides(doc: Document, overrides: list[dict]) -> None:
     ws.save_dms(doc, dms)
 
 
+def reference_root_transform(doc: Document) -> Callable[[dict, ir_mod.IRNode], ir_mod.IRNode]:
+    reviews = preliminary.load(doc).get("reviews", {})
+
+    def transform(dm: dict, root: ir_mod.IRNode) -> ir_mod.IRNode:
+        if reviews.get(dm["dm_id"], {}).get("status") in {"reviewed", "skipped"}:
+            return reviewed_root(doc, dm, root)
+        return root
+
+    return transform
+
+
 def _generate_all(db: Session, doc: Document) -> None:
-    """Serialise et valide chaque DM. Etape 100% deterministe : aucun appel IA
-    ici (un appel LLM pendant la generation/validation faisait remonter une
-    "Unexpected server error" au moindre incident reseau).
+    """Serialise et valide chaque DM de maniere deterministe et locale.
 
     Un DM qui echoue ne casse plus toute l'etape : il porte sa propre violation.
     """
@@ -487,8 +561,12 @@ def _generate_all(db: Session, doc: Document) -> None:
         dm_count=len(dms),
     )
     reference_index = build_reference_index(
-        reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue)
+        reference_index_documents(
+            dms, dmrl_by_dmc, doc.s1000d_issue,
+            root_transform=reference_root_transform(doc),
+        )
     )
+    fingerprint_context = xml_context_fingerprint(doc, brex_xml)
     for dm_index, dm in enumerate(dms, start=1):
         dm_started = perf_counter()
         resources_ms = 0.0
@@ -528,6 +606,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             })
             dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["xml_fingerprint"] = dm_xml_fingerprint(dm, fingerprint_context)
             dm["template_missing_fields"] = template_missing_fields
 
             serialization_ms = (perf_counter() - stage_started) * 1000
@@ -598,6 +677,10 @@ def state(doc: Document) -> dict:
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
         "has_brex_profile": bool(doc.brex_id),
+        "illustration_errors": sum(
+            item.get("count", 0) for item in json.loads(doc.violations_json or "[]")
+            if item.get("rule") == "ILLUSTRATION_EXTRACTION"
+        ),
         "resources": _resources_state(doc),
         "dms": out_dms,
     }
@@ -621,12 +704,14 @@ def _resources_state(doc: Document) -> dict:
     }
 
 
-def dm_xml(
+def render_dm(
     doc: Document,
     dm_id: str,
     *,
     db: Session | None = None,
     reference_index: ReferenceIndex | None = None,
+    image_name_map: dict[str, str] | None = None,
+    persist: bool = True,
 ) -> str:
     dms = ws.load_dms(doc)
     res = wres.load_resources(doc)
@@ -638,7 +723,10 @@ def dm_xml(
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     if reference_index is None:
         reference_index = build_reference_index(
-            reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue)
+            reference_index_documents(
+                dms, dmrl_by_dmc, doc.s1000d_issue,
+                root_transform=reference_root_transform(doc),
+            )
         )
     for dm in dms:
         if dm["dm_id"] == dm_id:
@@ -668,10 +756,12 @@ def dm_xml(
                 ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
+                image_name_map=image_name_map,
             )
             sync_mappings(root, render_root)
             dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["xml_fingerprint"] = dm_xml_fingerprint(dm, xml_context_fingerprint(doc, brex_xml))
             dm["template_missing_fields"] = template_missing_fields
             xsd_results = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
@@ -682,25 +772,44 @@ def dm_xml(
             xsd_results.extend(serialization.xsd_violations)
             dm["violations"] = [
                 violation for violation in dm.get("violations") or []
-                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE"}
+                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE", "GRAPHIC_NAME_INVALID"}
             ] + xsd_results + template_violations
             dm["xsd_valid"] = xsd_is_valid(xsd_results)
             dm["missing_fields"] = missing_data_fields(
                 xml, template_missing_fields,
             )
-            doc.status = (
-                "incomplete"
-                if any(
-                    item.get("xsd_valid") is not True
-                    or item.get("missing_fields")
-                    or any(
-                        violation.get("severity") == "error"
-                        for violation in item.get("violations") or []
+            if persist and image_name_map is None:
+                doc.status = (
+                    "incomplete"
+                    if any(
+                        item.get("xsd_valid") is not True
+                        or has_blocking_violation(item.get("violations") or [])
+                        for item in dms
                     )
-                    for item in dms
+                    else "extracted"
                 )
-                else "extracted"
-            )
-            ws.save_dms(doc, dms)
+                ws.save_dms(doc, dms)
             return xml
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)
+
+
+dm_xml = render_dm
+
+
+def read_dm_xml(
+    doc: Document, dm_id: str, *, db: Session,
+    fingerprint_context: str | None = None,
+    reference_index: ReferenceIndex | None = None,
+) -> tuple[str, str]:
+    dm = next((item for item in ws.load_dms(doc) if item["dm_id"] == dm_id), None)
+    if dm is None:
+        raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)
+    preliminary.require_complete(doc, dm_id)
+    context = fingerprint_context or xml_context_fingerprint(
+        doc, _brex_xml(db, doc.brex_id, doc.s1000d_issue),
+    )
+    fingerprint = dm_xml_fingerprint(dm, context)
+    if dm.get("xml_fingerprint") == fingerprint:
+        return dm["xml"], fingerprint
+    xml = render_dm(doc, dm_id, db=db, reference_index=reference_index, persist=False)
+    return xml, dm_xml_fingerprint({**dm, "xml": xml}, context)

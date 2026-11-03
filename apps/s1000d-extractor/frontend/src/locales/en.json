@@ -1,7 +1,67 @@
 {
+  "home": {
+    "title": "Home",
+    "subtitle": "Migrate legacy documentation to S1000D.",
+    "cardTitle": "Legacy to S1000D migration",
+    "description": "This tool extracts an S1000D structural skeleton from a native PDF or Word file to start converting legacy documentation.",
+    "principle": "The S1000D element type depends on context, not shape. The tool classifies context, proposes mappings and flags ambiguous cases for human review.",
+    "bestEffortTitle": "Indicative output",
+    "bestEffort": "The output remains a skeleton. The user BREX is supplied separately and supported rules are applied; the DM DMC, applicability, SNS and ICN must still be confirmed by a person.",
+    "backendStatus": "Backend status:",
+    "unknown": "UNKNOWN",
+    "version": "version:"
+  },
+  "architecture": {
+    "title": "Architecture",
+    "subtitle": "Generic pipeline, generation workflow and step details.",
+    "layersTitle": "Generic pipeline (3 independent layers)",
+    "documentChangeTitle": "WHAT VARIES BY DOCUMENT",
+    "documentChangeText": "Input format (PDF layout, Word styles) is absorbed by a canonical logical model (IR). PDF and Word are normalized to the same IR, with no per-document configuration.",
+    "projectChangeTitle": "WHAT VARIES BY PROJECT",
+    "projectChangeText": "The S1000D version (4.1 / 4.2 and its local XSDs) and user BREX provide project constraints. BREX guides and validates DMs without replacing the mapping engine.",
+    "workflowTitle": "User workflow — guided generation",
+    "workflowIntro": "Each step is gated: heuristics make proposals, and a person reviews and corrects them before continuing.",
+    "workflow": [
+      "Settings → demo mode and prefill rules.",
+      "Upload → PDF/Word + S1000D version (4.1/4.2) + optional BREX profile → Generate.",
+      "Split → choose a level (chapter/section/subsection) and review detected Data Modules.",
+      "Types → correct each DM type (descriptive / procedural / IPD).",
+      "Structure → review each DM tree and resolve ambiguous nodes (para ↔ proceduralStep).",
+      "Generate → S1000D XML per DM and violations; download individual DMs or a ZIP."
+    ],
+    "pipelineTitle": "Under the hood (step pipeline)",
+    "pipeline": [
+      "Parse → PyMuPDF (PDF) / python-docx (Word); scanned PDFs require local OCR.",
+      "Canonical IR → common logical tree (sections / lists / admonitions / figures / tables).",
+      "Split (step 1) → one Data Module per section, chapter or subsection.",
+      "DM typing (step 2) → descriptive / procedural / IPD (deterministic heuristics).",
+      "Resolve (step 3) → S1000D element by context and shape; multiple candidates when ambiguous.",
+      "Serialize and validate (step 4) → XML per DM (lxml), XSD and supported BREX rules."
+    ],
+    "outputWarning": "Output is a set of DMs, each an indicative skeleton: the DM DMC, applicability, SNS and ICN still need human confirmation. brexDmRef points to the selected BREX; unsupported rules are reported separately."
+  },
+  "errors": {
+    "VALIDATION_ERROR": "The request is invalid.",
+    "VALIDATION_BAD_OVERRIDES": "Validation versions must be provided as a valid list.",
+    "VALIDATION_TOO_MANY_FILES": "This batch contains too many files.",
+    "FILE_TOO_LARGE": "This batch exceeds the maximum allowed size.",
+    "PDF_PAGE_INVALID": "The PDF page range is invalid.",
+    "PDF_CUT_VALIDATION_REQUIRED": "Confirm the PDF page range before continuing.",
+    "DOC_NOT_FOUND": "Document not found.",
+    "WIZARD_NOT_STARTED": "Start the conversion for this document first.",
+    "DMRL_TYPE_REVIEW_REQUIRED": "Choose a type for each Data Module before continuing.",
+    "INVALID_STREAM": "The response stream is invalid.",
+    "INVALID_RESPONSE": "The server response is invalid.",
+    "NETWORK_ERROR": "The server could not be reached.",
+    "HTTP_ERROR": "The request could not be completed.",
+    "INTERNAL_ERROR": "An internal error occurred.",
+    "START_FAILED": "Document analysis failed.",
+    "INCOMPLETE_STREAM": "The stream ended before analysis was complete.",
+    "BREX_NOT_FOUND": "BREX profile not found.",
+    "BREX_ISSUE_MISMATCH": "The BREX profile version does not match the document."
+  },
   "preliminary": {
     "title": "Review the procedural DM",
-    "localOnly": "Strictly local wizard: no content sent to an AI service. Rules propose; you decide.",
     "progress": "Procedure {{current}} of {{total}}",
     "procedure": "Procedure",
     "previous": "Previous procedure",
@@ -23,6 +83,8 @@
     "remaining": "{{count}} passage(s) without a decision out of {{total}}",
     "confirmWhole": "I checked the entire DM, including empty categories and passages not detected by the rules.",
     "complete": "Mark this procedure as reviewed",
+    "skip": "Skip reviews and generate as-is",
+    "skipConfirm": "Confirm generation without review",
     "generate": "Generate and validate XML",
     "sourceAt": "Show source — page {{page}}",
     "unlocated": "Source page unknown",
@@ -43,8 +105,6 @@
     "decisionSummary": "Decision: {{category}}",
     "collapsePassage": "Collapse passage",
     "expandPassage": "Expand passage",
-    "confirmationHelp": "Category filters also show proposals. Counts include only decisions; a proposal alone cannot validate the review.",
-    "structureHelp": "{{count}} heading(s), marker(s), caption(s) or table header(s) retained in the source, outside requirement classification. Technical numbers and data rows still need review.",
     "destination": "Classification decision",
     "accept": "Accept proposal",
     "editSplit": "Edit or split passage",
@@ -61,6 +121,7 @@
     "status": {
       "pending": "Review in progress",
       "reviewed": "Reviewed",
+      "skipped": "Review skipped",
       "stale": "Outdated review"
     },
     "category": {
@@ -97,25 +158,16 @@
   },
   "nav": {
     "home": "Home",
-    "migration": "Migration",
+    "migration": "S1000D conversion",
     "validation": "Validation",
     "architecture": "Architecture",
     "data": "Data",
     "settings": "Settings",
-    "versioning": "Versions",
     "ariaLabel": "Main navigation",
     "themeToggle": "Switch theme",
     "languageSwitcher": "Language",
     "collapse": "Collapse menu",
     "expand": "Expand menu"
-  },
-  "llm": {
-    "label": "LLM",
-    "title": "LLM status (see Settings)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "UNTESTED",
-    "noKey": "NO KEY"
   },
   "demo": {
     "badge": "DEMO MODE",
@@ -131,11 +183,17 @@
     "uploaded": "Uploaded",
     "wizard": "Configuring",
     "extracted": "Extracted",
+    "incomplete": "In error",
     "extract_failed": "Extraction failed"
   },
   "common": {
     "back": "← Back",
-    "none": "—"
+    "none": "—",
+    "confirmAgain": "Click again to confirm",
+    "close": "Close",
+    "pageShort": "p.",
+    "loading": "Loading",
+    "retry": "Retry"
   },
   "data": {
     "title": "Data",
@@ -149,38 +207,24 @@
     "reset": "Reset",
     "warningPrefix": "This operation is",
     "irreversible": "irreversible",
-    "warningSuffix": "Mistral configuration ({{config}}) and BREX profiles are preserved.",
+    "warningSuffix": "Application settings and BREX profiles are preserved.",
     "deleteDocuments": "Delete documents",
     "deleteAll": "Delete all",
     "confirm": "Click again to confirm",
     "nothingToDelete": "(nothing to delete)",
     "resetSuccess": "Reset OK ({{items}}).",
-    "resetError": "Reset failed: {{message}}"
+    "resetError": "Reset failed: {{message}}",
+    "resetSuccessTitle": "Reset complete",
+    "resetErrorTitle": "Reset failed"
   },
   "settings": {
     "title": "Settings",
-    "subtitle": "Prefill rules, operating mode and Mistral configuration.",
+    "subtitle": "Prefill rules and operating mode.",
     "demoTitle": "Operating mode",
     "demoHint": "Demo mode preloads the sample files. Processing starts only when you start the migration.",
     "normalMode": "Normal mode",
     "demoMode": "Demo mode",
-    "demoSaveError": "Could not save the mode.",
-    "aiTitle": "Artificial intelligence",
-    "llmEnabled": "LLM enabled",
-    "llmHelp": "Disabling stops tasks delegated to AI (scan OCR, classification, splitting). The Mistral key is kept.",
-    "configuration": "Mistral configuration",
-    "configured": "CONFIGURED",
-    "notConfigured": "NOT CONFIGURED",
-    "apiKey": "Mistral API key",
-    "apiKeyKeep": "A key is already stored (leave blank to keep it).",
-    "baseUrl": "Base URL",
-    "chatModel": "Chat model",
-    "embedModel": "Embeddings model",
-    "save": "Save",
-    "testConnection": "Test connection",
-    "saved": "Settings saved.",
-    "connectionOk": "Connection OK ({{count}} models available).",
-    "connectionFailed": "Failure: {{message}}"
+    "demoSaveError": "Could not save the mode."
   },
   "settingsRules": {
     "title": "Requirement prefill rules",
@@ -218,31 +262,25 @@
       "VALIDATION_ERROR": "Invalid lists: every active group needs valid French and English expressions."
     }
   },
-  "versioning": {
-    "title": "Versioning",
-    "subtitle": "Data Module history and non-destructive restoration.",
-    "document": "Document",
-    "selectDocument": "Select a document",
-    "snapshots": "Snapshots",
-    "loading": "Loading...",
-    "noVersions": "No version recorded.",
-    "preview": "Preview",
-    "selectSnapshot": "Select a snapshot.",
-    "restore": "Restore this snapshot",
-    "restored": "Version restored as a new snapshot.",
-    "restoreError": "Restore failed: {{message}}",
-    "characters": "{{count}} characters",
-    "status": {
-      "draft": "Draft",
-      "extracted": "Extracted",
-      "validated": "Validated",
-      "frozen": "Frozen",
-      "restored": "Restored"
-    }
-  },
   "migration": {
-    "title": "Migration",
+    "title": "S1000D conversion",
     "subtitle": "Guided generation of S1000D Data Modules.",
+    "zoneFlags": {
+      "header": "header",
+      "footer": "footer",
+      "chapter": "chapter",
+      "cover": "cover page",
+      "toc": "table of contents",
+      "flagHelp": "Zone may need review",
+      "reviewHelp": "This content may be layout noise",
+      "review": "review",
+      "link": "link",
+      "table": "table"
+    },
+    "preview": {
+      "empty": "No previewable content.",
+      "hidden": "{{count}} intermediate block(s)"
+    },
     "upload": {
       "title": "Upload a document",
       "file": "PDF or Word document",
@@ -250,10 +288,17 @@
       "issueValue": "Issue {{issue}}",
       "brex": "Project BREX",
       "inDevelopment": "In development",
-      "dmrl": "DMRL (xlsx / csv / json) — drives the split + the PMC",
-      "cir": "CIR (xml) — shared content",
-      "dmHeader": "Client DM header (json / xml)",
+      "dmrl": "DMRL",
+      "dmrlHint": "Drives the split and the PMC",
+      "cir": "CIR",
+      "cirHint": "Shared content",
+      "dmHeader": "Client DM header",
+      "dmHeaderHint": "Shared Data Module metadata",
       "dmHeaderHelp": "This JSON or XML file supplies shared Data Module header metadata, such as language, security classification, responsible or originating organization, and applicability.",
+      "helpToggle": "Show help: {{label}}",
+      "resourcesTitle": "Project resources",
+      "dropLabel": "Drop or choose a file",
+      "wrongFormat": "Unsupported format. Accepted formats: {{formats}}",
       "start": "Generate",
       "noFile": "Select a PDF or Word file to start a new generation.",
       "selectedFile": "File sent to Generate: {{filename}}",
@@ -268,6 +313,8 @@
         "endPage": "To page",
         "candidate": "Page {{page}} — score {{score}}",
         "invalidRange": "The start page must be before or equal to the end page.",
+        "invalidPage": "Enter a valid page number.",
+        "pageTooLarge": "The page must be between 1 and {{total}}.",
         "validate": "Validate the range and start analysis",
         "previewAlt": "Preview of page {{page}}"
       }
@@ -356,8 +403,8 @@
     "match": {
       "notFound": "not found",
       "exact": "found p.{{page}}",
-      "prefix": "check p.{{page}} (prefix)",
-      "contains": "check p.{{page}} (approximate)"
+      "prefix": "check (prefix)",
+      "contains": "check"
     },
     "dmrl": {
       "title": "Validate the DMRL ({{count}} Data Modules)",
@@ -372,7 +419,7 @@
       "typeLabel": "Type for DM {{title}}",
       "typeIssuesTitle": "Reviewing the InfoCode-derived DM types ({{count}} DMs).",
       "typeIssuesPending": "{{count}} type(s) need resolution: choose the type to use when generating each DM.",
-      "typeIssuesResolved": "A type has been selected for every row. Review the differences before validating.",
+      "typeIssuesResolved": "A type is retained for every row. Review the differences before validating.",
       "typeConflict": "InfoCode {{infoCode}} maps to schema \"{{schema}}\"{{mappedType}}, while the DMRL proposes \"{{dmrlType}}\".",
       "missingInfoCode": "No InfoCode is provided, so the reference workbook cannot determine the DM type (the DMRL proposes \"{{dmrlType}}\").",
       "unmappedInfoCode": "InfoCode {{infoCode}} is not listed in the Issue 4.1 reference workbook (the DMRL proposes \"{{dmrlType}}\").",
@@ -426,6 +473,8 @@
       "cirUnresolved": "{{count}} shared-content reference(s) to review",
       "xml": "Download DM",
       "images": "Extracted illustrations ({{count}})",
+      "illustrationErrors_one": "Illustration extraction encountered {{count}} error. Previous illustrations have been preserved.",
+      "illustrationErrors_other": "Illustration extraction encountered {{count}} errors. Previous illustrations have been preserved.",
       "imageAlt": "Extracted illustration {{index}}",
       "pictograms": "Extracted pictograms ({{count}})",
       "pictogramAlt": "Extracted pictogram {{index}}",
@@ -464,9 +513,33 @@
         "warning": "Warning",
         "info": "Information"
       }
+    },
+    "ui": {
+      "invalidFile": "Choose a non-empty PDF or DOCX.",
+      "invalidIssue": "Choose a supported Issue.",
+      "lowConfidence": "Low confidence",
+      "clearResource": "Remove resource",
+      "search": "Search documents",
+      "sort": "Sort documents",
+      "sort_recent": "Newest first",
+      "sort_oldest": "Oldest first",
+      "sort_name": "Filename",
+      "noDocument": "Select a document.",
+      "selectDm": "Select {{title}}",
+      "dmTitle": "Title of {{title}}",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "useElement": "Use {{element}}",
+      "selectedElement": "{{element}} selected",
+      "validationDetails": "XSD error details",
+      "brexDetails": "BREX analysis details",
+      "errorsOnly": "Errors only",
+      "summary": "Valid: {{valid}} / With warnings: {{warnings}} / In error: {{errors}}",
+      "reused": "Existing document reused: no duplicate created."
     }
   },
   "validation": {
+    "sourceUnavailable": "The source for this validation is unavailable.",
     "title": "Data Module validation",
     "subtitle": "Deterministic XML and XSD checks, with no AI processing.",
     "dropTitle": "Drop XML files here",
@@ -514,6 +587,8 @@
       "unverifiable": "XSD validation could not be completed. See the details below.",
       "violations": "Violations ({{count}})",
       "selectDm": "Select a DM to inspect its result."
-    }
+    },
+    "progress": "{{completed}}/{{total}} files processed",
+    "backToConversion": "Back to conversion"
   }
 }

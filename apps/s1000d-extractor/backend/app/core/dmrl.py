@@ -8,7 +8,7 @@ attendus (DMC, titre, arborescence). L'outil s'en sert pour :
    du document source (appariement par titre normalise, ordre de lecture) ;
 3. `generate_pmc`         : produire la PMC XML (delegue a `core.pmc`).
 
-Aucun appel LLM ici : le decoupage DMRL est deterministe et reproductible.
+Le decoupage DMRL est deterministe et reproductible.
 """
 
 from __future__ import annotations
@@ -210,6 +210,7 @@ def _map_row(
         entry.info_code_schema = schema
         mapped_type = dm_type_for_schema(schema) if schema else None
         entry.info_code_dm_type = mapped_type or ""
+        declared_type = _canonical_type(entry.dmrl_type, "")
 
         if not code:
             entry.type_issue = "missing_info_code"
@@ -219,7 +220,6 @@ def _map_row(
             entry.type_issue = "unsupported_schema"
 
         if entry.dmrl_type and schema:
-            declared_type = _canonical_type(entry.dmrl_type, "")
             entry.type_conflict = (
                 declared_type != mapped_type
                 if mapped_type
@@ -228,7 +228,7 @@ def _map_row(
         entry.dm_type = (
             mapped_type
             if mapped_type and not entry.type_conflict
-            else ""
+            else declared_type
         )
         if (
             not entry.dm_type

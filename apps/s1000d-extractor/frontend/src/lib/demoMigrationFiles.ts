@@ -1,7 +1,7 @@
 const DEMO_FILES_BASE_URL = `${import.meta.env.BASE_URL}demo/`;
 
 async function fetchDemoFile(filename: string, contentType: string): Promise<File> {
-  const response = await fetch(`${DEMO_FILES_BASE_URL}${filename}`);
+  const response = await fetch(`${DEMO_FILES_BASE_URL}${filename}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`${filename} (HTTP ${response.status})`);
   }

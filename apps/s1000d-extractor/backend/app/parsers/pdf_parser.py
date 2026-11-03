@@ -3,7 +3,7 @@
 Couverture de TOUS les PDF :
 - page avec couche texte exploitable  -> lecture directe (spans + police) ;
 - page sans texte (scannee / image)   -> signalee `has_text=False` pour que la
-  couche superieure (`core.ingest`) la confie a l'OCR Mistral.
+  couche superieure (`core.ingest`) signale qu'un OCR local est necessaire.
 
 La decision est PAR PAGE : un PDF mixte (pages texte + pages scannees) est donc
 correctement couvert, sans perdre les pages scannees ni re-OCR les pages texte.
@@ -11,7 +11,6 @@ correctement couvert, sans perdre les pages scannees ni re-OCR les pages texte.
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -19,6 +18,7 @@ from pathlib import Path
 from time import perf_counter
 
 import pymupdf as fitz
+import structlog
 
 from app.core.ir import InlineRun, RawBlock
 from app.core.pdf_overlays import is_large_red_image_cross
@@ -33,7 +33,7 @@ _ITALIC_FONT = re.compile(r"(?:^|[-_])(?:lt|md|bd)?it$")
 _MIN_TEXT_CHARS = 16
 _TEXT_DICT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
 
-log = logging.getLogger("s1000d_extractor.pdf_parser")
+log = structlog.get_logger("s1000d_extractor.pdf_parser")
 
 
 @dataclass
@@ -41,6 +41,7 @@ class PageParse:
     index: int                                   # 1-indexe
     blocks: list[RawBlock] = field(default_factory=list)
     has_text: bool = False
+    table_bboxes: list[tuple[float, float, float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -124,7 +125,10 @@ def _block_is_bold(spans: list[dict]) -> bool:
 def _image_infos(page: fitz.Page) -> list[dict]:
     try:
         return page.get_image_info()
-    except Exception:
+    except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+        number = page.number
+        log.warning("pdf_image_info_failed", page=number + 1 if number is not None else None,
+                    error_type=type(exc).__name__, exc_info=True)
         return []
 
 
@@ -238,12 +242,16 @@ def _table_blocks(
     bboxes: list[tuple] = []
     try:
         found = page.find_tables()
-    except Exception:
+    except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+        log.warning("pdf_table_detection_failed", page=page_idx,
+                    error_type=type(exc).__name__, exc_info=True)
         return blocks, bboxes
     for tbl in getattr(found, "tables", []) or []:
         try:
             rows = [[(c or "").strip() for c in row] for row in tbl.extract()]
-        except Exception:
+        except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
+            log.warning("pdf_table_extraction_failed", page=page_idx,
+                        error_type=type(exc).__name__, exc_info=True)
             continue
         rows = [r for r in rows if any(r)]
         if not rows:
@@ -273,6 +281,7 @@ def parse_pdf_pages(
     tableau pour ne pas le dupliquer en paragraphes. `progress_cb` recoit le
     nombre de pages terminees et le total apres chaque page."""
     doc = fitz.open(str(path))
+    started = perf_counter()
     try:
         out: list[PageParse] = []
         total_pages = doc.page_count
@@ -307,29 +316,27 @@ def parse_pdf_pages(
                     or not any(_in_vertical_band(b.y0, b.y1, bx) for bx in tbl_bboxes)
                 ]
             merged = sorted(text_blocks + tbl_blocks, key=lambda b: (b.y0 if b.y0 is not None else 0.0))
-            out.append(PageParse(index=idx, blocks=merged, has_text=True))
+            out.append(PageParse(index=idx, blocks=merged, has_text=True, table_bboxes=tbl_bboxes))
             text_page_count += 1
             table_count += len(tbl_blocks)
             block_count += len(merged)
             if progress_cb:
                 progress_cb(idx, total_pages)
         log.info(
-            "pdf_parse_breakdown page_count=%d text_page_count=%d block_count=%d "
-            "table_count=%d text_extract_ms=%.1f table_detect_ms=%.1f block_extract_ms=%.1f "
-            "text_dict_ms=%.1f image_info_ms=%.1f block_transform_ms=%.1f "
-            "image_info_count=%d span_count=%d",
-            total_pages,
-            text_page_count,
-            block_count,
-            table_count,
-            text_extract_ms,
-            table_detect_ms,
-            block_extract_ms,
-            block_profile.text_dict_ms,
-            block_profile.image_info_ms,
-            block_profile.transform_ms,
-            block_profile.image_info_count,
-            block_profile.span_count,
+            "pdf_parse_done",
+            duration_ms=round((perf_counter() - started) * 1000, 1),
+            page_count=total_pages,
+            text_page_count=text_page_count,
+            block_count=block_count,
+            table_count=table_count,
+            text_extract_ms=round(text_extract_ms, 1),
+            table_detect_ms=round(table_detect_ms, 1),
+            block_extract_ms=round(block_extract_ms, 1),
+            text_dict_ms=round(block_profile.text_dict_ms, 1),
+            image_info_ms=round(block_profile.image_info_ms, 1),
+            block_transform_ms=round(block_profile.transform_ms, 1),
+            image_info_count=block_profile.image_info_count,
+            span_count=block_profile.span_count,
         )
         return out
     finally:

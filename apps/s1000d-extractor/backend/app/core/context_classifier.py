@@ -8,26 +8,14 @@ Strategie :
 1. Prior fort = le HINT document fourni a l'upload ("descriptive"/"procedural"
    /"mixed").
 2. Heuristique par section : mots-cles de titre + signaux d'action.
-3. Raffinement IA (Mistral, optionnel) : si une cle est configuree. Sans cle,
-   on reste sur l'heuristique - jamais de crash (degradation gracieuse).
+3. Le type dominant est choisi a partir des contextes deterministes.
 """
 
 from __future__ import annotations
 
-import logging
 import re
 
-from sqlalchemy.orm import Session
-
 from app.core.ir import Context, IRNode
-from app.core.mistral_client import (
-    MistralClient,
-    MistralError,
-    get_effective_settings,
-    get_llm_enabled,
-)
-
-log = logging.getLogger("s1000d_extractor.context")
 
 _PROC_TITLE = re.compile(
     r"\b(remov|install|disassembl|assembl|replac|adjust|test|inspect|servic|repair|"
@@ -52,26 +40,6 @@ _IMPERATIVE = re.compile(
     r"desserrer|verifier|appliquer|regler|ouvrir|fermer)\b",
     re.IGNORECASE,
 )
-
-_PROMPT_INJECTION_MARKERS = (
-    "ignore previous instructions",
-    "ignore all previous instructions",
-    "ignore the instructions above",
-    "disregard previous instructions",
-    "system message:",
-    "developer message:",
-    "assistant message:",
-    "reponds uniquement",
-    "respond only with",
-    "follow these instructions instead",
-)
-
-
-def _contains_prompt_injection(text: str) -> bool:
-    """Return true for explicit attempts to address or override the model."""
-    normalized = " ".join((text or "").casefold().split())
-    return any(marker in normalized for marker in _PROMPT_INJECTION_MARKERS)
-
 
 def _section_signal(section: IRNode) -> Context:
     title = section.text or ""
@@ -100,7 +68,7 @@ def _hint_default(hint: str) -> Context:
     return "unknown"
 
 
-def classify(root: IRNode, *, hint: str = "mixed", db: Session | None = None) -> str:
+def classify(root: IRNode, *, hint: str = "mixed") -> str:
     """Assigne `context` a tous les noeuds et renvoie le type de DM dominant.
 
     Renvoie "procedural" ou "descriptive" (jamais "unknown" pour le serialiseur,
@@ -120,9 +88,6 @@ def classify(root: IRNode, *, hint: str = "mixed", db: Session | None = None) ->
         if n.kind != "section" and n.context == "unknown":
             n.context = default if default != "unknown" else "descriptive"
 
-    if db is not None:
-        _llm_refine(sections, db)
-
     return _dominant_dm_type(root, default)
 
 
@@ -132,54 +97,6 @@ def _dominant_dm_type(root: IRNode, default: Context) -> str:
     if proc == desc:
         return default if default != "unknown" else "descriptive"
     return "procedural" if proc > desc else "descriptive"
-
-
-def _llm_refine(sections: list[IRNode], db: Session) -> None:
-    """Raffine la classification par section via Mistral (best-effort)."""
-    if not get_llm_enabled(db):
-        return
-    if not get_effective_settings(db).get("api_key"):
-        return
-    try:
-        client = MistralClient.from_db(db)
-    except MistralError:
-        return
-    # Pas de troncature de l'entree (HR6) : un titre ou un extrait coupe peut
-    # faire basculer un DM du bon type au mauvais. La brievete est demandee a la
-    # SORTIE (JSON guide), pas en decoupant l'entree.
-    listing = []
-    for i, section in enumerate(sections):
-        title = section.text
-        sample = _first_text(section)
-        if _contains_prompt_injection(title) or _contains_prompt_injection(sample):
-            log.warning("LLM context refine skipped for suspicious section %s", i)
-            continue
-        listing.append({"i": i, "title": title, "sample": sample})
-    if not listing:
-        return
-    prompt = (
-        "Tu classes des sections de documentation technique aeronautique en "
-        "'descriptive' (description/fonctionnement) ou 'procedural' (procedure "
-        "de maintenance, suite d'actions). Reponds STRICTEMENT en JSON : "
-        '{"labels": [{"i": 0, "context": "descriptive|procedural"}, ...]}.\n\n'
-        f"Sections : {listing}"
-    )
-    try:
-        out = client.chat_json([{"role": "user", "content": prompt}], timeout=30.0)
-        for lab in out.get("labels", []):
-            i = lab.get("i")
-            ctx = lab.get("context")
-            if isinstance(i, int) and 0 <= i < len(sections) and ctx in ("descriptive", "procedural"):
-                _propagate(sections[i], ctx)  # type: ignore[arg-type]
-    except (MistralError, Exception) as exc:
-        log.warning("LLM context refine skipped: %s", exc)
-
-
-def _first_text(section: IRNode) -> str:
-    for n in section.walk():
-        if n.kind in ("paragraph", "item") and n.text:
-            return n.text
-    return ""
 
 
 # --- Typage par Data Module (wizard etape 3) --------------------------------
@@ -219,51 +136,12 @@ def guess_dm_type(title: str, root: IRNode) -> str:
     return ctx
 
 
-def classify_dms(dms: list, *, hint: str = "mixed", db: Session | None = None) -> dict[str, str]:
+def classify_dms(dms: list, *, hint: str = "mixed") -> dict[str, str]:
     """Type chaque DM independamment (descriptive / procedural / ipd) et
     propage le contexte a ses noeuds. Renvoie {dm_id: dm_type}."""
     default = _hint_default(hint)
     types = {dm.dm_id: _dm_signal(dm.title, dm.root, default) for dm in dms}
 
-    if db is not None:
-        _llm_refine_dms(dms, types, db)
-
     for dm in dms:
         apply_dm_type(dm.root, types[dm.dm_id])
     return types
-
-
-def _llm_refine_dms(dms: list, types: dict[str, str], db: Session) -> None:
-    if not get_llm_enabled(db):
-        return
-    if not get_effective_settings(db).get("api_key"):
-        return
-    try:
-        client = MistralClient.from_db(db)
-    except MistralError:
-        return
-    listing = []
-    for dm in dms:
-        title = dm.title
-        sample = _first_text(dm.root)
-        if _contains_prompt_injection(title) or _contains_prompt_injection(sample):
-            log.warning("LLM DM typing skipped for suspicious module %s", dm.dm_id)
-            continue
-        listing.append({"id": dm.dm_id, "title": title, "sample": sample})
-    if not listing:
-        return
-    prompt = (
-        "Classe chaque module de documentation technique aeronautique en "
-        "'descriptive' (description/fonctionnement), 'procedural' (procedure de "
-        "maintenance, suite d'actions) ou 'ipd' (catalogue de pieces illustre). "
-        'Reponds STRICTEMENT en JSON : {"types": [{"id": "dm1", "type": "..."}]}.\n\n'
-        f"Modules : {listing}"
-    )
-    try:
-        out = client.chat_json([{"role": "user", "content": prompt}], timeout=30.0)
-        for lab in out.get("types", []):
-            did, t = lab.get("id"), lab.get("type")
-            if did in types and t in DM_TYPES:
-                types[did] = t
-    except (MistralError, Exception) as exc:
-        log.warning("LLM DM typing skipped: %s", exc)

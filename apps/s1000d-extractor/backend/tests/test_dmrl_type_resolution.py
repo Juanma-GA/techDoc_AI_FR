@@ -103,7 +103,7 @@ def test_issue_41_type_uses_infocode_and_preserves_dmrl_conflicts(tmp_path, monk
     entries = dmrl.load_dmrl(path, issue="4.1")
 
     conflict, matching, unsupported, unmapped, missing, defaulted, unmapped_defaulted, pm_title = entries
-    assert conflict.dm_type == ""
+    assert conflict.dm_type == "descriptive"
     assert conflict.type_conflict is True
     assert conflict.dmrl_type == "Descriptif"
     assert conflict.info_code_dm_type == "procedural"
@@ -113,16 +113,37 @@ def test_issue_41_type_uses_infocode_and_preserves_dmrl_conflicts(tmp_path, monk
     assert unsupported.type_issue == "unsupported_schema"
     assert unsupported.info_code_schema == "frontmatter"
     assert unsupported.type_conflict is True
-    assert unsupported.dm_type == ""
+    assert unsupported.dm_type == "descriptive"
     assert unmapped.type_issue == "unmapped_info_code"
+    assert unmapped.dm_type == "descriptive"
     assert missing.type_issue == "missing_info_code"
-    assert missing.dm_type == ""
+    assert missing.dm_type == "descriptive"
     assert defaulted.type_issue == "missing_info_code"
     assert defaulted.dm_type == "descriptive"
     assert unmapped_defaulted.type_issue == "unmapped_info_code"
     assert unmapped_defaulted.dm_type == "descriptive"
     assert is_pm_title(pm_title)
     assert pm_title.dm_type == ""
+
+
+def test_unrecognized_dmrl_type_does_not_resolve_an_infocode_conflict(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "dmrl.json"
+    path.write_text(
+        json.dumps([{
+            "DMC": "DMC-PUMP-A-00-00-00-00A-520A-D",
+            "Infocode": "520",
+            "Titre": "Removal Procedure",
+            "Type": "Unknown category",
+        }]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dmrl, "load_info_code_schemas", lambda: {"520": "proced"})
+
+    entry = dmrl.load_dmrl(path, issue="4.1")[0]
+
+    assert entry.type_conflict is True
+    assert entry.dmrl_type == "Unknown category"
+    assert entry.dm_type == ""
 
 
 def test_non_41_dmrl_keeps_legacy_type_precedence(tmp_path, monkeypatch) -> None:
@@ -175,7 +196,7 @@ def test_issue_41_conflict_must_be_resolved_before_generation(
         "DMC": "DMC-PUMP-A-00-00-00-00A-520A-D",
         "Infocode": "520",
         "Titre": "Description",
-        "Type": "Descriptif",
+        "Type": "Unknown category",
     }]
     upload_response = client.post(
         f"/api/v1/documents/{doc_id}/resources/dmrl",
@@ -202,21 +223,67 @@ def test_issue_41_conflict_must_be_resolved_before_generation(
     assert state["step"] == "split"
     assert state["dms"][0]["dm_type"] == "procedural"
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
-    assert state["step"] == "type"
-    state = client.post(
-        f"/api/v1/documents/{doc_id}/wizard/advance",
-        json={"types": {}},
-    ).json()
-    assert state["step"] == "structure"
-    state = client.post(
-        f"/api/v1/documents/{doc_id}/wizard/advance",
-        json={"overrides": []},
-    ).json()
+    assert state["step"] == "preliminary"
     state = complete_preliminary(doc_id, state)
     assert state["step"] == "generate"
     assert state["dms"][0]["dm_type"] == "procedural"
 
+
+def test_issue_41_conflict_uses_recognized_dmrl_type_as_fallback(
+    client, pdf_bytes, monkeypatch,
+) -> None:
+    monkeypatch.setattr(dmrl, "load_info_code_schemas", lambda: {"001": "frontmatter"})
+
+    document_response = client.post(
+        "/api/v1/documents",
+        files={"file": ("manual.pdf", pdf_bytes, "application/pdf")},
+        data={"s1000d_issue": "4.1", "context_hint": "mixed"},
+    )
+    assert document_response.status_code == 201, document_response.text
+    doc_id = document_response.json()["id"]
+
+    detection_response = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection_response.status_code == 200, detection_response.text
+    detection = detection_response.json()
+    if detection["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": detection["selected_page"] or detection["default_start_page"],
+                "end_page": detection["selected_end_page"] or detection["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+
+    dmrl_rows = [{
+        "DMC": "DMC-PUMP-A-00-00-00-00A-001A-D",
+        "Infocode": "001",
+        "Titre": "Terminologie",
+        "Type": "DESCR",
+    }]
+    upload_response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl_rows).encode())},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    assert state["step"] == "dmrl"
+    assert state["dmrl"][0]["type_issue"] == "unsupported_schema"
+    assert state["dmrl"][0]["type_conflict"] is True
+    assert state["dmrl"][0]["dm_type"] == "descriptive"
+
+    advanced = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    assert advanced.status_code == 200, advanced.text
+    assert advanced.json()["step"] == "split"
+    assert advanced.json()["dms"][0]["dm_type"] == "descriptive"
+
+    generated = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["step"] == "generate"
+    assert generated.json()["dms"][0]["dm_type"] == "descriptive"
+
     generated_xml = client.get(
-        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
-    ).text
-    assert "<procedure>" in generated_xml
+        f"/api/v1/documents/{doc_id}/wizard/dm/{generated.json()['dms'][0]['dm_id']}/xml"
+    )
+    assert generated_xml.status_code == 200, generated_xml.text

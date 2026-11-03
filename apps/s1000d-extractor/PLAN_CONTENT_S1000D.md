@@ -222,7 +222,7 @@ Ajouter ou calculer un role metier pour les sections et blocs, par exemple :
 - `procedure_step` ;
 - `closing_requirements`.
 
-La determination combine titre, position dans le DM, forme du contenu, type du DM et eventuellement LLM. Le serializer ne doit pas demander au LLM de produire directement du XML.
+La determination combine le titre, la position dans le DM, la forme du contenu et le type du DM. Le serializer produit du XML contraint par les modeles XSD, jamais du XML libre.
 
 ### 7.2 Admonitions
 
@@ -446,7 +446,7 @@ qu'elles ne sont pas verifiees avec les schemas officiels.
 - [ ] Injecter les roles metier dans les bons conteneurs.
 - [ ] Generer les attributs connus.
 - [ ] Ajouter des commentaires pour les attributs absents.
-- [ ] Ne jamais emettre de XML libre provenant directement du LLM.
+- [ ] Ne jamais emettre de XML libre hors des modeles contraints par les XSD.
 
 ### Phase 6 - Integrer le wizard
 

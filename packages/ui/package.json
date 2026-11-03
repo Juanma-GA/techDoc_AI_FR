@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared UI primitives for internal POCs - atoms (Button/Card/Badge/Input/Select/Textarea/Switch/Checkbox/Skeleton), layout and forms (AppShell/PageHeader/FormField/CollapsibleSection/Alert/Tabs/Table/Tooltip), overlays (Dialog/Toast) and business components (KpiCard/ChartCard/EmptyState/LoadingOverlay/FileDropzone/MultiSelect/MarkdownView).",
+  "description": "Shared UI primitives for internal POCs - atoms (Button/Card/Badge/Input/Select/SelectMenu/Textarea/Switch/Checkbox/Skeleton/ProgressBar), layout and forms (AppShell/PageHeader/FormField/CollapsibleSection/Alert/Tabs/Table/Tooltip), overlays (Dialog/Toast) and business components (KpiCard/ChartCard/EmptyState/LoadingOverlay/FileDropzone/MultiSelect/MarkdownView).",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

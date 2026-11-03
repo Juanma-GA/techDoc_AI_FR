@@ -1,8 +1,9 @@
-import { Button } from "@internal/ui";
+import { Button, Input, SelectMenu } from "@internal/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { wizardApi, type ApiError } from "../lib/api";
+import { wizardApi } from "../lib/api";
+import { formatApiError } from "../lib/migrationUtils";
 
 type Props = {
   docId: string | null;
@@ -29,28 +30,21 @@ export function WizardZipDownloadButton({ docId, disabled, title }: Props) {
     setDownloading(true);
     setError(null);
     try {
-      const response = await fetch(wizardApi.zipUrl(docId, {
+      const file = await wizardApi.downloadZip(docId, {
         ...(parsedDimension === undefined ? {} : { maxDimension: parsedDimension }),
         format: imageFormat,
-      }));
-      if (!response.ok) {
-        const apiError = (await response.json().catch(() => null)) as ApiError | null;
-        throw new Error(apiError?.message || response.statusText || "Erreur");
-      }
-      const disposition = response.headers.get("Content-Disposition");
-      const filename =
-        disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? `${docId}_dms.zip`;
-      const objectUrl = URL.createObjectURL(await response.blob());
+      });
+      const objectUrl = URL.createObjectURL(file);
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = filename;
-      link.style.display = "none";
+      link.download = file.name;
+      link.hidden = true;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setError(formatApiError(t, caught));
     } finally {
       setDownloading(false);
     }
@@ -59,9 +53,10 @@ export function WizardZipDownloadButton({ docId, disabled, title }: Props) {
   return (
     <div className="ml-auto flex flex-wrap items-end gap-2">
       <label className="flex min-w-36 flex-col gap-1">
-        <span className="label">{t("migration.generate.imageSize")}</span>
-        <input
-          className="input"
+        <span className="text-label font-mono uppercase text-fg-dim">
+          {t("migration.generate.imageSize")}
+        </span>
+        <Input
           type="number"
           min="1"
           step="1"
@@ -82,23 +77,25 @@ export function WizardZipDownloadButton({ docId, disabled, title }: Props) {
         </span>
       </label>
       <label className="flex min-w-36 flex-col gap-1">
-        <span className="label">{t("migration.generate.imageFormat")}</span>
-        <select
-          className="input"
+        <span className="text-label font-mono uppercase text-fg-dim">
+          {t("migration.generate.imageFormat")}
+        </span>
+        <SelectMenu
+          label={t("migration.generate.imageFormat")}
           value={imageFormat}
           aria-describedby="wizard-image-format-help"
-          onChange={(event) => {
-            const value = event.currentTarget.value;
+          onValueChange={(value) => {
             if (value === "original" || value === "jpeg" || value === "png") {
               setImageFormat(value);
             }
           }}
           disabled={disabled || downloading}
-        >
-          <option value="original">{t("migration.generate.imageFormatOriginal")}</option>
-          <option value="jpeg">{t("migration.generate.imageFormatJpeg")}</option>
-          <option value="png">{t("migration.generate.imageFormatPng")}</option>
-        </select>
+          options={[
+            { value: "original", label: t("migration.generate.imageFormatOriginal") },
+            { value: "jpeg", label: t("migration.generate.imageFormatJpeg") },
+            { value: "png", label: t("migration.generate.imageFormatPng") },
+          ]}
+        />
         <span id="wizard-image-format-help" className="sr-only">
           {t("migration.generate.imageFormatHelp")}
         </span>
@@ -115,11 +112,11 @@ export function WizardZipDownloadButton({ docId, disabled, title }: Props) {
           {downloading ? t("migration.analysis.processing") : t("migration.generate.zip")}
         </Button>
         {invalidDimension ? (
-          <div id="wizard-image-size-error" className="error" role="alert">
+          <div id="wizard-image-size-error" className="text-sm text-danger" role="alert">
             {t("migration.generate.imageSizeInvalid")}
           </div>
         ) : error ? (
-          <div className="error" role="alert">{error}</div>
+          <div className="text-sm text-danger" role="alert">{error}</div>
         ) : null}
       </div>
     </div>

@@ -7,8 +7,8 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db.models import AppConfig, Document
+from app.db.session import storage_directory
 
 MAPPING_KEY = "migration_input_mapping"
 INPUT_KINDS = ("document", "dmrl", "cir", "brex_rules", "dm_header")
@@ -108,7 +108,7 @@ def public(db: Session) -> dict:
     mapping = load(db)
     files = {}
     for kind, item in mapping["files"].items():
-        if _safe_path(item["path"]) is not None:
+        if _safe_path(item["path"], db) is not None:
             files[kind] = {"filename": item["filename"]}
     return {
         "issue": mapping["issue"],
@@ -124,13 +124,20 @@ def saved_file(db: Session, kind: str) -> tuple[Path, str] | None:
     item = load(db)["files"].get(kind)
     if not item:
         return None
-    path = _safe_path(item["path"])
+    path = _safe_path(item["path"], db)
     return (path, item["filename"]) if path is not None else None
 
 
-def _safe_path(raw_path: str) -> Path | None:
+def remove_resource(db: Session, document: Document, kind: str) -> None:
+    mapping = load(db)
+    if mapping["files"].get("document", {}).get("path") == document.storage_path:
+        mapping["files"].pop(kind, None)
+        _save(db, mapping)
+
+
+def _safe_path(raw_path: str, db: Session) -> Path | None:
     path = Path(raw_path)
-    root = Path(settings.storage_dir).resolve()
+    root = storage_directory(db).resolve()
     try:
         path = path.resolve()
         path.relative_to(root)

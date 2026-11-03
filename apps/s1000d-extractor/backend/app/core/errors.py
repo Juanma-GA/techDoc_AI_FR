@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.request_id import REQUEST_ID_HEADER
 
-log = logging.getLogger("s1000d_extractor.errors")
+log = structlog.get_logger("s1000d_extractor.errors")
 
 
 class AppError(Exception):
@@ -61,7 +61,8 @@ def register_error_handlers(app: FastAPI) -> None:
         rid = request.headers.get(REQUEST_ID_HEADER, "")
         # Trace complete cote serveur : sans elle, un 500 "Unexpected server
         # error" cote UI n'est pas diagnosticable.
-        log.exception("unhandled error on %s %s (request_id=%s)", request.method, request.url.path, rid)
+        log.exception("unhandled_request_error", method=request.method,
+                      path=request.url.path, request_id=rid, error_type=type(exc).__name__)
         return JSONResponse(
             status_code=500,
             content=_payload("INTERNAL_ERROR", "Unexpected server error", None, rid),

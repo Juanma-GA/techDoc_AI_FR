@@ -35,7 +35,7 @@ export type ReaderPosition = {
 export type ProcedureReview = {
   fingerprint: string;
   rules_revision?: number;
-  status: "pending" | "reviewed" | "stale";
+  status: "pending" | "reviewed" | "skipped" | "stale";
   passages: ReviewPassage[];
   position: ReaderPosition;
   saved_at: string | null;
@@ -51,7 +51,7 @@ export type PreliminaryState = {
 
 export type ReviewAction = {
   dm_id: string;
-  op: "decide" | "split" | "complete" | "restart" | "cursor";
+  op: "decide" | "split" | "complete" | "restart" | "cursor" | "skip";
   passage_id?: string;
   destination?: ReviewDestination | null;
   text?: string;

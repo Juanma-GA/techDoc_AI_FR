@@ -2,29 +2,22 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-import re
 from typing import TypeAlias
 
 import lxml.etree as etree
+
+from app.core.s1000d_schema import SCHEMA_STEMS, SELECTABLE_ISSUES
 
 _XS_NS = "http://www.w3.org/2001/XMLSchema"
 _XS = f"{{{_XS_NS}}}"
 _XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 _NS = {"xs": _XS_NS}
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
-_SCHEMA_STEMS = {
-    "descriptive": "descript",
-    "description": "descript",
-    "descript": "descript",
-    "procedural": "proced",
-    "procedure": "proced",
-    "proced": "proced",
-    "ipd": "ipd",
-}
 QName = tuple[str | None, str]
 XmlElement: TypeAlias = etree._Element
 
@@ -592,15 +585,27 @@ class XsdModel:
                 return value
         return None
 
-    def constrain(self, root: XmlElement) -> ConstraintReport:
+    def constrain(
+        self, root: XmlElement, *,
+        skip_nodes: frozenset[XmlElement] = frozenset(),
+        root_path: str = "/dmodule",
+        declarations: dict[XmlElement, tuple[XmlElement, str]] | None = None,
+    ) -> ConstraintReport:
         report = ConstraintReport()
         name = _element_qname(root)
         declaration = self.elements.get(name)
         if declaration is None:
             report.violations.append(self._violation("/", f"La racine {name[1]} n'est pas declaree dans le XSD."))
             return report
-        self._constrain_element(root, declaration, "/dmodule", report, 0)
+        self._constrain_element(root, declaration, root_path, report, 0, skip_nodes, declarations)
         report.provisional_fields = list(dict.fromkeys(report.provisional_fields))
+        return report
+
+    def constrain_fragment(
+        self, element: XmlElement, declaration: XmlElement, path: str,
+    ) -> ConstraintReport:
+        report = ConstraintReport()
+        self._constrain_element(element, declaration, path, report, 0)
         return report
 
     def _violation(self, path: str, message: str) -> dict:
@@ -616,7 +621,13 @@ class XsdModel:
         path: str,
         report: ConstraintReport,
         depth: int,
+        skip_nodes: frozenset[XmlElement] = frozenset(),
+        declarations: dict[XmlElement, tuple[XmlElement, str]] | None = None,
     ) -> None:
+        if element in skip_nodes:
+            return
+        if declarations is not None:
+            declarations[element] = (declaration, path)
         if depth > 80:
             report.violations.append(self._violation(path, "Profondeur de modele XSD recursive non prise en charge."))
             return
@@ -732,7 +743,10 @@ class XsdModel:
                 else self.elements.get(_element_qname(item.element))
             )
             if child_declaration is not None:
-                self._constrain_element(item.element, child_declaration, child_path, report, depth + 1)
+                self._constrain_element(
+                    item.element, child_declaration, child_path, report, depth + 1,
+                    skip_nodes, declarations,
+                )
 
     def _particle_names(self, particle: Particle | None) -> set[QName]:
         if particle is None:
@@ -898,8 +912,8 @@ class XsdModel:
 
 @lru_cache(maxsize=6)
 def load_xsd_model(issue: str, dm_type: str) -> XsdModel:
-    stem = _SCHEMA_STEMS.get((dm_type or "").lower())
-    if issue not in {"4.1", "4.2"} or stem is None:
+    stem = SCHEMA_STEMS.get((dm_type or "").lower())
+    if issue not in SELECTABLE_ISSUES or stem is None:
         raise ValueError(f"Aucun modele XSD de generation pour Issue {issue} / type {dm_type}.")
     path = _SCHEMA_ROOT / f"issue-{issue}" / f"{stem}.xsd"
     if not path.is_file():

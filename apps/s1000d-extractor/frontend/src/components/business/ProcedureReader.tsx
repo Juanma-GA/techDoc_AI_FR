@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { pdfCutApi } from "../../lib/api";
+import { formatApiError } from "../../lib/migrationUtils";
 import { preliminaryApi } from "../../lib/preliminaryApi";
 import type { ProcedureReview, ReaderPosition, ReviewPassage, SourcePage } from "../../lib/preliminaryTypes";
 
@@ -92,7 +93,7 @@ function PdfSourcePage({ docId, dmId, page, passages, selectedId, container, jum
       ) : null}
       {anchors.error ? (
         <div role="alert" className="text-danger">
-          {t("preliminary.anchorError")}: {anchors.error.message}
+          {t("preliminary.anchorError")}: {formatApiError(t, anchors.error)}
           <Button variant="secondary" size="sm" onClick={() => void anchors.refetch()}>{t("preliminary.retry")}</Button>
         </div>
       ) : null}
@@ -174,7 +175,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
       <p className="text-sm text-fg-dim">{t(pdf ? "preliminary.pdfHelp" : "preliminary.wordHelp")}</p>
       {manifest.error ? (
         <div role="alert" className="text-danger">
-          {t("preliminary.readerError")}: {manifest.error.message}
+          {t("preliminary.readerError")}: {formatApiError(t, manifest.error)}
           <Button variant="secondary" onClick={() => void manifest.refetch()}>{t("preliminary.retry")}</Button>
         </div>
       ) : null}

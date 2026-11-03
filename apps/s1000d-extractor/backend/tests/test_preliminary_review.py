@@ -228,6 +228,35 @@ def test_decisions_drive_xml_zip_and_keep_source_immutable(procedure, client):
     assert client.post(f"/api/v1/documents/{doc_id}/wizard/back").json()["step"] == "preliminary"
 
 
+def test_skipping_reviews_generates_original_procedural_structure(procedure, client):
+    doc_id, _ = procedure
+    with SessionLocal() as db:
+        original = json.loads(db.get(Document, doc_id).dms_json)[0]["tree"]
+
+    skipped = _action(client, doc_id, op="skip")
+    assert skipped.status_code == 200, skipped.text
+    assert all(item["status"] == "skipped" for item in skipped.json()["reviews"].values())
+
+    generated = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["step"] == "generate"
+    with SessionLocal() as db:
+        assert all(item["status"] == "skipped"
+                   for item in review.view(db.get(Document, doc_id))["reviews"].values())
+
+    xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/proc/xml")
+    assert xml.status_code == 200, xml.text
+    assert "Ensure the power is off." in xml.text
+    assert "Disconnect the connector." in xml.text
+    download = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    assert download.status_code == 200, download.text
+    with ZipFile(BytesIO(download.content)) as archive:
+        assert archive.read("proc.xml") == xml.content
+
+    with SessionLocal() as db:
+        assert json.loads(db.get(Document, doc_id).dms_json)[0]["tree"] == original
+
+
 def test_empty_review_requires_positive_confirmation_and_word_has_reading_pages(client):
     with SessionLocal() as db:
         doc = Document(filename="empty.docx", source_format="docx", storage_path="synthetic-unused",
@@ -305,33 +334,9 @@ def test_backtracking_to_structure_preserves_review_but_reanalysis_invalidates_i
     assert client.get(f"/api/v1/documents/{doc_id}/wizard").json()["preliminary"]["reviews"]["proc"]["status"] == "stale"
 
 
-def test_wizard_never_calls_remote_typing_or_ocr(client, pdf_bytes, monkeypatch):
-    from app.core import context_classifier, ocr
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("A local wizard must not consult a remote AI service")
-
-    monkeypatch.setattr(context_classifier, "_llm_refine_dms", forbidden)
-    monkeypatch.setattr(ocr, "ocr_available", forbidden)
-    monkeypatch.setattr(ocr, "run_ocr", forbidden)
-    uploaded = client.post(
-        "/api/v1/documents", files={"file": ("synthetic.pdf", pdf_bytes)},
-        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
-    )
-    doc_id = uploaded.json()["id"]
-    response = client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
-    assert response.status_code == 200, response.text
-    assert response.json()["step"] == "split"
-
-
-def test_local_ingest_rejects_mixed_scans_without_ignoring_pages_or_calling_ocr(tmp_path, monkeypatch):
-    from app.core import ingest, ocr
+def test_ingest_rejects_mixed_scans_without_ignoring_pages(tmp_path):
+    from app.core import ingest
     from app.core.errors import AppError
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("OCR must not be consulted in local mode")
-
-    monkeypatch.setattr(ocr, "ocr_available", forbidden)
     source = tmp_path / "synthetic-mixed.pdf"
     with fitz.open() as pdf:
         page = pdf.new_page()
@@ -343,6 +348,6 @@ def test_local_ingest_rejects_mixed_scans_without_ignoring_pages_or_calling_ocr(
         pdf.new_page()  # A genuinely blank page is not an OCR failure.
         pdf.save(str(source))
     with pytest.raises(AppError) as error:
-        ingest.extract_blocks(source, fmt="pdf", local_only=True)
-    assert error.value.code == "LOCAL_OCR_REQUIRED"
+        ingest.extract_blocks(source, fmt="pdf")
+    assert error.value.code == "OCR_UNAVAILABLE"
     assert error.value.detail == {"pages_in_analyzed_pdf": [2]}

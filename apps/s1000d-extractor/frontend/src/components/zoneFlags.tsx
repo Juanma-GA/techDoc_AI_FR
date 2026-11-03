@@ -1,12 +1,13 @@
 import type { NodeRef } from "../lib/api";
+import { Badge } from "@internal/ui";
+import { useTranslation } from "react-i18next";
 
-// Libelle + variante de badge (classe .badge du preview-skin) pour une zone.
 const ZONE_LABEL: Record<string, string> = {
-  header: "entête",
-  footer: "pied",
-  chapter: "chapitre",
-  cover: "page de garde",
-  toc: "sommaire",
+  header: "migration.zoneFlags.header",
+  footer: "migration.zoneFlags.footer",
+  chapter: "migration.zoneFlags.chapter",
+  cover: "migration.zoneFlags.cover",
+  toc: "migration.zoneFlags.toc",
 };
 
 /**
@@ -22,28 +23,37 @@ function humanizeToken(token: string): string {
 }
 
 export function ZoneFlag({ zone }: { zone?: string }) {
+  const { t } = useTranslation();
   if (!zone || zone === "body") return null;
   const variant = zone === "chapter" ? "info" : "danger";
-  const label = ZONE_LABEL[zone] ?? humanizeToken(zone);
-  return <span className={`badge ${variant}`} title="Zone probablement à vérifier">{label}</span>;
+  const label = ZONE_LABEL[zone] ? t(ZONE_LABEL[zone]) : humanizeToken(zone);
+  return <Badge variant={variant} title={t("migration.zoneFlags.flagHelp")}>{label}</Badge>;
 }
 
 export function ReviewFlag({ zone }: { zone?: string }) {
+  const { t } = useTranslation();
   if (!zone || zone === "body" || zone === "chapter") return null;
-  return <span className="badge danger" title="Ce contenu peut être du bruit de mise en page">à vérifier</span>;
+  return (
+    <Badge variant="danger" title={t("migration.zoneFlags.reviewHelp")}>
+      {t("migration.zoneFlags.review")}
+    </Badge>
+  );
 }
 
 export function PageFlag({ page }: { page?: number | null }) {
+  const { t } = useTranslation();
   if (page == null) return null;
-  return <span className="badge">p.{page}</span>;
+  return <Badge>{t("common.pageShort")}{page}</Badge>;
 }
 
 export function RefFlag({ refs }: { refs?: NodeRef[] | null }) {
+  const { t } = useTranslation();
   if (!refs || refs.length === 0) return null;
-  return <span className="badge info">lien</span>;
+  return <Badge variant="info">{t("migration.zoneFlags.link")}</Badge>;
 }
 
 export function TableFlag({ kind }: { kind: string }) {
+  const { t } = useTranslation();
   if (kind !== "table") return null;
-  return <span className="badge warn">tableau</span>;
+  return <Badge variant="warning">{t("migration.zoneFlags.table")}</Badge>;
 }

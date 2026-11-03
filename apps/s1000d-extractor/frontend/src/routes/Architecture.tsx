@@ -1,84 +1,68 @@
-// Contenu FR (le preview source est FR-only).
+import { Alert, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@internal/ui";
+import { useTranslation } from "react-i18next";
+
 export function Architecture() {
-  const workflow = [
-    "Paramètres → clé Mistral (active OCR scans + classification IA).",
-    "Charger → PDF/Word + version S1000D (4.1/4.2) + profil BREX optionnel → « Générer ».",
-    "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
-    "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
-    "Structure → arbre par DM, trancher les nœuds ambigus (para ↔ proceduralStep).",
-    "Génération → XML S1000D par DM + violations ; download par DM ou ZIP.",
-  ];
-  const pipeline = [
-    "parse → PyMuPDF (PDF) / python-docx (Word) ; page scannée → OCR Mistral.",
-    "IR canonique → arbre logique commun (sections / listes / admonitions / figures / tables).",
-    "découpage (étape 1) → 1 Data Module par section/chapitre/sous-section.",
-    "typage par DM (étape 2) → descriptive / procedural / ipd (heuristique + IA Mistral).",
-    "résolution (étape 3) → élément S1000D selon contexte × forme ; candidats multiples si ambigu.",
-    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + règles BREX prises en charge.",
-  ];
+  const { t } = useTranslation();
+  const workflow = Array.from({ length: 6 }, (_, index) =>
+    t(`architecture.workflow.${index}`),
+  );
+  const pipeline = Array.from({ length: 6 }, (_, index) =>
+    t(`architecture.pipeline.${index}`),
+  );
 
   return (
-    <>
-      <div className="page-header">
-        <h1>Architecture</h1>
-        <p>Pipeline générique, workflow de génération et détail par étape.</p>
-      </div>
+    <div className="space-y-4">
+      <PageHeader title={t("architecture.title")} description={t("architecture.subtitle")} />
 
-      <div className="card">
-        <h2 className="card-title">Pipeline générique (3 couches indépendantes)</h2>
-        <div className="grid-2">
-          <div className="arch-split">
-            <div className="label brand-color">CE QUI VARIE PAR DOCUMENT</div>
-            <div>
-              La <strong>forme d'entrée</strong> (layout PDF, styles Word) est absorbée
-              par un <strong>modèle logique canonique (IR)</strong>. PDF et Word se
-              normalisent dans le même IR : aucune config par document.
+      <Card>
+        <CardHeader><CardTitle>{t("architecture.layersTitle")}</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-md bg-bg-2 p-4">
+            <div className="text-label font-mono uppercase text-brand-text">
+              {t("architecture.documentChangeTitle")}
             </div>
+            <p className="mt-2">{t("architecture.documentChangeText")}</p>
           </div>
-          <div className="arch-split">
-            <div className="label accent-color">CE QUI VARIE PAR PROJET</div>
-            <div>
-              La <strong>version S1000D</strong> (4.1 / 4.2 → schémas XSD locaux) et le
-              <strong> BREX utilisateur</strong> fournissent les contraintes du projet.
-              Le BREX guide et vérifie les DMs sans remplacer le moteur de mapping.
+          <div className="rounded-lg border border-md bg-bg-2 p-4">
+            <div className="text-label font-mono uppercase text-info">
+              {t("architecture.projectChangeTitle")}
             </div>
+            <p className="mt-2">{t("architecture.projectChangeText")}</p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h2 className="card-title">Workflow utilisateur — génération guidée</h2>
-        <p className="label">
-          Étapes bloquantes : on valide chacune avant la suivante. L'IA dégrossit,
-          l'humain tranche.
-        </p>
-        <div className="arch-flow">
-          {workflow.map((s, i) => (
-            <div className="arch-step" key={i}>
-              <span className="step-n">{i}.</span>
-              <span>{s}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <Card>
+        <CardHeader><CardTitle>{t("architecture.workflowTitle")}</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-sm text-fg-dim">{t("architecture.workflowIntro")}</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {workflow.map((step, index) => (
+              <div key={index} className="flex items-start gap-2.5 rounded-sm border-l border-brand bg-bg-2 px-3 py-2 text-sm">
+                <span className="font-mono text-brand-text">{index}.</span>
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h2 className="card-title">Sous le capot (pipeline par étape)</h2>
-        <div className="arch-flow">
-          {pipeline.map((s, i) => (
-            <div className="arch-step" key={i}>
-              <span className="step-n">{String.fromCharCode(65 + i)}.</span>
-              <span>{s}</span>
-            </div>
-          ))}
-        </div>
-        <div className="banner warn" style={{ marginTop: 12 }}>
-          Sortie = jeu de DMs, chacun un <strong>squelette best-effort</strong> : DMC du
-          DM, applicabilité, SNS et ICN restent à confirmer par l'humain. Le
-          <code>brexDmRef</code> pointe vers le BREX sélectionné ; les règles non prises
-          en charge sont signalées séparément.
-        </div>
-      </div>
-    </>
+      <Card>
+        <CardHeader><CardTitle>{t("architecture.pipelineTitle")}</CardTitle></CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-1.5">
+            {pipeline.map((step, index) => (
+              <div key={index} className="flex items-start gap-2.5 rounded-sm border-l border-brand bg-bg-2 px-3 py-2 text-sm">
+                <span className="font-mono text-brand-text">{String.fromCharCode(65 + index)}.</span>
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+          <Alert className="mt-3" variant="warning">
+            {t("architecture.outputWarning")}
+          </Alert>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

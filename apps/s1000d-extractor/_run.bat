@@ -102,7 +102,7 @@ if not exist "%INSTALLED_MARK%" (
 )
 
 echo [setup] Migrations Alembic...
-"%PYTHON%" -m alembic upgrade head
+"%PYTHON%" -m app.db.migrations
 if errorlevel 1 (
     echo [erreur] Echec migrations.
     pause

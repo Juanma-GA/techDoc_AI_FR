@@ -1,7 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import type { PreliminaryState, ReviewAction } from "../../src/lib/preliminaryTypes";
 import type { RequirementRules } from "../../src/lib/preliminaryRules";
+
+async function chooseOption(trigger: Locator, label: string) {
+  await trigger.click();
+  await trigger.page().getByRole("option", { name: label, exact: true }).last().click();
+}
 
 function syntheticState(sourceFormat = "docx"): PreliminaryState {
   return {
@@ -35,12 +40,13 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     revision: 0, groups: [{ category: "conditions", kind: "keyword", fr: ["avant"], en: ["before"] }],
   };
   const writes: Array<ReviewAction & { revision: number }> = [];
+  let advances = 0;
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     let response: unknown = {};
-    if (path.endsWith("/health")) response = { status: "ok", llm: "disabled" };
+    if (path.endsWith("/health")) response = { status: "ok", version: "test", db: "ok" };
     else if (path.endsWith("/settings/preliminary-rules")) {
       if (route.request().method() === "POST") {
         const payload = route.request().postDataJSON() as RequirementRules;
@@ -48,7 +54,7 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
       }
       response = rules;
     }
-    else if (path.endsWith("/settings")) response = { demo_enabled: false, llm_enabled: false };
+    else if (path.endsWith("/settings")) response = { demo_enabled: false };
     else if (path.endsWith("/documents")) response = [{
       id: "synthetic-doc", filename: "synthetic-source.docx", source_format: sourceFormat, status: "wizard",
     }];
@@ -60,6 +66,12 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
         title: id === "proc" ? "Synthetic removal" : "Synthetic empty", node_count: 18,
       })),
     };
+    else if (path.endsWith("/wizard/advance")) {
+      advances += 1;
+      response = {
+        step: "generate", split_level: "section", dms: [], steps: ["split", "type", "structure", "preliminary", "generate"],
+      };
+    }
     else if (path.endsWith("/wizard/preliminary")) {
       if (failSave) {
         await route.fulfill({ status: 503, json: { code: "SYNTHETIC_FAILURE", message: "Synthetic save failure" } });
@@ -81,6 +93,12 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
         if ("destination" in action) passage.decision = action.destination ?? null;
         passage.text = action.text ?? passage.text;
       } else if (action.op === "complete") review.status = "reviewed";
+      else if (action.op === "skip") {
+        for (const skipped of Object.values(state.reviews)) {
+          skipped.status = "skipped";
+          skipped.saved_at = "2026-10-27T14:00:00Z";
+        }
+      }
       else if (action.op === "cursor") review.position = {
         page: action.page ?? 1, scroll_top: action.scroll_top ?? 0, selected_id: action.selected_id ?? null,
       };
@@ -101,10 +119,16 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
       });
       return;
     } else if (path.includes("/brex")) response = [];
-    else if (path.includes("/migration-inputs")) response = [];
+    else if (path.endsWith("/wizard/images")) response = [];
+    else if (path.includes("/migration-inputs")) response = {
+      issue: "4.2", context_hint: "mixed", brex_id: null, files: {},
+    };
     await route.fulfill({ json: response });
   });
-  return { writes, read: () => state, fail: (value: boolean) => { failSave = value; } };
+  return {
+    writes, read: () => state, advances: () => advances,
+    fail: (value: boolean) => { failSave = value; },
+  };
 }
 
 test("classifies, scrolls continuously, and restores after reopening without advancing", async ({ page }) => {
@@ -113,8 +137,9 @@ test("classifies, scrolls continuously, and restores after reopening without adv
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Revoir le DM de procédure" })).toBeVisible();
   const first = page.locator("article").first();
-  await first.getByLabel("Décision de classement").selectOption("safety");
-  await expect(first.getByLabel("Décision de classement")).toHaveValue("safety");
+  const decision = first.getByRole("button", { name: "Décision de classement" });
+  await chooseOption(decision, "Sécurité");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   const reader = page.getByTestId("procedure-reader");
   await expect(reader.locator("[data-passage]").first()).toHaveText(/Synthetic source passage 0/);
   await reader.hover();
@@ -125,7 +150,8 @@ test("classifies, scrolls continuously, and restores after reopening without adv
   await page.reload();
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   await expect.poll(() => reader.evaluate((element) => element.scrollTop)).toBeCloseTo(position, 0);
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect(page.locator("article").first().locator('button[aria-haspopup="listbox"]'))
+    .toContainText("Sécurité");
   expect(server.writes.some((action) => action.op === "cursor")).toBe(true);
 });
 
@@ -133,8 +159,8 @@ test("saving rules in Settings flags an already-open review without discarding i
   const server = await mockApplication(page);
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await page.locator("article").first().getByLabel("Décision de classement").selectOption("safety");
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await chooseOption(page.locator("article").first().getByRole("button", { name: "Décision de classement" }), "Sécurité");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
   await page.getByRole("button", { name: "Afficher les règles", exact: true }).click();
   const form = page.getByRole("form", { name: "Règles de préremplissage des exigences" });
@@ -143,7 +169,7 @@ test("saving rules in Settings flags an already-open review without discarding i
   await category.locator("fieldset").first().getByLabel("Liste française (FR)").fill("avant\navant intervention");
   await form.getByRole("button", { name: "Enregistrer les règles", exact: true }).click();
   await expect(form.getByRole("status")).toContainText("révision 1");
-  await page.getByRole("link", { name: "Migration", exact: true }).click();
+  await page.getByRole("link", { name: "Conversion S1000D", exact: true }).click();
   await expect(page.getByRole("button", { name: "Recommencer cette revue", exact: true })).toBeVisible();
   expect(server.read().reviews.proc!.passages[0]?.decision).toBe("safety");
   expect(server.writes.some((write) => write.op === "restart")).toBe(false);
@@ -154,12 +180,12 @@ test("exposes a failed save and retries without claiming success", async ({ page
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   server.fail(true);
-  await page.locator("article").first().getByLabel("Décision de classement").selectOption("safety");
+  await chooseOption(page.locator("article").first().getByRole("button", { name: "Décision de classement" }), "Sécurité");
   await expect(page.getByRole("alert").filter({ hasText: "Synthetic save failure" })).toBeVisible();
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("");
+  expect(server.read().reviews.proc!.passages[0]!.decision).toBeNull();
   server.fail(false);
   await page.getByRole("button", { name: "Réessayer", exact: true }).click();
-  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
 });
 
 test("PDF pages load progressively with source highlighting in dark and light layouts", async ({ page }) => {
@@ -206,9 +232,10 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   const cards = page.locator("article");
-  await expect(cards.nth(0).locator("select option:checked")).toHaveText("Sécurité");
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Reste dans la procédure");
-  await expect(cards.nth(2).locator("select option:checked")).toHaveText("À trancher");
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toContainText("Sécurité");
+  await expect(cards.nth(1).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Reste dans la procédure");
+  await expect(cards.nth(2).getByRole("button", { name: "Décision de classement" })).toContainText("À trancher");
   expect(server.writes.filter((action) => action.op === "decide")).toHaveLength(0);
   expect(server.read().reviews.proc!.passages.every((passage) => passage.decision === null)).toBe(true);
   const complete = page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" });
@@ -216,23 +243,25 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   const collapseButton = cards.nth(0).getByRole("button", { name: "Replier le passage" });
   await expect(collapseButton).toHaveText("Page source 1");
   await expect(collapseButton.locator("svg")).toBeVisible();
-  const filter = page.getByLabel("Afficher les passages");
-  await filter.selectOption("safety");
+  const filter = page.getByRole("button", { name: "Afficher les passages" });
+  await chooseOption(filter, "Sécurité");
   await expect(cards).toHaveCount(1);
-  await filter.selectOption("all");
+  await chooseOption(filter, "Tous les passages");
   await expect(cards).toHaveCount(18);
   await cards.nth(0).getByRole("button", { name: "Accepter la proposition" }).click();
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toHaveValue("safety");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.decision).toBe("safety");
   const expandButton = cards.nth(0).getByRole("button", { name: "Développer le passage" });
   await expect(expandButton).toHaveText("Page source 1");
   await expect(expandButton.locator("svg")).toBeVisible();
   await expect(expandButton)
     .toHaveAttribute("aria-expanded", "false");
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeHidden();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toBeHidden();
   await expect(cards.nth(0).getByText("Proposition : Sécurité")).toBeHidden();
   await expect(complete).toBeDisabled();
   await expandButton.click({ position: { x: 30, y: 16 } });
-  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeVisible();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" })).toBeVisible();
+  await expect(cards.nth(0).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Sécurité");
   await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
   const sourcePassage = cards.nth(0).getByRole("button", { name: "Voir la source — page 1" });
   await expect(sourcePassage).toBeVisible();
@@ -243,8 +272,8 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
   expect(server.read().reviews.proc!.passages[1]!.decision).toBeNull();
   await page.getByRole("button", { name: "EN", exact: true }).click();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Keep in procedure");
-  await expect(cards.nth(2).locator("select option:checked")).toHaveText("Decision needed");
+  await expect(cards.nth(1).locator('button[aria-haspopup="listbox"]')).toContainText("Keep in procedure");
+  await expect(cards.nth(2).locator('button[aria-haspopup="listbox"]')).toContainText("Decision needed");
 });
 
 test("splits source text at a selected word boundary", async ({ page }) => {
@@ -339,11 +368,12 @@ test("source navigation loads an offscreen PDF page before refining the highligh
   await expect(reader.locator("[data-passage]")).toHaveCount(0);
 });
 
-test("distinguishes empty from reviewed, changes language and resumes the active procedure", async ({ page }) => {
+test("auto-advances after review, distinguishes empty from reviewed and resumes the active procedure", async ({ page }) => {
   const server = await mockApplication(page, "docx", true);
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await page.getByLabel("Procédure", { exact: true }).selectOption("empty");
+  const procedure = page.getByRole("button", { name: "Procédure", exact: true });
+  await chooseOption(procedure, "Synthetic empty");
   await expect(page.getByText("Procédure 2 sur 2", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Générer et valider le XML" })).toBeDisabled();
@@ -352,11 +382,34 @@ test("distinguishes empty from reviewed, changes language and resumes the active
   await page.keyboard.press("Space");
   await page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" }).click();
   await expect.poll(() => server.read().reviews.empty!.status).toBe("reviewed");
+  await expect.poll(() => server.read().active_dm_id).toBe("proc");
+  await expect(procedure).toContainText("Synthetic removal");
   await page.getByRole("button", { name: "EN", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review the procedural DM" })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
-  await expect(page.getByLabel("Procédure", { exact: true })).toHaveValue("empty");
+  await expect(page.getByRole("button", { name: "Procédure", exact: true })).toContainText("Synthetic removal");
+});
+
+test("skips every procedural review and starts generation directly", async ({ page }) => {
+  const server = await mockApplication(page, "docx", true);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+
+  const title = page.getByRole("heading", { name: "Revoir le DM de procédure" });
+  const skip = page.getByRole("button", { name: "Ignorer les revues et générer en l'état" });
+  const [titleBox, skipBox] = await Promise.all([title.boundingBox(), skip.boundingBox()]);
+  if (!titleBox || !skipBox) throw new Error("Procedure title or skip action is not visible.");
+  expect(skipBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+  expect(Math.abs(skipBox.y - titleBox.y)).toBeLessThan(16);
+  await skip.click();
+  const confirm = page.getByRole("button", { name: "Confirmer la génération sans revue" });
+  await expect(confirm).toBeVisible();
+  await confirm.click();
+
+  await expect.poll(() => Object.values(server.read().reviews)
+    .every((review) => review.status === "skipped")).toBe(true);
+  await expect.poll(() => server.advances()).toBe(1);
 });
 
 test("editorial structure is not classified and closing conditions have their own destination", async ({ page }) => {
@@ -381,7 +434,8 @@ test("editorial structure is not classified and closing conditions have their ow
   await expect(reader.locator('[data-passage="heading"]')).toHaveText("3.2 Tools required");
   await expect(reader.locator('[data-passage="header"]').getByRole("cell")).toHaveText(["Tool", "Qty"]);
   await expect(page.getByText("3 passage(s) sans décision sur 18", { exact: true })).toBeVisible();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Conditions de clôture");
+  await expect(cards.nth(1).getByRole("button", { name: "Décision de classement" }))
+    .toContainText("Conditions de clôture");
   await expect(cards.nth(2).getByText(/Contenu de la procédure/)).toBeVisible();
   for (const index of [0, 1, 2]) {
     await cards.nth(index).getByRole("button", { name: "Accepter la proposition" }).click();

@@ -13,8 +13,9 @@ non verifiable. Seules 4.1 et 4.2 sont selectionnables pour la generation.
 from __future__ import annotations
 
 import re
+from _thread import LockType
 from pathlib import Path
-from threading import local
+from threading import Lock
 
 from lxml import etree
 
@@ -23,8 +24,9 @@ from app.core import xml_safe
 SUPPORTED_ISSUES = ("4.1", "4.2", "5.0")
 SELECTABLE_ISSUES = ("4.1", "4.2")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
-_SCHEMA_CACHE = local()
-_DM_SCHEMA_STEMS = {
+_SCHEMA_CACHE: dict[Path, tuple[etree.XMLSchema, LockType]] = {}
+_SCHEMA_CACHE_LOCK = Lock()
+SCHEMA_STEMS = {
     "descriptive": "descript",
     "description": "descript",
     "descript": "descript",
@@ -70,24 +72,21 @@ def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
     if not d.is_dir() or not dm_type:
         return None
     normalized_type = dm_type.lower().removesuffix(".xsd")
-    schema_stem = _DM_SCHEMA_STEMS.get(normalized_type)
+    schema_stem = SCHEMA_STEMS.get(normalized_type)
     if schema_stem is None or not re.fullmatch(r"[a-z][a-z0-9_-]*", schema_stem):
         return None
     schema_path = d / f"{schema_stem}.xsd"
     return schema_path if schema_path.is_file() else None
 
 
-def _compiled_schema(path: Path) -> etree.XMLSchema:
-    schemas = getattr(_SCHEMA_CACHE, "schemas", None)
-    if schemas is None:
-        schemas = {}
-        _SCHEMA_CACHE.schemas = schemas
+def _compiled_schema(path: Path) -> tuple[etree.XMLSchema, LockType]:
     resolved_path = path.resolve()
-    schema = schemas.get(resolved_path)
-    if schema is None:
-        schema = etree.XMLSchema(xml_safe.parse(str(resolved_path)))
-        schemas[resolved_path] = schema
-    return schema
+    with _SCHEMA_CACHE_LOCK:
+        cached = _SCHEMA_CACHE.get(resolved_path)
+        if cached is None:
+            cached = (etree.XMLSchema(xml_safe.parse(str(resolved_path))), Lock())
+            _SCHEMA_CACHE[resolved_path] = cached
+        return cached
 
 
 def validate_xsd(
@@ -128,21 +127,22 @@ def validate_xsd(
                 f"Aucun schema DM correspondant au type '{selected_type}' pour l'Issue {issue}.",
                 "/",
             )]
-        schema = _compiled_schema(xsd_path)
+        schema, lock = _compiled_schema(xsd_path)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]
     except Exception as exc:
         return [_v("info", "XSD", f"Chargement XSD impossible : {exc}", "/")]
-    if schema.validate(doc):
-        return []
-    return [
-        {
-            **_v("error", "XSD", e.message, e.path or "/"),
-            "line": e.line or None,
-            "column": e.column or None,
-        }
-        for e in schema.error_log  # type: ignore[union-attr]
-    ]
+    with lock:
+        if schema.validate(doc):
+            return []
+        return [
+            {
+                **_v("error", "XSD", e.message, e.path or "/"),
+                "line": e.line or None,
+                "column": e.column or None,
+            }
+            for e in schema.error_log
+        ]
 
 
 def _v(severity: str, rule: str, message: str, path: str) -> dict:
