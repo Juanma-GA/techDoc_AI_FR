@@ -45,7 +45,7 @@
 .banner { margin-bottom: 1rem; color: var(--fg-dim); font-size: 0.875rem; overflow-wrap: anywhere; }
 .banner strong { color: var(--fg); }
 .banner.warn { color: var(--warning); }
-.banner code { font-family: "JetBrains Mono", monospace; overflow-wrap: anywhere; }
+.banner code { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .error, .success { margin-top: 0.5rem; font-size: 0.875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .error { color: var(--danger); }
 .success { color: var(--success); }
@@ -64,7 +64,7 @@
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 0.75rem; }
 .kpi { display: flex; min-width: 0; padding-block: 0.75rem; flex-direction: column; gap: 0.25rem; }
-.kpi-value { font-family: "JetBrains Mono", monospace; font-size: 1.375rem; font-weight: 700; }
+.kpi-value { font-family: var(--font-mono); font-size: 1.375rem; font-weight: 700; }
 .kpi-value.ok { color: var(--success); }
 .kpi-value.warn { color: var(--warning); }
 .kpi-value.err { color: var(--danger); }
@@ -84,12 +84,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 table.tbl th, table.tbl td { padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 table.tbl th { color: var(--fg-dim); font-size: 0.75rem; font-weight: 500; }
 table.tbl tr:hover td { background: var(--bg-2); }
-.preview-table { width: max-content; max-width: none; border-collapse: collapse; font-family: "JetBrains Mono", monospace; font-size: 0.75rem; }
+.preview-table { width: max-content; max-width: none; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.75rem; }
 .preview-table td, .preview-table th { max-width: 14rem; padding: 0.25rem 0.5rem; overflow: hidden; border: 1px solid var(--border); text-overflow: ellipsis; white-space: nowrap; }
 .preview-table th { background: var(--bg-2); color: var(--fg-dim); }
 .preview-table .rownum { position: sticky; left: 0; background: var(--bg-2); color: var(--fg-dim); text-align: right; }
 
-.tree { max-height: 26rem; overflow: auto; font-family: "JetBrains Mono", monospace; font-size: 0.875rem; }
+.tree { max-height: 26rem; overflow: auto; font-family: var(--font-mono); font-size: 0.875rem; }
 .tree ul { margin: 0; padding: 0; list-style: none; }
 .tree ul ul { margin-left: 0.5rem; padding-left: 0.75rem; border-left: 1px solid var(--border); }
 .tree-node { display: flex; align-items: center; gap: 0.375rem; padding-block: 0.125rem; }
