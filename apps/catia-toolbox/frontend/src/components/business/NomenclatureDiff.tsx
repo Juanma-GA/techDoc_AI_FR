@@ -1,3 +1,4 @@
+import { Button, Select } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,7 +102,7 @@ export function NomenclatureDiff() {
   if (runs.length < 2) {
     return (
       <div className="empty-state">
-        <h3 className="card-title">{t("diff.nomenNeedTwo")}</h3>
+        <h3 className="section-title">{t("diff.nomenNeedTwo")}</h3>
         <p className="hint">{t("diff.nomenNeedTwoDesc")}</p>
       </div>
     );
@@ -109,8 +110,8 @@ export function NomenclatureDiff() {
 
   return (
     <div className="form">
-      <article className="card">
-        <h2 className="card-title">{t("diff.nomenCompareTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("diff.nomenCompareTitle")}</h2>
         <NomenclatureVersionSelector
           options={options}
           selected={selected}
@@ -127,21 +128,21 @@ export function NomenclatureDiff() {
         />
         {remaining.length > 0 && selected.length < MAX_VERSIONS ? (
           <div className="row" style={{ marginTop: "0.75rem" }}>
-            <select className="input grow" value={candidate} onChange={(event) => setAddId(event.target.value)}>
+            <Select options={[]} className="grow" value={candidate} onChange={(event) => setAddId(event.target.value)}>
               {remaining.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <button type="button" className="btn secondary small" onClick={addVersion}>{t("diff.addVersion")}</button>
+            </Select>
+            <Button type="button" variant="secondary" size="sm" onClick={addVersion}>{t("diff.addVersion")}</Button>
           </div>
         ) : null}
         <p className="hint">{t("diff.versionLimit", { count: MAX_VERSIONS })}</p>
         {error ? <p className="error">{error}</p> : null}
-      </article>
+      </section>
 
       {multiResult ? (
         <>
           <NomenclatureMatrix result={multiResult} labelOf={labelOf} />
-          <article className="card">
-            <h2 className="card-title">{t("diff.multiSummaryTitle")}</h2>
+          <section className="workflow-section">
+            <h2 className="section-title">{t("diff.multiSummaryTitle")}</h2>
             <p className="hint">
               {t("diff.multiSummary", {
                 comparisons: multiResult.summary.comparisons ?? 0,
@@ -152,8 +153,8 @@ export function NomenclatureDiff() {
             </p>
             <label className="field">
               <span className="field-label">{t("diff.comparisonStep")}</span>
-              <select
-                className="input"
+              <Select options={[]}
+
                 value={activeComparison}
                 onChange={(event) => setActiveComparison(Number(event.target.value))}
               >
@@ -162,15 +163,15 @@ export function NomenclatureDiff() {
                     {`${labelOf(comparison.base_run_id)} \u2192 ${labelOf(comparison.other_run_id)}`}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-          </article>
+          </section>
         </>
       ) : null}
       {singleResult ? <NomenclatureComparisonResult result={singleResult} /> : null}
       {activeResult ? <NomenclatureComparisonResult result={activeResult} pairLabel={pairLabel} /> : null}
       {!singleResult && !activeResult ? (
-        <article className="card"><div className="empty-state"><h3 className="card-title">{t("diff.runPrompt")}</h3></div></article>
+        <section className="workflow-section"><div className="empty-state"><h3 className="section-title">{t("diff.runPrompt")}</h3></div></section>
       ) : null}
     </div>
   );

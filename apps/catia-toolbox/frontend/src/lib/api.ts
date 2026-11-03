@@ -89,12 +89,6 @@ export type SmgxmlBatchDto = {
 };
 
 export type SettingsDto = {
-  api_key_set: boolean;
-  base_url: string;
-  chat_model: string;
-  embed_model: string;
-  llm_enabled: boolean;
-  llm_tested?: boolean;
   onedrive_input_root: string;
   onedrive_output_root: string;
   composer_license_server: string;
@@ -103,11 +97,6 @@ export type SettingsDto = {
 };
 
 export type SettingsInput = {
-  api_key?: string;
-  base_url?: string;
-  chat_model?: string;
-  embed_model?: string;
-  llm_enabled?: boolean;
   onedrive_input_root?: string;
   onedrive_output_root?: string;
   composer_license_server?: string;
@@ -149,21 +138,14 @@ export type BrowsePreviewDto = {
   rows: string[][];
 };
 
-export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
-
 export type AdminStatsDto = {
   imports: number;
   nodes: number;
-  runs: number;
-  suggestions: number;
   diffs: number;
-  checks: number;
   conversions: number;
-  replacements: number;
   colorizations: number;
   nomenclatures: number;
   smgxml_runs: number;
-  qc_checklists: number;
   total_size_bytes: number;
 };
 
@@ -176,21 +158,6 @@ export type DiffRunDto = {
   created_at: string;
 };
 export type DiffEntryDto = { id: string; rel_path: string; change_type: string; detail: string };
-
-export type CheckRunDto = {
-  id: string;
-  import_id: string;
-  status: string;
-  summary: Record<string, number>;
-  created_at: string;
-};
-export type CheckResultDto = { id: string; rule: string; severity: string; rel_path: string; message: string };
-export type CheckInput = {
-  rules?: string[];
-  max_depth?: number;
-  naming_style?: string;
-  forbidden_extensions?: string[];
-};
 
 export type ConversionRunDto = {
   id: string;
@@ -224,30 +191,12 @@ export type ComposerConverterStatusDto = {
   message: string;
 };
 
-export type ReplacementRunDto = {
-  id: string;
-  import_id: string;
-  status: string;
-  summary: Record<string, number>;
-  created_at: string;
-};
-export type ReplacementItemDto = {
-  id: string;
-  occurrence_path: string;
-  old_ref: string;
-  new_ref: string;
-  status: string;
-};
-
 // ----- Health --------------------------------------------------------------
-
-export type LlmState = "ok" | "untested" | "not_configured" | "disabled";
 
 export type HealthDto = {
   status: string;
   version: string;
   db: string;
-  llm: LlmState;
 };
 
 // ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) --------------
@@ -430,43 +379,6 @@ export type SmgxmlRenameInput = {
   apply?: boolean;
 };
 
-// ----- Etape 5 : Controle Qualite (checklist) ------------------------------
-
-export type QcItemDto = {
-  id: string;
-  label: string;
-  category: string;
-  status: "pending" | "ok" | "ko" | "na";
-  comment: string;
-  position: number;
-};
-
-export type QcSummaryDto = {
-  pending: number;
-  ok: number;
-  ko: number;
-  na: number;
-  done: number;
-  total: number;
-};
-
-export type QcChecklistDto = {
-  id: string;
-  title: string;
-  status: string;
-  created_at: string;
-  items: QcItemDto[];
-  summary: QcSummaryDto;
-};
-
-export type QcChecklistCreateInput = {
-  title?: string;
-  template?: string | null;
-  items?: { label: string; category?: string }[];
-};
-
-export type QcItemUpdateInput = { status?: string; comment?: string };
-
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
@@ -602,7 +514,6 @@ export const settingsApi = {
   read: () => request<SettingsDto>("/settings"),
   write: (payload: SettingsInput) =>
     request<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(payload) }),
-  test: () => request<TestConnectionDto>("/settings/test", { method: "POST" }),
 };
 
 export const diffApi = {
@@ -613,13 +524,6 @@ export const diffApi = {
     }),
   entries: (runId: string, changeType?: string) =>
     request<DiffEntryDto[]>(`/diff/${runId}/entries${changeType ? `?change_type=${changeType}` : ""}`),
-};
-
-export const checksApi = {
-  rules: () => request<string[]>("/checks/rules"),
-  run: (importId: string, config: CheckInput) =>
-    request<CheckRunDto>(`/imports/${importId}/check`, { method: "POST", body: JSON.stringify(config) }),
-  results: (runId: string) => request<CheckResultDto[]>(`/checks/${runId}/results`),
 };
 
 export const conversionApi = {
@@ -647,21 +551,6 @@ export const conversionApi = {
       method: "POST",
       body: JSON.stringify({ dry_run: dryRun, confirm }),
     }),
-};
-
-export const replacementApi = {
-  run: (importId: string, file: File) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    return request<ReplacementRunDto>(`/imports/${importId}/replacement`, { method: "POST", body: fd });
-  },
-  /** Mapping depuis un fichier de la Source (scope input) — preview /replacement/source. */
-  source: (importId: string, path: string, scope: BrowseScope = "input") =>
-    request<ReplacementRunDto>(`/imports/${importId}/replacement/source`, {
-      method: "POST",
-      body: JSON.stringify({ scope, path }),
-    }),
-  items: (runId: string) => request<ReplacementItemDto[]>(`/replacements/${runId}/items`),
 };
 
 export const adminApi = {
@@ -769,24 +658,11 @@ export const smgxmlApi = {
     }),
 };
 
-export const qcApi = {
-  list: () => request<QcChecklistDto[]>("/qc/checklists"),
-  get: (id: string) => request<QcChecklistDto>(`/qc/checklists/${id}`),
-  create: (body: QcChecklistCreateInput) =>
-    request<QcChecklistDto>("/qc/checklists", { method: "POST", body: JSON.stringify(body) }),
-  remove: (id: string) => request<void>(`/qc/checklists/${id}`, { method: "DELETE" }),
-  setItem: (id: string, patch: QcItemUpdateInput) =>
-    request<QcItemDto>(`/qc/items/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
-};
-
 /** URL de telechargement direct (CSV / script) — consommee via <a href>. */
 export const exportUrl = {
   diffCsv: (runId: string) => `${API_BASE}/diff/${runId}/export.csv`,
-  checksCsv: (runId: string) => `${API_BASE}/checks/${runId}/export.csv`,
   conversionCsv: (runId: string) => `${API_BASE}/conversions/${runId}/export.csv`,
   conversionScript: (runId: string) => `${API_BASE}/conversions/${runId}/export.script`,
-  replacementCsv: (runId: string) => `${API_BASE}/replacements/${runId}/export.csv`,
-  replacementMacro: (runId: string) => `${API_BASE}/replacements/${runId}/export.macro`,
   identificationCsv: (
     runId: string,
     filters?: { toTreat?: boolean; optimized?: boolean; replaced?: boolean; monoBody?: boolean },
@@ -801,7 +677,6 @@ export const exportUrl = {
   },
   nomenclatureCompareCsv: (baseRunId: string, otherRunId: string) =>
     `${API_BASE}/identification/compare/export.csv?base_run_id=${baseRunId}&other_run_id=${otherRunId}`,
-  qcCsv: (checklistId: string) => `${API_BASE}/qc/checklists/${checklistId}/export.csv`,
 };
 
 // Keep the frontend client aligned with the routes registered by the backend.

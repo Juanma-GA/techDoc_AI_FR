@@ -1,0 +1,39 @@
+{
+  "tools": {
+    "crop": {
+      "tab": "Recadrer",
+      "title": "Recadrer un PDF",
+      "description": "Retirez les marges blanches manuellement ou automatiquement."
+    }
+  },
+  "crop": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "La page 1 sert d’aperçu pour le recadrage manuel.",
+    "stepCrop": "Définir le recadrage",
+    "stepCropDescription": "Choisissez un cadre manuel ou la détection automatique des marges.",
+    "modeLabel": "Mode de recadrage",
+    "manualMode": "Manuel — dessiner un cadre",
+    "automaticMode": "Automatique — détecter les marges blanches",
+    "manualHelp": "Tracez sur l’aperçu la zone à conserver. Vous pouvez aussi régler ses coordonnées ci-dessous.",
+    "manualScope": "Le cadre de la page 1 est appliqué aux proportions de toutes les pages.",
+    "automaticHelp": "L’aperçu montre la page 1 ; la détection analyse chaque page du document.",
+    "automaticScope": "Le contenu visible est détecté page par page, avec une petite marge de sécurité. Les pages blanches restent inchangées.",
+    "previewPage": "Aperçu de la page {{page}}",
+    "previewLoading": "Chargement de l’aperçu…",
+    "previewFailed": "Impossible de lire ce PDF dans l’aperçu.",
+    "previewRequired": "Attendez que l’aperçu du PDF soit prêt avant le recadrage.",
+    "noPages": "Ce PDF ne contient aucune page.",
+    "leftLabel": "Gauche (%)",
+    "topLabel": "Haut (%)",
+    "widthLabel": "Largeur (%)",
+    "heightLabel": "Hauteur (%)",
+    "outputDescription": "PDF recadré à télécharger",
+    "analysisProgress": "Analyse des pages : {{completed}} / {{total}}",
+    "action": "Recadrer et télécharger",
+    "working": "Recadrage en cours…",
+    "selectionRequired": "Tracez ou saisissez une zone plus petite que la page entière.",
+    "noMarginsFound": "Aucune marge à retirer n’a été détectée.",
+    "success": "Le fichier {{fileName}} a été téléchargé.",
+    "failed": "Le recadrage du PDF a échoué."
+  }
+}

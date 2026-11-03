@@ -145,7 +145,6 @@ export function ImagesToPdfTool() {
             ))}
           </ol>
         ) : null}
-        <p className="privacy-hint">{t("imagesToPdf.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

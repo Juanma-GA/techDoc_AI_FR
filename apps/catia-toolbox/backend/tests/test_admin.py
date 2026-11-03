@@ -7,6 +7,15 @@ from app.db.models import AppConfig, NomenclatureItem, NomenclatureRun
 from app.db.session import SessionLocal
 
 
+def test_stats_only_counts_active_modules(client) -> None:
+    response = client.get("/api/v1/admin/stats")
+    assert response.status_code == 200
+    assert set(response.json()) == {
+        "imports", "nodes", "diffs", "conversions", "colorizations",
+        "nomenclatures", "smgxml_runs", "total_size_bytes",
+    }
+
+
 def test_reset_all_deletes_database_and_local_uploads_but_preserves_config(
     client, tmp_path, monkeypatch
 ) -> None:

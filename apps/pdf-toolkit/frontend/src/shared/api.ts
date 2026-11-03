@@ -2,6 +2,8 @@ import { isTauri } from "@tauri-apps/api/core";
 import type { TFunction } from "i18next";
 import { save } from "@tauri-apps/plugin-dialog";
 
+import type { PDFEndpoint } from "./pdfEndpoints";
+
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/v1`;
 
 type ErrorPayload = {
@@ -107,15 +109,7 @@ export async function chooseSplitDestination(
 }
 
 export async function processPDF(
-  endpoint:
-    | "merge"
-    | "images-to-pdf"
-    | "compress"
-    | "extract"
-    | "delete"
-    | "reorder"
-    | "rotate"
-    | "signature",
+  endpoint: PDFEndpoint,
   data: FormData,
   downloadName: string,
   t: TFunction,

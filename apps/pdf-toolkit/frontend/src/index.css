@@ -132,10 +132,33 @@ a {
   flex-direction: column;
 }
 
-.pdf-toolkit-shell .ui-tool-tabs {
+.pdf-toolkit-shell .pdf-nav-group-items {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.pdf-toolkit-shell .pdf-nav-section-title {
+  margin-top: 8px;
+  border-top: 1px solid var(--color-border-base);
+  padding-top: 12px;
+  color: var(--color-text-base);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.pdf-toolkit-shell .pdf-nav-section-title.is-first {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.pdf-toolkit-shell .pdf-nav-settings {
+  margin-top: auto;
+  border-top: 1px solid var(--color-border-base);
+  padding-top: 12px;
 }
 
 .pdf-toolkit-shell .ui-nav-item {
@@ -288,13 +311,6 @@ a {
 .remove-button:not(:disabled):hover {
   background: var(--danger-soft);
   color: var(--danger);
-}
-
-.privacy-hint {
-  margin: 14px 0 0;
-  color: var(--color-text-dim);
-  font-size: 0.72rem;
-  line-height: 1.6;
 }
 
 .action-panel {
@@ -566,9 +582,14 @@ a {
 }
 
 @media (max-width: 760px) {
-  .pdf-toolkit-shell .ui-tool-tabs {
+  .pdf-toolkit-shell .pdf-nav-group-items {
+    flex: 1 0 100%;
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  .pdf-toolkit-shell .pdf-nav-settings {
+    margin-top: 0;
   }
 
   .workflow-grid {

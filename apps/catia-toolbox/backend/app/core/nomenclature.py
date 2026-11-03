@@ -103,7 +103,12 @@ def _detect_header(rows: list[list], max_scan: int = 20) -> tuple[int, dict[str,
         mapping: dict[str, int] = {}
         for col, cell in enumerate(row):
             field = _match_field(cell)
-            if field and field not in mapping:
+            exact_sin = (
+                field == "sin"
+                and _norm(cell) == "sin"
+                and ("sin" not in mapping or _norm(row[mapping["sin"]]) != "sin")
+            )
+            if field and (field not in mapping or exact_sin):
                 mapping[field] = col
         if len(mapping) > len(best_map):
             best_row, best_map = i, mapping

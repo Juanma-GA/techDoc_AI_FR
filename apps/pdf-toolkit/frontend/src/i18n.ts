@@ -4,6 +4,12 @@ import { initReactI18next } from "react-i18next";
 
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
+import extractImagesEn from "./features/extract-images/locales/en.json";
+import extractImagesFr from "./features/extract-images/locales/fr.json";
+import cropEn from "./features/crop/locales/en.json";
+import cropFr from "./features/crop/locales/fr.json";
+import insertEn from "./features/insert/locales/en.json";
+import insertFr from "./features/insert/locales/fr.json";
 import signatureEn from "./features/signature/locales/en.json";
 import signatureFr from "./features/signature/locales/fr.json";
 import splitEn from "./features/split/locales/en.json";
@@ -18,18 +24,38 @@ void i18n
         translation: {
           ...fr,
           app: { ...fr.app, ...signatureFr.app },
-          tools: { ...fr.tools, ...signatureFr.tools, ...splitFr.tools },
+          tools: {
+            ...fr.tools,
+            ...signatureFr.tools,
+            ...splitFr.tools,
+            ...insertFr.tools,
+            ...extractImagesFr.tools,
+            ...cropFr.tools,
+          },
           signature: signatureFr.signature,
           split: splitFr.split,
+          insert: insertFr.insert,
+          extractImages: extractImagesFr.extractImages,
+          crop: cropFr.crop,
         },
       },
       en: {
         translation: {
           ...en,
           app: { ...en.app, ...signatureEn.app },
-          tools: { ...en.tools, ...signatureEn.tools, ...splitEn.tools },
+          tools: {
+            ...en.tools,
+            ...signatureEn.tools,
+            ...splitEn.tools,
+            ...insertEn.tools,
+            ...extractImagesEn.tools,
+            ...cropEn.tools,
+          },
           signature: signatureEn.signature,
           split: splitEn.split,
+          insert: insertEn.insert,
+          extractImages: extractImagesEn.extractImages,
+          crop: cropEn.crop,
         },
       },
     },

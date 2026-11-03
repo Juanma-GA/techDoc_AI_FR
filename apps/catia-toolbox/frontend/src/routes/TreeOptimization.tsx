@@ -1,3 +1,4 @@
+import { Badge, Button, Input, Spinner } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,11 +102,11 @@ export function TreeOptimization() {
 
   return (
     <div className="flex max-w-5xl flex-col gap-4">
-      <article className="card">
+      <section className="workflow-section">
         <div className="field">
           <span className="field-label">{t("treeOptimization.folderLabel")}</span>
           {rootsQuery.isLoading ? (
-            <span className="spinner" />
+            <Spinner aria-label={t("common.loading")} />
           ) : hasInputRoot ? (
             <FilePicker
               mode="folder"
@@ -126,9 +127,9 @@ export function TreeOptimization() {
           ) : (
             <>
               <div className="row">
-                <input
+                <Input
                   type="text"
-                  className="input grow"
+                  className="grow"
                   placeholder={t("treeOptimization.absolutePathPlaceholder")}
                   value={path}
                   onChange={(event) => {
@@ -146,15 +147,15 @@ export function TreeOptimization() {
                     }
                   }}
                 />
-                <button
+                <Button
                   type="button"
-                  className="btn secondary"
+                  variant="secondary"
                   onClick={() => pickFolderMutation.mutate()}
                   disabled={isPending}
                 >
-                  {pickFolderMutation.isPending ? <span className="spinner" /> : null}
+                  {pickFolderMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
                   <span>{t("picker.browse")}</span>
-                </button>
+                </Button>
               </div>
               <p className="hint">{t("treeOptimization.noInputRootHint")}</p>
             </>
@@ -162,7 +163,7 @@ export function TreeOptimization() {
         </div>
         {countMutation.isPending ? (
           <div className="row" style={{ marginTop: "0.75rem" }} role="status">
-            <span className="spinner" />
+            <Spinner aria-label={t("common.loading")} />
             <span className="hint">{t("treeOptimization.counting")}</span>
           </div>
         ) : null}
@@ -175,7 +176,7 @@ export function TreeOptimization() {
                   total: progress.filesTotal,
                 })}
               </span>
-              <span className="badge info">{progressPercentage}%</span>
+              <Badge variant="info">{progressPercentage}%</Badge>
             </div>
             <progress
               value={progress.filesScanned}
@@ -194,49 +195,49 @@ export function TreeOptimization() {
               <span className="hint">{t("treeOptimization.noFiles")}</span>
             ) : (
               <>
-                <span className="badge info">
+                <Badge variant="info">
                   {t("treeOptimization.filesToAnalyze", { count: filesToAnalyze })}
-                </span>
-                <button
+                </Badge>
+                <Button
                   type="button"
-                  className="btn primary"
+                  variant="primary"
                   onClick={() => optimizeMutation.mutate(path.trim())}
                   disabled={isPending || countMutation.isPending}
                 >
-                  {optimizeMutation.isPending ? <span className="spinner" /> : null}
+                  {optimizeMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
                   <span>{t("treeOptimization.confirmAnalyze", { count: filesToAnalyze })}</span>
-                </button>
+                </Button>
               </>
             )}
           </div>
         ) : null}
         {error ? <p className="error">{error}</p> : null}
-      </article>
+      </section>
 
       {result ? (
-        <article className="card">
-          <h2 className="card-title">{t("treeOptimization.resultTitle")}</h2>
+        <section className="workflow-section">
+          <h2 className="section-title">{t("treeOptimization.resultTitle")}</h2>
           <code className="hint" style={{ overflowWrap: "anywhere" }}>{result.path}</code>
           <div className="row" style={{ flexWrap: "wrap", marginBottom: "0.75rem" }}>
-            <span className="badge info">
+            <Badge variant="info">
               {t("treeOptimization.filesScanned", { count: result.files_scanned })}
-            </span>
-            <span className={`badge ${result.applied ? "ok" : "warn"}`}>
+            </Badge>
+            <Badge variant={result.applied ? "success" : "warning"}>
               {result.applied
                 ? t("treeOptimization.filesModified", { count: result.files_modified })
                 : t("treeOptimization.filesWithChanges", { count: result.files_with_changes })}
-            </span>
+            </Badge>
             {result.applied && result.removed_elements ? (
-              <span className="badge default">
+              <Badge variant="default">
                 {t("treeOptimization.elementsRemoved", { count: result.removed_elements })}
-              </span>
+              </Badge>
             ) : null}
             {result.files_scanned === 0 ? <span className="hint">{t("treeOptimization.noFiles")}</span> : null}
             {result.files_scanned > 0 && result.files_with_changes === 0 ? (
               <span className="hint">{t("treeOptimization.noChanges")}</span>
             ) : null}
           </div>
-        </article>
+        </section>
       ) : null}
     </div>
   );

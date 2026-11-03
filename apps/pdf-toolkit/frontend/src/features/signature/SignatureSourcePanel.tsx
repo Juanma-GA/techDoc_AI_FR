@@ -136,7 +136,6 @@ export function SignatureSourcePanel({
           </p>
         ) : null}
       </div>
-      <p className="privacy-hint">{t("signature.privacy")}</p>
     </Card>
   );
 }

@@ -1,109 +1,58 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Button, Input, Spinner } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { FolderInput, FolderOutput, RefreshCw, Save, Search } from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { DataResetCard } from "../components/business/DataResetCard";
-import { browseApi, settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
+import { browseApi, settingsApi } from "../lib/api";
 
 const schema = z.object({
-  api_key: z.string().optional(),
-  base_url: z.string().url().or(z.literal("")),
-  chat_model: z.string().min(1),
-  embed_model: z.string().min(1),
+  onedrive_input_root: z.string().trim(),
+  onedrive_output_root: z.string().trim(),
+  composer_license_server: z.string().trim(),
+  composer_converter_path: z.string().trim(),
+  composer_settings_path: z.string().trim(),
 });
 type FormValues = z.infer<typeof schema>;
 
 export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<TestConnectionDto | null>(null);
-  const [llmNotice, setLlmNotice] = useState<string | null>(null);
-
-  const settingsQuery = useQuery<SettingsDto>({ queryKey: ["settings"], queryFn: settingsApi.read });
+  const [saved, setSaved] = useState(false);
+  const [detected, setDetected] = useState<string[]>([]);
+  const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: settingsApi.read });
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    getValues,
+    formState: { isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    values: settingsQuery.data
-      ? {
-          api_key: "",
-          base_url: settingsQuery.data.base_url,
-          chat_model: settingsQuery.data.chat_model,
-          embed_model: settingsQuery.data.embed_model,
-        }
-      : undefined,
-  });
-
-  const llmMutation = useMutation({
-    mutationFn: (enabled: boolean) => settingsApi.write({ llm_enabled: enabled }),
-    onSuccess: (data) => {
-      setLlmNotice(data.llm_enabled ? t("settings.llmTitle") : null);
-      void qc.invalidateQueries({ queryKey: ["settings"] });
-      void qc.invalidateQueries({ queryKey: ["health"] });
+    defaultValues: {
+      onedrive_input_root: "",
+      onedrive_output_root: "",
+      composer_license_server: "",
+      composer_converter_path: "",
+      composer_settings_path: "",
     },
+    values: settingsQuery.data,
   });
 
   const saveMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      settingsApi.write({
-        api_key: values.api_key ? values.api_key : undefined,
-        base_url: values.base_url || undefined,
-        chat_model: values.chat_model,
-        embed_model: values.embed_model,
-      }),
+    mutationFn: (values: FormValues) => settingsApi.write(values),
     onSuccess: (data) => {
-      setSavedNotice(t("settings.saved"));
-      reset({ api_key: "", base_url: data.base_url, chat_model: data.chat_model, embed_model: data.embed_model });
-      void qc.invalidateQueries({ queryKey: ["settings"] });
-      void qc.invalidateQueries({ queryKey: ["health"] });
-    },
-  });
-
-  const testMutation = useMutation({
-    mutationFn: () => settingsApi.test(),
-    onSuccess: (data) => {
-      setTestResult(data);
-      void qc.invalidateQueries({ queryKey: ["health"] });
-    },
-  });
-
-  const [odInput, setOdInput] = useState("");
-  const [odOutput, setOdOutput] = useState("");
-  const [odNotice, setOdNotice] = useState<string | null>(null);
-  const [detected, setDetected] = useState<string[]>([]);
-  const [licServer, setLicServer] = useState("");
-  const [licNotice, setLicNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (settingsQuery.data) {
-      setOdInput(settingsQuery.data.onedrive_input_root || "");
-      setOdOutput(settingsQuery.data.onedrive_output_root || "");
-      setLicServer(settingsQuery.data.composer_license_server || "");
-    }
-  }, [settingsQuery.data]);
-
-  const licSaveMutation = useMutation({
-    mutationFn: () => settingsApi.write({ composer_license_server: licServer.trim() }),
-    onSuccess: () => {
-      setLicNotice(t("settings.saved"));
-      void qc.invalidateQueries({ queryKey: ["settings"] });
-    },
-  });
-
-  const odSaveMutation = useMutation({
-    mutationFn: () =>
-      settingsApi.write({ onedrive_input_root: odInput.trim(), onedrive_output_root: odOutput.trim() }),
-    onSuccess: () => {
-      setOdNotice(t("settings.saved"));
-      void qc.invalidateQueries({ queryKey: ["settings"] });
+      qc.setQueryData(["settings"], data);
+      reset(data);
+      setSaved(true);
       void qc.invalidateQueries({ queryKey: ["browse", "roots"] });
+      void qc.invalidateQueries({ queryKey: ["composer-status"] });
     },
   });
 
@@ -111,213 +60,124 @@ export function Settings() {
     mutationFn: () => browseApi.roots(),
     onSuccess: (data) => {
       setDetected(data.detected);
-      if (!odInput.trim() && data.detected[0]) setOdInput(data.detected[0]);
+      if (!getValues("onedrive_input_root") && data.detected[0]) {
+        setValue("onedrive_input_root", data.detected[0], { shouldDirty: true });
+        setSaved(false);
+      }
     },
   });
 
-  if (settingsQuery.isLoading) return <span className="spinner" />;
-  const apiKeySet = settingsQuery.data?.api_key_set ?? false;
-  const llmEnabled = settingsQuery.data?.llm_enabled ?? false;
+  if (settingsQuery.isLoading) return <Spinner aria-label={t("settings.loading")} />;
+  if (settingsQuery.isError) {
+    return (
+      <div className="space-y-4">
+        <p role="alert" className="error">{settingsQuery.error.message}</p>
+        <Button variant="secondary" onClick={() => void settingsQuery.refetch()}>
+          <RefreshCw size={16} aria-hidden="true" />
+          {t("settings.retry")}
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="form" style={{ maxWidth: "42rem" }}>
-      <article className="card">
-        <h2 className="card-title">{t("settings.llmTitle")}</h2>
-        <div className="switch-row">
-          <div>
-            <div className="label">{t("settings.llmEnabled")}</div>
-            <p className="hint">{t("settings.llmHint")}</p>
-          </div>
-          <label className="switch">
-            <input
-              type="checkbox"
-              aria-label={t("settings.llmEnabled")}
-              checked={llmEnabled}
-              disabled={llmMutation.isPending}
-              onChange={(e) => {
-                setLlmNotice(null);
-                llmMutation.mutate(e.target.checked);
-              }}
-            />
-            <span className="track" />
-          </label>
-        </div>
-        {llmNotice ? <p className="success">{llmNotice}</p> : null}
-      </article>
-
-      <article className="card">
-        <h2 className="card-title">
-          <span className="row">
-            <span>Mistral</span>
-            {apiKeySet ? (
-              <span className="badge ok">CONFIGURED</span>
-            ) : (
-              <span className="badge warn">NOT CONFIGURED</span>
-            )}
-          </span>
-        </h2>
-        <form
-          onSubmit={handleSubmit((v) => {
-            setSavedNotice(null);
-            saveMutation.mutate(v);
-          })}
-          className="form"
-        >
-          <div className="field">
-            <label htmlFor="api_key" className="field-label">
-              {t("settings.apiKeyLabel")}
-            </label>
-            <input
-              className="input mono"
-              id="api_key"
-              type="password"
-              autoComplete="off"
-              placeholder="sk-..."
-              {...register("api_key")}
-            />
-            {apiKeySet ? <p className="hint">{t("settings.apiKeyStored")}</p> : null}
-          </div>
-          <div className="field">
-            <label htmlFor="base_url" className="field-label">
-              {t("settings.baseUrlLabel")}
-            </label>
-            <input className="input" id="base_url" {...register("base_url")} />
-          </div>
-          <div className="grid-2">
-            <div className="field">
-              <label htmlFor="chat_model" className="field-label">
-                {t("settings.chatModelLabel")}
-              </label>
-              <input className="input" id="chat_model" {...register("chat_model")} />
-            </div>
-            <div className="field">
-              <label htmlFor="embed_model" className="field-label">
-                {t("settings.embedModelLabel")}
-              </label>
-              <input className="input" id="embed_model" {...register("embed_model")} />
-            </div>
-          </div>
-          <div className="row">
-            <button type="submit" className="btn primary" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("settings.save")}</span>
-            </button>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => {
-                setTestResult(null);
-                testMutation.mutate();
-              }}
-              disabled={testMutation.isPending}
-            >
-              {testMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("settings.test")}</span>
-            </button>
-          </div>
-          {savedNotice ? <p className="success">{savedNotice}</p> : null}
-          {testResult ? (
-            <p className={testResult.ok ? "success" : "error"}>
-              {testResult.ok
-                ? t("settings.testOk", { count: testResult.models.length })
-                : t("settings.testFailed", { error: testResult.error ?? "" })}
-            </p>
-          ) : null}
-        </form>
-      </article>
-
-      <article className="card">
-        <h2 className="card-title">{t("settings.onedriveTitle")}</h2>
-        <div className="form">
+    <div className="min-w-0 max-w-4xl space-y-8">
+      <form
+        className="space-y-6"
+        onChange={() => setSaved(false)}
+        onSubmit={handleSubmit((values) => {
+          setSaved(false);
+          saveMutation.mutate(values);
+        })}
+      >
+        <section className="min-w-0 space-y-4 pb-6" aria-labelledby="onedrive-title">
+          <h2 id="onedrive-title" className="text-base font-semibold">{t("settings.onedriveTitle")}</h2>
+          <div className="grid min-w-0 gap-4 md:grid-cols-2">
           <div className="field">
             <label htmlFor="od_input" className="field-label">
               {t("settings.onedriveInput")}
             </label>
-            <input
-              className="input"
+            <Input
               id="od_input"
-              value={odInput}
-              onChange={(e) => setOdInput(e.target.value)}
-              placeholder="C:\\Users\\moi\\OneDrive - Entreprise\\CATIA"
+              {...register("onedrive_input_root")}
             />
           </div>
           <div className="field">
             <label htmlFor="od_output" className="field-label">
               {t("settings.onedriveOutput")}
             </label>
-            <input
-              className="input"
+            <Input
               id="od_output"
-              value={odOutput}
-              onChange={(e) => setOdOutput(e.target.value)}
-              placeholder="C:\\Users\\moi\\OneDrive - Entreprise\\CATIA\\exports"
+              {...register("onedrive_output_root")}
             />
           </div>
-          <div className="row">
-            <button type="button" className="btn primary" onClick={() => odSaveMutation.mutate()} disabled={odSaveMutation.isPending}>
-              {odSaveMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("settings.save")}</span>
-            </button>
-            <button type="button" className="btn secondary" onClick={() => detectMutation.mutate()} disabled={detectMutation.isPending}>
-              {detectMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("settings.onedriveDetect")}</span>
-            </button>
           </div>
-          {odNotice ? <p className="success">{odNotice}</p> : null}
+          <Button variant="secondary" onClick={() => detectMutation.mutate()} disabled={detectMutation.isPending}>
+            {detectMutation.isPending ? <Spinner aria-label={t("settings.loading")} /> : <Search size={16} aria-hidden="true" />}
+            {t("settings.onedriveDetect")}
+          </Button>
+          {detectMutation.isError ? <p role="alert" className="error">{detectMutation.error.message}</p> : null}
           {detected.length ? (
-            <ul className="item-list">
-              {detected.map((d) => (
-                <li key={d} className="item-row">
-                  <code className="item-main mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d}</code>
-                  <div className="item-actions">
-                    <button type="button" className="btn ghost small" onClick={() => setOdInput(d)}>
+            <ul className="min-w-0">
+              {detected.map((path) => (
+                <li key={path} className="grid min-w-0 gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <code className="break-all text-xs">{path}</code>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => {
+                      setValue("onedrive_input_root", path, { shouldDirty: true });
+                      setSaved(false);
+                    }}>
+                      <FolderInput size={16} aria-hidden="true" />
                       {t("settings.onedriveUseInput")}
-                    </button>
-                    <button type="button" className="btn ghost small" onClick={() => setOdOutput(d)}>
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => {
+                      setValue("onedrive_output_root", path, { shouldDirty: true });
+                      setSaved(false);
+                    }}>
+                      <FolderOutput size={16} aria-hidden="true" />
                       {t("settings.onedriveUseOutput")}
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
             </ul>
           ) : null}
-        </div>
-      </article>
-
-      <article className="card">
-        <h2 className="card-title">{t("settings.composerTitle")}</h2>
-        <div className="form">
+        </section>
+        <section className="min-w-0 space-y-4 pb-6" aria-labelledby="composer-title">
+          <h2 id="composer-title" className="text-base font-semibold">{t("settings.composerTitle")}</h2>
           <div className="field">
             <label htmlFor="lic_server" className="field-label">
               {t("settings.composerLicense")}
             </label>
-            <input
-              className="input mono"
+            <Input
+              className="font-mono"
               id="lic_server"
-              value={licServer}
-              onChange={(e) => setLicServer(e.target.value)}
               placeholder="4085@serveur-licence"
+              aria-describedby="license-hint"
+              {...register("composer_license_server")}
             />
-            <p className="hint">{t("settings.composerHint")}</p>
+            <p id="license-hint" className="hint">{t("settings.composerHint")}</p>
           </div>
-          <div className="row">
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => {
-                setLicNotice(null);
-                licSaveMutation.mutate();
-              }}
-              disabled={licSaveMutation.isPending}
-            >
-              {licSaveMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("settings.save")}</span>
-            </button>
+          <div className="field">
+            <label htmlFor="composer_executable" className="field-label">{t("conversion.composerExecutable")}</label>
+            <Input id="composer_executable" aria-describedby="executable-hint" {...register("composer_converter_path")} />
+            <p id="executable-hint" className="hint">{t("conversion.composerExecutableHint")}</p>
           </div>
-          {licNotice ? <p className="success">{licNotice}</p> : null}
+          <div className="field">
+            <label htmlFor="composer_profile" className="field-label">{t("conversion.composerSettings")}</label>
+            <Input id="composer_profile" aria-describedby="profile-hint" {...register("composer_settings_path")} />
+            <p id="profile-hint" className="hint">{t("conversion.composerSettingsHint")}</p>
+          </div>
+        </section>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={saveMutation.isPending || !isDirty}>
+            {saveMutation.isPending ? <Spinner aria-label={t("settings.loading")} /> : <Save size={16} aria-hidden="true" />}
+            {t("settings.save")}
+          </Button>
+          {saved ? <p role="status" className="text-sm text-success">{t("settings.saved")}</p> : null}
         </div>
-      </article>
-
+        {saveMutation.isError ? <p role="alert" className="error">{saveMutation.error.message}</p> : null}
+      </form>
       <DataResetCard
         title={t("settings.deleteUserDataTitle")}
         description={t("settings.deleteUserDataHint")}
