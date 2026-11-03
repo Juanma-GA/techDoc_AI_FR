@@ -1,8 +1,8 @@
-import { Checkbox } from "@internal/ui";
+import { Checkbox, Badge, Button, Input, Select, Spinner } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronUp, File as FileIcon } from "lucide-react";
+import { Check, ChevronUp, File as FileIcon, FolderOpen, Upload } from "lucide-react";
 import type { InputHTMLAttributes } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { browseApi, type BrowseEntryDto, type BrowseScope } from "../lib/api";
@@ -135,29 +135,32 @@ function FolderPicker({ scope = "input", value, onChange, label, localFallback }
   return (
     <div className="form">
       <div className="row">
-        <input
+        <Input
           type="text"
-          className="input grow"
+          className="grow"
+          aria-label={label ?? t("picker.folderPlaceholder")}
           placeholder={t("picker.folderPlaceholder")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-        <button
+        <Button
           type="button"
-          className="btn secondary"
+          variant="secondary"
+          aria-expanded={open}
           onClick={() => {
             if (!open) setPath("");
             setOpen((v) => !v);
           }}
         >
+          <FolderOpen size={16} aria-hidden="true" />
           {label ?? t("picker.browse")}
-        </button>
+        </Button>
       </div>
 
       {open ? (
-        <div className="card" style={{ padding: "0.5rem" }}>
+        <div className="file-browser">
           {listQuery.isLoading ? (
-            <span className="spinner" />
+            <Spinner aria-label={t("common.loading")} />
           ) : listQuery.isError ? (
             <p className="hint" style={{ textAlign: "center" }}>
               {(listQuery.error instanceof Error ? listQuery.error.message : String(listQuery.error)) +
@@ -167,45 +170,45 @@ function FolderPicker({ scope = "input", value, onChange, label, localFallback }
           ) : data ? (
             <>
               <div className="row" style={{ marginBottom: "0.5rem" }}>
-                <button
+                <Button
                   type="button"
-                  className="btn ghost small"
+                  variant="ghost" size="sm"
                   disabled={atRoot}
                   onClick={() => setPath(parentPath(data.path, data.root))}
                 >
+                  <ChevronUp size={16} aria-hidden="true" />
                   {t("picker.up")}
-                </button>
+                </Button>
                 <code className="hint grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {data.path}
                 </code>
-                <button
+                <Button
                   type="button"
-                  className="btn primary small"
+                  variant="primary" size="sm"
                   onClick={() => {
                     onChange(data.path);
                     setOpen(false);
                   }}
                 >
+                  <Check size={16} aria-hidden="true" />
                   {t("picker.chooseFolder")}
-                </button>
+                </Button>
               </div>
               <div className="item-list" style={{ maxHeight: "15rem", overflow: "auto" }}>
                 {folders.length ? (
                   folders.map((e) => (
-                    <button
+                    <Button
                       key={e.path}
                       type="button"
-                      className="item-row"
-                      style={{ width: "100%", textAlign: "left" }}
+                      variant="ghost"
+                      className="h-auto min-h-10 w-full justify-start text-left"
                       onClick={() => setPath(e.path)}
                     >
-                      <span className="item-actions">
-                        <span className="btn ghost small">{t("picker.open")}</span>
-                      </span>
+                      <FolderOpen size={16} className="shrink-0" aria-hidden="true" />
                       <span className="item-main">
                         <span className="item-name">{e.name}/</span>
                       </span>
-                    </button>
+                    </Button>
                   ))
                 ) : (
                   <p className="hint" style={{ textAlign: "center" }}>
@@ -256,29 +259,32 @@ function SingleFilePicker({
   return (
     <div className="form">
       <div className="row">
-        <input
+        <Input
           type="text"
-          className="input grow"
+          className="grow"
+          aria-label={label ?? t("picker.placeholder")}
           placeholder={t("picker.placeholder")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-        <button
+        <Button
           type="button"
-          className="btn secondary"
+          variant="secondary"
+          aria-expanded={open}
           onClick={() => {
             if (!open) setPath("");
             setOpen((v) => !v);
           }}
         >
+          <FolderOpen size={16} aria-hidden="true" />
           {label ?? t("picker.browse")}
-        </button>
+        </Button>
       </div>
 
       {open ? (
-        <div className="card" style={{ padding: "0.5rem" }}>
+        <div className="file-browser">
           {listQuery.isLoading ? (
-            <span className="spinner" />
+            <Spinner aria-label={t("common.loading")} />
           ) : listQuery.isError ? (
             <p className="hint" style={{ textAlign: "center" }}>
               {(listQuery.error instanceof Error ? listQuery.error.message : String(listQuery.error)) +
@@ -288,14 +294,15 @@ function SingleFilePicker({
           ) : data ? (
             <>
               <div className="row" style={{ marginBottom: "0.5rem" }}>
-                <button
+                <Button
                   type="button"
-                  className="btn ghost small"
+                  variant="ghost" size="sm"
                   disabled={atRoot}
                   onClick={() => setPath(parentPath(data.path, data.root))}
                 >
+                  <ChevronUp size={16} aria-hidden="true" />
                   {t("picker.up")}
-                </button>
+                </Button>
                 <code className="hint grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {data.path}
                 </code>
@@ -305,44 +312,40 @@ function SingleFilePicker({
                   entries.map((e) => {
                     if (e.kind === "folder") {
                       return (
-                        <button
+                        <Button
                           key={e.path}
                           type="button"
-                          className="item-row"
-                          style={{ width: "100%", textAlign: "left" }}
+                          variant="ghost"
+                          className="h-auto min-h-10 w-full justify-start text-left"
                           onClick={() => setPath(e.path)}
                         >
-                          <span className="item-actions">
-                            <span className="btn ghost small">{t("picker.open")}</span>
-                          </span>
+                          <FolderOpen size={16} className="shrink-0" aria-hidden="true" />
                           <span className="item-main">
                             <span className="item-name">{e.name}/</span>
                           </span>
-                        </button>
+                        </Button>
                       );
                     }
                     // Fichier : selectionnable seulement si l'extension correspond.
                     const selectable = matchesExts(e.name, exts);
                     return (
-                      <button
+                      <Button
                         key={e.path}
                         type="button"
-                        className="item-row"
+                        variant="ghost"
+                        className="h-auto min-h-10 w-full justify-start text-left"
                         disabled={!selectable}
-                        style={{ width: "100%", textAlign: "left", ...(selectable ? {} : { opacity: 0.5 }) }}
                         onClick={() => {
                           onChange(e.path);
                           setOpen(false);
                         }}
                       >
-                        <span className="item-actions">
-                          <span className="btn secondary small">{t("picker.choose")}</span>
-                        </span>
+                        <FileIcon size={16} className="shrink-0" aria-hidden="true" />
                         <span className="item-main">
                           <span className="item-name">{e.name}</span>
                           <span className="item-meta">{fmtBytes(e.size)}</span>
                         </span>
-                      </button>
+                      </Button>
                     );
                   })
                 ) : (
@@ -429,7 +432,7 @@ function MultiFilePicker({
   if (localFallback) {
     return <LocalMultiFilePicker exts={exts} value={value} onChange={onChange} onFolderChange={onFolderChange} />;
   }
-  if (listQuery.isLoading) return <span className="spinner" />;
+  if (listQuery.isLoading) return <Spinner aria-label={t("common.loading")} />;
   if (listQuery.isError) {
     return (
       <p className="error">
@@ -442,27 +445,29 @@ function MultiFilePicker({
   return (
     <div className="form">
       <div className="row">
-        <button type="button" className="btn ghost small" disabled={atRoot} onClick={() => openFolder(parentPath(absPath, root))}>
+        <Button type="button" variant="ghost" size="sm" disabled={atRoot} onClick={() => openFolder(parentPath(absPath, root))}>
           <ChevronUp className="mr-1 h-4 w-4" />
           {t("picker.up")}
-        </button>
+        </Button>
         <code className="grow label" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {absPath}
         </code>
         {allowRecursive ? (
-          <button
+          <Button
             type="button"
-            className={recursive ? "btn secondary small" : "btn ghost small"}
+            variant={recursive ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={recursive}
             onClick={() => setRecursive((v) => !v)}
           >
             {recursive ? t("picker.levelView") : t("picker.recursiveView")}
-          </button>
+          </Button>
         ) : null}
       </div>
 
       {recursive ? (
-        <input
-          className="input"
+        <Input
+
           type="text"
           placeholder={t("picker.filterPlaceholder")}
           value={filter}
@@ -475,7 +480,7 @@ function MultiFilePicker({
       <ul className="item-list" style={{ maxHeight: "18rem", overflow: "auto" }}>
         {recursive && filesQuery.isLoading ? (
           <li className="item-row">
-            <span className="spinner" />
+            <Spinner aria-label={t("common.loading")} />
           </li>
         ) : visibleItems.length ? (
           visibleItems.map((e) => {
@@ -486,10 +491,10 @@ function MultiFilePicker({
                 className={checked ? "item-row clickable" : "item-row"}
               >
                 <Checkbox checked={checked} onCheckedChange={() => toggle(e.path)} aria-label={e.name} />
-                <button
+                <Button
                   type="button"
-                  className="item-main grow"
-                  style={{ textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
+                  variant="ghost"
+                  className="item-main grow h-auto min-h-10 justify-start text-left"
                   onClick={() => (e.kind === "folder" && !recursive ? openFolder(e.path) : toggle(e.path))}
                 >
                   {!recursive && e.kind === "folder" ? (
@@ -501,9 +506,9 @@ function MultiFilePicker({
                       <span className="item-meta">{fmtBytes(e.size)}</span>
                     </>
                   )}
-                </button>
+                </Button>
                 {!recursive && e.kind === "folder" ? (
-                  <span className="badge default">{t("picker.folder")}</span>
+                  <Badge variant="default">{t("picker.folder")}</Badge>
                 ) : null}
               </li>
             );
@@ -516,12 +521,12 @@ function MultiFilePicker({
       </ul>
 
       <div className="row">
-        <button type="button" className="btn ghost small" onClick={selectAll}>
+        <Button type="button" variant="ghost" size="sm" onClick={selectAll}>
           {t("picker.selectAll")}
-        </button>
-        <button type="button" className="btn ghost small" onClick={() => onChange([])}>
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])}>
           {t("picker.clear")}
-        </button>
+        </Button>
         <span className="hint">{t("picker.countSelected", { count: visibleItems.length, sel: selection.size })}</span>
       </div>
     </div>
@@ -535,6 +540,7 @@ function LocalSingleFilePicker({
   label,
 }: Pick<SingleProps, "exts" | "value" | "onChange" | "label">) {
   const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useMutation({
     mutationFn: (file: File) => browseApi.uploadLocal([file]),
     onSuccess: (data) => {
@@ -546,17 +552,21 @@ function LocalSingleFilePicker({
   return (
     <div className="form">
       <div className="row">
-        <input
+        <Input
           type="text"
-          className="input grow"
+          className="grow"
+          aria-label={label ?? t("picker.placeholder")}
           placeholder={t("picker.placeholder")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-        <label className="btn secondary">
-          {uploadMutation.isPending ? <span className="spinner" /> : null}
+        <Button variant="secondary" disabled={uploadMutation.isPending} onClick={() => inputRef.current?.click()}>
+          <Upload size={16} aria-hidden="true" />
+          {uploadMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
           <span>{label ?? t("picker.browseLocal")}</span>
+        </Button>
           <input
+            ref={inputRef}
             type="file"
             hidden
             accept={exts.length ? exts.join(",") : undefined}
@@ -567,7 +577,6 @@ function LocalSingleFilePicker({
               e.currentTarget.value = "";
             }}
           />
-        </label>
       </div>
       <p className="hint">{t("picker.localHint")}</p>
       {uploadMutation.isError ? (
@@ -581,6 +590,7 @@ function LocalSingleFilePicker({
 
 function LocalFolderPicker({ value, onChange, label }: Pick<FolderProps, "value" | "onChange" | "label">) {
   const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => browseApi.uploadLocal(files),
     onSuccess: (data) => onChange(data.root),
@@ -589,17 +599,21 @@ function LocalFolderPicker({ value, onChange, label }: Pick<FolderProps, "value"
   return (
     <div className="form">
       <div className="row">
-        <input
+        <Input
           type="text"
-          className="input grow"
+          className="grow"
+          aria-label={label ?? t("picker.folderPlaceholder")}
           placeholder={t("picker.folderPlaceholder")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-        <label className="btn secondary">
-          {uploadMutation.isPending ? <span className="spinner" /> : null}
+        <Button variant="secondary" disabled={uploadMutation.isPending} onClick={() => inputRef.current?.click()}>
+          <FolderOpen size={16} aria-hidden="true" />
+          {uploadMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
           <span>{label ?? t("picker.chooseLocalFolder")}</span>
+        </Button>
           <input
+            ref={inputRef}
             type="file"
             hidden
             multiple
@@ -611,7 +625,6 @@ function LocalFolderPicker({ value, onChange, label }: Pick<FolderProps, "value"
               e.currentTarget.value = "";
             }}
           />
-        </label>
       </div>
       <p className="hint">{t("picker.localFolderHint")}</p>
       {uploadMutation.isError ? (
@@ -630,6 +643,7 @@ function LocalMultiFilePicker({
   onFolderChange,
 }: Pick<MultiProps, "exts" | "value" | "onChange" | "onFolderChange">) {
   const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => browseApi.uploadLocal(files),
     onSuccess: (data) => {
@@ -640,10 +654,13 @@ function LocalMultiFilePicker({
 
   return (
     <div className="form">
-      <label className="btn secondary" style={{ width: "fit-content" }}>
-        {uploadMutation.isPending ? <span className="spinner" /> : null}
+      <Button className="w-fit" variant="secondary" disabled={uploadMutation.isPending} onClick={() => inputRef.current?.click()}>
+        <FolderOpen size={16} aria-hidden="true" />
+        {uploadMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
         <span>{t("picker.chooseLocalFolder")}</span>
+      </Button>
         <input
+          ref={inputRef}
           type="file"
           hidden
           multiple
@@ -656,7 +673,6 @@ function LocalMultiFilePicker({
             e.currentTarget.value = "";
           }}
         />
-      </label>
       <p className="hint">{t("picker.localFolderHint")}</p>
       {value.length ? <p className="success">{t("picker.localUploaded", { count: value.length })}</p> : null}
       {uploadMutation.isError ? (
@@ -677,6 +693,7 @@ function LocalMultiFilePicker({
  */
 function SheetPreview({ path, scope }: { path: string; scope: BrowseScope }) {
   const { t } = useTranslation();
+  const sheetId = useId();
   const [sheet, setSheet] = useState("");
   const [collapsed, setCollapsed] = useState(false);
 
@@ -696,15 +713,15 @@ function SheetPreview({ path, scope }: { path: string; scope: BrowseScope }) {
   const activeSheet = sheet || data?.sheet || "";
 
   return (
-    <div className="card" style={{ padding: "0.5rem" }}>
+    <div className="file-browser">
       <div className="row" style={{ alignItems: "flex-end" }}>
         <div className="field">
-          <label htmlFor="picker-sheet" className="field-label">
+          <label htmlFor={sheetId} className="field-label">
             {t("picker.sheet")}
           </label>
-          <select
-            id="picker-sheet"
-            className="input"
+          <Select options={[]}
+            id={sheetId}
+
             value={activeSheet}
             disabled={!data || data.sheets.length === 0}
             onChange={(e) => setSheet(e.target.value)}
@@ -714,15 +731,15 @@ function SheetPreview({ path, scope }: { path: string; scope: BrowseScope }) {
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
-        <button type="button" className="btn ghost small" onClick={() => setCollapsed((v) => !v)}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setCollapsed((v) => !v)}>
           {collapsed ? t("picker.previewShow") : t("picker.previewHide")}
-        </button>
+        </Button>
       </div>
 
       {collapsed ? null : previewQuery.isLoading ? (
-        <span className="spinner" style={{ marginTop: "0.5rem" }} />
+        <Spinner aria-label={t("common.loading")} />
       ) : previewQuery.isError ? (
         <p className="error" style={{ marginTop: "0.5rem" }}>
           {previewQuery.error instanceof Error ? previewQuery.error.message : String(previewQuery.error)}

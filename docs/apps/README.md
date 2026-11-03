@@ -17,7 +17,7 @@ the same registered value.
 | [corpus-agent](../../apps/corpus-agent/README.md) | fastapi | `local-first`, `llm`, `files` | 8001 | No |
 | [doc-writer](../../apps/doc-writer/README.md) | fastapi | `local-first`, `llm`, `files` | 8002 | No |
 | [doc-reviewer](../../apps/doc-reviewer/README.md) | fastapi | `local-first`, `llm`, `files` | 8003 | No |
-| [catia-toolbox](../../apps/catia-toolbox/README.md) | fastapi | `local-first`, `llm`, `files` | 8004 | No |
+| [catia-toolbox](../../apps/catia-toolbox/README.md) | fastapi | `local-first`, `files` | 8004 | No |
 | [ocr-vision](../../apps/ocr-vision/README.md) | fastapi | `local-first`, `llm`, `files` | 8005 | No |
 | [s1000d-extractor](../../apps/s1000d-extractor/README.md) | fastapi | `local-first`, `files` | 8006 | No |
 | [ecm-automation](../../apps/ecm-automation/README.md) | fastapi | `local-first` | 8009 | No |

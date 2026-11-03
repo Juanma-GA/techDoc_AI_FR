@@ -1,3 +1,4 @@
+import { Badge, Button, Checkbox, Input, Select, Spinner } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Palette } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -6,8 +7,10 @@ import { useTranslation } from "react-i18next";
 import { FilePicker } from "../components/FilePicker";
 import {
   ApiClientError,
+  browseApi,
   colorizationApi,
   identificationApi,
+  treeOptimizationApi,
   type MonoBodyColorizationDto,
   type NomenclatureItemDto,
   type NomenclatureRunDto,
@@ -28,10 +31,13 @@ export function Colorization() {
   const profilesRoot = useWorkspace((state) => state.sources.profilesRoot);
   const preferredRunId = useWorkspace((state) => state.nomenclatureRunId);
   const setSource = useWorkspace((state) => state.setSource);
+  const rootsQuery = useQuery({ queryKey: ["browse", "roots"], queryFn: browseApi.roots });
+  const hasInputRoot = Boolean(rootsQuery.data?.input);
   const [runId, setRunId] = useState(preferredRunId ?? "");
   const [apply, setApply] = useState(false);
   const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profilesPickerError, setProfilesPickerError] = useState<string | null>(null);
   const [result, setResult] = useState<MonoBodyColorizationDto | null>(null);
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -47,6 +53,17 @@ export function Colorization() {
   const monoParts = monoPartsQuery.data ?? [];
   const distinctOldPns = new Set(monoParts.map((item) => item.old_pn.trim()).filter(Boolean));
   const missingProfiles = monoParts.filter((item) => !item.mono_texture.trim()).length;
+  const pickProfilesFolderMutation = useMutation({
+    mutationFn: () =>
+      treeOptimizationApi.pickFolder(profilesRoot.trim() || undefined, t("colorization.profilesRoot")),
+    onSuccess: ({ path }) => {
+      if (!path) return;
+      setSource("profilesRoot", path);
+      setProfilesPickerError(null);
+    },
+    onError: (reason: unknown) =>
+      setProfilesPickerError(reason instanceof Error ? reason.message : String(reason)),
+  });
   const displayError = (reason: unknown) =>
     reason instanceof ApiClientError && reason.code === "PIECES_FOLDER_CONTENT_INVALID"
       ? t("colorization.invalidFolderContents")
@@ -114,16 +131,16 @@ export function Colorization() {
 
   return (
     <div className="form">
-      <article className="card">
-        <h2 className="card-title">{t("colorization.title")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("colorization.title")}</h2>
         <div className="grid-2">
           <div className="field">
             <label htmlFor="colorization-nomenclature" className="field-label">
               {t("colorization.nomenLabel")}
             </label>
-            <select
+            <Select options={[]}
               id="colorization-nomenclature"
-              className="input"
+
               value={runId}
               onChange={(event) => setRunId(event.target.value)}
               disabled={runsQuery.isLoading}
@@ -132,14 +149,14 @@ export function Colorization() {
               {runs.map((run) => (
                 <option key={run.id} value={run.id}>{fileName(run.source_ref)}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="field">
             <span className="field-label">{t("colorization.selectionSummary", {
               parts: monoParts.length,
               oldPns: distinctOldPns.size,
             })}</span>
-            {monoPartsQuery.isLoading ? <span className="spinner" /> : null}
+            {monoPartsQuery.isLoading ? <Spinner aria-label={t("common.loading")} /> : null}
             {runId && monoPartsQuery.isSuccess && monoParts.length === 0 ? (
               <p className="hint">{t("colorization.noMonoParts")}</p>
             ) : null}
@@ -154,9 +171,9 @@ export function Colorization() {
             <label htmlFor="colorization-pieces-root" className="field-label">
               {t("colorization.piecesRoot")}
             </label>
-            <input
+            <Input
               id="colorization-pieces-root"
-              className="input"
+
               value={piecesRoot}
               readOnly
             />
@@ -164,37 +181,73 @@ export function Colorization() {
           </div>
           <div className="field">
             <span className="field-label">{t("colorization.profilesRoot")}</span>
-            <FilePicker
-              mode="folder"
-              exts={[]}
-              value={profilesRoot}
-              onChange={(path) => setSource("profilesRoot", path)}
-            />
+            {rootsQuery.isLoading ? (
+              <Spinner aria-label={t("common.loading")} />
+            ) : rootsQuery.isError ? (
+              <p className="error" role="alert">
+                {rootsQuery.error instanceof Error ? rootsQuery.error.message : String(rootsQuery.error)}
+              </p>
+            ) : hasInputRoot ? (
+              <FilePicker
+                mode="folder"
+                exts={[]}
+                value={profilesRoot}
+                onChange={(path) => setSource("profilesRoot", path)}
+              />
+            ) : (
+              <>
+                <div className="row">
+                  <Input
+                    type="text"
+                    className="grow"
+                    aria-label={t("colorization.profilesRoot")}
+                    placeholder={t("picker.folderPlaceholder")}
+                    value={profilesRoot}
+                    onChange={(event) => setSource("profilesRoot", event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => pickProfilesFolderMutation.mutate()}
+                    disabled={pickProfilesFolderMutation.isPending}
+                  >
+                    {pickProfilesFolderMutation.isPending ? (
+                      <Spinner aria-label={t("common.loading")} />
+                    ) : null}
+                    <span>{t("picker.browse")}</span>
+                  </Button>
+                </div>
+                <p className="hint">{t("treeOptimization.noInputRootHint")}</p>
+                {profilesPickerError ? (
+                  <p className="error" role="alert">{profilesPickerError}</p>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
 
         <label className="checkbox">
-          <input type="checkbox" checked={apply} onChange={(event) => setApply(event.target.checked)} />
+          <Checkbox  checked={apply} onCheckedChange={(checked) => setApply(checked)} />
           <span>{t("colorization.apply")}</span>
         </label>
 
-        <div className="row">
-          <button
+        <div className="row colorization-actions">
+          <Button
             type="button"
-            className="btn primary"
+            variant="primary"
             onClick={onRun}
             disabled={colorizeMutation.isPending || !canRun}
           >
-            {colorizeMutation.isPending ? <span className="spinner" /> : <Palette className="h-4 w-4" />}
+            {colorizeMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : <Palette className="h-4 w-4" />}
             <span>{armed ? t("colorization.confirmWrite") : t("colorization.launch")}</span>
-          </button>
+          </Button>
           {error ? <span className="error">{error}</span> : null}
         </div>
-      </article>
+      </section>
 
       {result ? (
-        <article className="card">
-          <h2 className="card-title">{t("colorization.resultsTitle")}</h2>
+        <section className="workflow-section">
+          <h2 className="section-title">{t("colorization.resultsTitle")}</h2>
           <p className={result.summary.applied ? "banner success" : "banner warn"}>
             {t("colorization.summary", {
               files: result.summary.files_found ?? 0,
@@ -223,9 +276,9 @@ export function Colorization() {
                       <td title={item.path}>{fileName(item.path)}</td>
                       <td>{item.actors_changed}/{item.actors_total}</td>
                       <td>
-                        <span className={item.status === "applied" || item.status === "planned" ? "badge ok" : "badge warn"}>
+                        <Badge variant={item.status === "applied" || item.status === "planned" ? "success" : "warning"}>
                           {statusLabel(item.status)}
-                        </span>
+                        </Badge>
                         {item.message ? <span className="hint"> {item.message}</span> : null}
                       </td>
                     </tr>
@@ -239,7 +292,7 @@ export function Colorization() {
           {result.items.length > RESULT_LIMIT ? (
             <p className="hint">{t("colorization.resultsLimit", { shown: RESULT_LIMIT, total: result.items.length })}</p>
           ) : null}
-        </article>
+        </section>
       ) : null}
     </div>
   );

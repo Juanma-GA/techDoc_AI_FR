@@ -2,15 +2,7 @@
   "app": {
     "title": "Catia Toolbox",
     "version": "0.1.0",
-    "description": "Boîte à outils d'automatisations CATIA sur données exportées : nomenclature, conversion et contrôles."
-  },
-  "llm": {
-    "label": "LLM",
-    "title": "État du LLM (voir Paramètres)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "À TESTER",
-    "noKey": "NO KEY"
+    "description": "Boîte à outils CATIA : nomenclature, comparaison, conversion et traitement Composer."
   },
   "nav": {
     "identification": "Nomenclature / DE",
@@ -20,16 +12,13 @@
     "colorization": "Colorisation",
     "optimizationTree": "Optimisation arbo",
     "smgxmlRename": "SMGXML : renommage",
-    "replacement": "Remplacement (plan)",
-    "qc": "Checklist QC",
-    "checks": "Vérifications auto",
+    "data": "Données",
     "settings": "Paramètres",
     "groups": {
       "identification": "1 - Identification",
       "preparation": "2 - Préparation",
       "traitement": "3 - Traitement",
       "integration": "4 - Intégration",
-      "controle": "5 - Contrôle",
       "outils": "Outils"
     },
     "ariaLabel": "Navigation principale",
@@ -67,21 +56,9 @@
       "title": "4 - SMGXML : renommage",
       "sub": "Remplacer le nom de l'ancienne pièce par la nouvelle dans le SMGXML (dry-run par défaut)."
     },
-    "replacement": {
-      "title": "Remplacement",
-      "sub": "Plan de remplacement de pièces à partir d'un mapping."
-    },
-    "qc": {
-      "title": "5 - Contrôle Qualité",
-      "sub": "Checklist de vérification des pièces dans l'assemblage."
-    },
-    "checks": {
-      "title": "Vérifications",
-      "sub": "Lancer des vérifications configurables sur l'import courant."
-    },
     "settings": {
       "title": "Paramètres",
-      "sub": "Clé API Mistral et modèles utilisés."
+      "sub": "Dossiers de travail et configuration CATIA Composer."
     }
   },
   "common": {
@@ -90,6 +67,8 @@
     "launch": "Lancer",
     "view": "Voir",
     "yes": "oui",
+    "loading": "Chargement",
+    "version": "Version V{{index}}",
     "confirmAgain": "Cliquer encore pour confirmer",
     "dryRunTitle": "Dry-run."
   },
@@ -250,16 +229,6 @@
     "colDesignation": "Désignation",
     "nomenSummary": "{{added}} ajouté(s), {{removed}} supprimé(s), {{changed}} évolué(s)."
   },
-  "checks": {
-    "title": "Vérifications",
-    "subtitle": "Lancer des vérifications configurables sur l'import courant.",
-    "noImport": "Aucun import courant",
-    "runTitle": "Lancer les vérifications",
-    "maxDepth": "Profondeur max tolérée",
-    "run": "Vérifier",
-    "resultTitle": "{{count}} violation(s)",
-    "none": "Aucune violation."
-  },
   "conversion": {
     "title": "Conversion CATIA 3D → Composer",
     "subtitle": "Plan de conversion (dry-run).",
@@ -303,55 +272,28 @@
     "execResult": "{{mode}} terminé (code {{code}}).",
     "execBase": "Dossier racine : {{base}}"
   },
-  "replacement": {
-    "title": "Remplacement de pièces",
-    "subtitle": "Plan de remplacement à partir d'un mapping (dry-run).",
-    "noImport": "Aucun import courant",
-    "mappingTitle": "Importer un mapping",
-    "dryRun": "Le POC produit un plan + une macro CATIA squelette, jamais exécutée.",
-    "dropLabel": "Déposez un mapping CSV ou JSON",
-    "dropDescription": "Colonnes attendues : old, new.",
-    "resultTitle": "{{count}} occurrence(s)",
-    "macro": "Macro CATIA",
-    "sourceLabel": "Mapping depuis la Source",
-    "useSource": "Utiliser",
-    "orUpload": "ou importer un fichier",
-    "sourceRequired": "Choisissez un mapping dans la Source.",
-    "sourceApplied": "Mapping appliqué.",
-    "resultEmpty": "Aucune occurrence trouvée.",
-    "pickMapping": "Choisissez un mapping."
-  },
   "settings": {
     "title": "Paramètres",
-    "subtitle": "Clé API Mistral et modèles utilisés.",
-    "apiKeyLabel": "Clé API Mistral",
-    "apiKeyStored": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
-    "baseUrlLabel": "Base URL",
-    "chatModelLabel": "Modèle chat",
-    "embedModelLabel": "Modèle embeddings",
+    "subtitle": "Dossiers de travail et configuration CATIA Composer.",
     "save": "Enregistrer",
-    "test": "Tester la connexion",
+    "loading": "Chargement des paramètres",
+    "retry": "Réessayer",
     "saved": "Paramètres enregistrés.",
-    "testOk": "Connexion OK ({{count}} modèles disponibles).",
-    "testFailed": "Échec : {{error}}",
     "onedriveTitle": "Dossiers OneDrive (entrée / sortie)",
     "onedriveInput": "Racine commune entrée (ex. SAFRAN)",
     "onedriveOutput": "Racine sortie (output)",
     "onedriveDetect": "Auto-détecter",
     "onedriveUseInput": "Entrée",
     "onedriveUseOutput": "Sortie",
-    "composerTitle": "Licence Composer (conversion)",
+    "composerTitle": "CATIA Composer",
     "deleteUserDataTitle": "Supprimer les données utilisateur",
     "deleteUserDataHint": "Efface les imports, analyses et résultats enregistrés ainsi que les copies locales temporaires. Les sources OneDrive et tous les réglages de l'application sont conservés. Opération irréversible.",
     "composerLicense": "Serveur de licence (port@hôte)",
-    "composerHint": "Best-effort : la variable exacte lue par votre édition de Composer reste à confirmer (candidats DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
-    "llmTitle": "Intelligence artificielle",
-    "llmEnabled": "LLM activé",
-    "llmHint": "Quand désactivé, les tâches confiées à l'IA sont sautées (résultat déterministe). La clé est conservée."
+    "composerHint": "Serveur de licence de votre installation Composer (DSLICSRV / DS_LICENSE_SERVER / LSERVRC)."
   },
   "identification": {
     "sourceTitle": "Importer une nomenclature",
-    "sharedSourceHint": "Ce fichier est utilisé par les deux analyses; son aperçu se charge automatiquement.",
+    "sharedSourceHint": "Ce fichier est utilisé par les deux analyses. Cliquez sur Aperçu, puis sur Analyser pour chaque analyse.",
     "importedListTitle": "Nomenclatures importées",
     "importListEmpty": "Aucune nomenclature disponible. Choisissez un fichier ci-dessus.",
     "sourceNotAnalyzed": "À analyser",
@@ -534,40 +476,19 @@
       "write_error": "Écriture impossible"
     }
   },
-  "qc": {
-    "title": "Checklist Contrôle Qualité",
-    "titlePlaceholder": "Titre (ex: QC Lot 3 - U320 n)",
-    "defaultTitle": "Contrôle qualité - assemblage",
-    "newChecklist": "Nouvelle checklist (modèle assemblage)",
-    "ok": "OK",
-    "ko": "KO",
-    "na": "N/A",
-    "commentPlaceholder": "Commentaire",
-    "okCount": "{{count}} OK",
-    "koCount": "{{count}} KO",
-    "naCount": "{{count}} N/A",
-    "progress": "{{done}}/{{total}}",
-    "empty": "Aucune checklist.",
-    "noCategory": "-"
-  },
   "data": {
     "overviewTitle": "Vue d'ensemble",
     "statsUnavailable": "Stats indisponibles.",
     "imports": "Imports",
     "nodes": "Nœuds",
-    "runs": "Runs",
-    "suggestions": "Suggestions",
     "diffs": "Comparaisons",
-    "checks": "Vérifications",
     "conversions": "Conversions",
-    "replacements": "Remplacements",
     "colorizations": "Colorisations",
     "nomenclatures": "Nomenclatures",
     "smgxmlRuns": "SMGXML",
-    "qcChecklists": "Checklists QC",
     "totalSize": "Taille totale",
     "resetTitle": "Réinitialiser",
-    "resetBanner": "Opération irréversible. Les imports, analyses, résultats et copies locales temporaires sont supprimés. Les sources OneDrive et tous les réglages, dont Mistral, sont conservés.",
+    "resetBanner": "Opération irréversible. Les imports, analyses, résultats et copies locales temporaires sont supprimés. Les sources OneDrive et les réglages CATIA Composer sont conservés.",
     "resetAll": "Tout supprimer",
     "resetOk": "Reset OK ({{items}}).",
     "resetEmpty": "(rien à supprimer)"

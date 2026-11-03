@@ -1,3 +1,4 @@
+import { Badge, type BadgeProps } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import type { NomenclatureMatrixState, NomenclatureMultiCompareDto } from "../../lib/api";
@@ -7,11 +8,11 @@ type Props = {
   labelOf: (runId: string) => string;
 };
 
-const STATE_VARIANT: Record<NomenclatureMatrixState, "default" | "ok" | "danger" | "warn"> = {
+const STATE_VARIANT: Record<NomenclatureMatrixState, BadgeProps["variant"]> = {
   unchanged: "default",
-  added: "ok",
+  added: "success",
   removed: "danger",
-  changed: "warn",
+  changed: "warning",
   reference: "default",
 };
 
@@ -19,8 +20,8 @@ export function NomenclatureMatrix({ result, labelOf }: Props) {
   const { t } = useTranslation();
 
   return (
-    <article className="card">
-      <h2 className="card-title">{t("diff.matrixTitle")}</h2>
+    <section className="workflow-section">
+      <h2 className="section-title">{t("diff.matrixTitle")}</h2>
       <p className="hint">{t("diff.matrixHint")}</p>
       <div style={{ overflowX: "auto" }}>
         <table className="tbl" style={{ minWidth: `${28 + result.run_ids.length * 14}rem` }}>
@@ -61,9 +62,9 @@ export function NomenclatureMatrix({ result, labelOf }: Props) {
                     {cell.state !== "unchanged" ? (
                       <>
                         <br />
-                        <span className={`badge ${STATE_VARIANT[cell.state]}`}>
+                        <Badge variant={STATE_VARIANT[cell.state]}>
                           {t(`diff.matrixState.${cell.state}`)}
-                        </span>
+                        </Badge>
                       </>
                     ) : null}
                   </td>
@@ -74,6 +75,6 @@ export function NomenclatureMatrix({ result, labelOf }: Props) {
         </table>
       </div>
       {result.matrix.length === 0 ? <p className="hint">{t("diff.noDifference")}</p> : null}
-    </article>
+    </section>
   );
 }

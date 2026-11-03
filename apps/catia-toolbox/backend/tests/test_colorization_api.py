@@ -155,6 +155,36 @@ def test_colorization_rejects_paths_outside_scope(client, tmp_path):
     assert response.json()["code"] == "PATH_OUTSIDE_ROOT"
 
 
+def test_colorization_uses_local_absolute_profiles_without_input_root(client, tmp_path):
+    assert client.post(
+        "/api/v1/settings", json={"onedrive_input_root": str(tmp_path)}
+    ).status_code == 200
+    run_id = _make_run(client, tmp_path)
+    assert client.post("/api/v1/settings", json={"onedrive_input_root": ""}).status_code == 200
+
+    pieces_root = tmp_path / "COMP PART"
+    profiles_root = tmp_path / "Profiles"
+    pieces_root.mkdir()
+    profiles_root.mkdir()
+    (profiles_root / "STYLE-A.smgStyleSet").write_text(PROFILE_XML, encoding="utf-8")
+    piece_path = pieces_root / "GE_001_PN-001_CATPart.smgXml"
+    _make_piece(piece_path)
+
+    response = client.post(
+        "/api/v1/colorization/mono-body",
+        json={
+            "scope": "input",
+            "pieces_root": str(pieces_root),
+            "profiles_root": str(profiles_root),
+            "nomenclature_run_id": run_id,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"]["files_found"] == 1
+    assert response.json()["summary"]["files_changed"] == 1
+
+
 @pytest.mark.parametrize("invalid_entry", ["file", "subfolder"])
 def test_colorization_rejects_non_piece_entries(client, tmp_path, invalid_entry):
     assert client.post(
