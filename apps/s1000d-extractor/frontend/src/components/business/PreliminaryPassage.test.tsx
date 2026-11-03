@@ -65,8 +65,10 @@ describe.each([
   },
 ])("explicit classification proposals ($language)", (labels) => {
   it("shows a clear category without recording a human decision", async () => {
-    const { select, onAction } = await render(labels.language);
+    const { select, element, onAction } = await render(labels.language);
     expect(select?.textContent?.trim()).toBe(labels.proposed);
+    expect(element.querySelector('button[aria-expanded="false"]')).not.toBeNull();
+    expect(element.querySelector("#preliminary-passage-p > p")?.textContent).not.toContain("Synthetic text.");
     expect(onAction).not.toHaveBeenCalled();
   });
 

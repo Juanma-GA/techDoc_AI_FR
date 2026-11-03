@@ -28,10 +28,15 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const queue = useRef<Promise<boolean>>(Promise.resolve(true));
   const pending = useRef(0);
+  const savingActions = useRef(0);
 
   const enqueue = useCallback((action: ReviewAction, keepalive = false) => {
+    const tracksSaving = action.op !== "cursor";
     pending.current += 1;
-    setSaving(true);
+    if (tracksSaving) {
+      savingActions.current += 1;
+      setSaving(true);
+    }
     const result = queue.current.then(async () => {
       if (failed.current) return false;
       try {
@@ -48,7 +53,10 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       }
     }).finally(() => {
       pending.current -= 1;
-      setSaving(pending.current > 0);
+      if (tracksSaving) {
+        savingActions.current -= 1;
+        setSaving(savingActions.current > 0);
+      }
     });
     queue.current = result;
     return result;
@@ -77,7 +85,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       }
     }
     const saved = await queue.current;
-    setDirty(Boolean(cursor.current || failed.current || drafts.current.size));
+    setDirty(Boolean(failed.current || drafts.current.size));
     return saved && !failed.current;
   }, [enqueue]);
 
@@ -96,7 +104,6 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
 
   const position = useCallback((dmId: string, value: ReaderPosition) => {
     cursor.current = { dm_id: dmId, op: "cursor", ...value };
-    setDirty(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flush(); }, 300);
   }, [flush]);

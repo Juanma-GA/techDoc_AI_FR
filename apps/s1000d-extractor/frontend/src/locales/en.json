@@ -91,7 +91,6 @@
     "page": "Source page {{page}}",
     "readingPage": "Reading page {{page}}",
     "pdfPage": "Source PDF page {{page}}",
-    "pdfHelp": "Scroll through the original PDF. “Show source” highlights the passage directly on the page. Page numbers refer to the document before cutting.",
     "wordHelp": "Reading pagination of extracted Word text, not the original document's pagination.",
     "loading": "Loading pages…",
     "readerError": "Unable to load the reader",

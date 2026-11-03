@@ -91,7 +91,6 @@
     "page": "Page source {{page}}",
     "readingPage": "Page de lecture {{page}}",
     "pdfPage": "Page PDF source {{page}}",
-    "pdfHelp": "Défilez dans le PDF original. « Voir la source » surligne le passage directement dans la page. Les numéros correspondent au document avant découpe.",
     "wordHelp": "Pagination de lecture du texte Word extrait, et non pagination du document original.",
     "loading": "Chargement des pages…",
     "readerError": "Impossible de charger le lecteur",

@@ -31,7 +31,7 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const { t } = useTranslation();
   const words = sourceWords(passage.source_text);
   const [splitAfter, setSplitAfter] = useState(Math.max(1, Math.floor(words.length / 2)));
-  const [expanded, setExpanded] = useState(!passage.decision);
+  const [expanded, setExpanded] = useState(false);
   const base = { dm_id: dmId, passage_id: passage.id };
   const pageLabel = passage.page === null
     ? t("preliminary.unlocated")
@@ -46,40 +46,32 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const splitAt = Array.from(passage.source_text.slice(0, splitOffset)).length;
   const firstPart = passage.source_text.slice(0, splitOffset).trim();
   const secondPart = passage.source_text.slice(splitOffset).trim();
-  const acceptProposal = async () => {
-    if (passage.suggested !== "review" && await decide(passage.suggested)) {
-      setExpanded(false);
-    }
-  };
-  const toggleAndSelect = () => {
-    setExpanded((open) => !open);
-    onSelect();
-  };
+  const decisionLabel = t(passage.decision ? "preliminary.decisionSummary" : "preliminary.proposed", {
+    category: passage.decision ? t(`preliminary.category.${passage.decision}`) : pendingLabel,
+  });
   return (
     <article className={`rounded-sm border p-3 space-y-3 ${selected ? "border-bright bg-bg-3" : "bg-card"}`}>
-      <div>
-        <Button variant="ghost" size="sm" aria-expanded={expanded}
-          className="w-full justify-between text-left"
-          aria-controls={`preliminary-passage-${passage.id}`}
-          aria-label={`${pageLabel}, ${t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}`}
-          onClick={toggleAndSelect}>
-          <span>{pageLabel}</span>
-          {expanded
-            ? <ChevronUp className="h-4 w-4" aria-hidden="true" />
-            : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-        </Button>
-      </div>
-      <div id={`preliminary-passage-${passage.id}`} hidden={!expanded} className="space-y-3">
-        <Button variant="ghost" size="md"
-          className="h-auto w-full flex-col items-start justify-start whitespace-normal px-0 py-1 text-left font-normal"
-          onClick={toggleAndSelect} aria-pressed={selected}
-          aria-label={t("preliminary.sourceAt", { page: passage.page ?? t("preliminary.unlocated") })}>
-          <span className="block w-full whitespace-pre-wrap break-words">{passage.text}</span>
-          <span className="block w-full text-sm text-fg-dim">
-            {t("preliminary.proposed", { category: t(`preliminary.category.${passage.suggested}`) })}
-            {" - "}{t(`preliminary.rule.${passage.rule}`)}
-          </span>
-        </Button>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-start">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" aria-pressed={selected}
+              aria-label={t("preliminary.sourceAt", { page: passage.page ?? t("preliminary.unlocated") })}
+              onClick={onSelect}>{pageLabel}</Button>
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-dim" title={decisionLabel}>
+              {decisionLabel}
+            </span>
+            <Button variant="ghost" size="sm" aria-expanded={expanded}
+              aria-controls={`preliminary-passage-${passage.id}`} className="shrink-0"
+              aria-label={t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}
+              onClick={() => setExpanded((open) => !open)}>
+              {expanded
+                ? <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+              <span>{t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}</span>
+            </Button>
+          </div>
+          <p className="mt-2 line-clamp-2 whitespace-pre-wrap break-words">{passage.text}</p>
+        </div>
         <label className="block space-y-1">
           <span>{t("preliminary.destination")}</span>
           <SelectMenu
@@ -96,11 +88,9 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
             }}
           />
         </label>
-        {passage.suggested !== "review" && !passage.decision ? (
-          <Button size="sm" variant="secondary" disabled={disabled} onClick={() => void acceptProposal()}>
-            {t("preliminary.accept")}
-          </Button>
-        ) : null}
+      </div>
+      <div id={`preliminary-passage-${passage.id}`} hidden={!expanded} className="space-y-3 border-t border-md pt-3">
+        <p className="text-sm text-fg-dim">{t(`preliminary.rule.${passage.rule}`)}</p>
         <details>
           <summary className="cursor-pointer text-fg-dim">{t("preliminary.editSplit")}</summary>
           <div className="space-y-3 pt-3">

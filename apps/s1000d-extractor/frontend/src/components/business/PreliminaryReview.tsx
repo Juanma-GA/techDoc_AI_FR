@@ -98,6 +98,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     <Card>
       <CardContent className="space-y-4 pt-4">
         <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
           <h2 className="font-display text-lg">{t("preliminary.title")}</h2>
           <div className="ml-auto">
             <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
@@ -178,14 +179,21 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                 sourceFormat={review.state.source_format} selectedId={selectedId} jump={jump}
                 onPosition={(value) => review.position(active, value)} />
               <section className="min-w-0 space-y-3" aria-label={t("preliminary.classification")}>
-                <label className="block">
-                  <span>{t("preliminary.filter")}</span>
-                  <SelectMenu label={t("preliminary.filter")} value={filter}
-                    options={["all", "pending", ...reviewDestinations].map((value) => ({
-                      value, label: t(`preliminary.category.${value}`),
-                    }))} onValueChange={setFilter} />
-                </label>
-                <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,14rem)] sm:items-end">
+                  <div>
+                    <h3 className="font-semibold">{t("preliminary.classification")}</h3>
+                    <p className="text-sm text-fg-dim">
+                      {t("preliminary.remaining", { count: undecided, total: passages.length })}
+                    </p>
+                  </div>
+                  <label className="block">
+                    <span>{t("preliminary.filter")}</span>
+                    <SelectMenu label={t("preliminary.filter")} value={filter}
+                      options={["all", "pending", ...reviewDestinations].map((value) => ({
+                        value, label: t(`preliminary.category.${value}`),
+                      }))} onValueChange={setFilter} />
+                  </label>
+                </div>
                 <div data-testid="passage-list" className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
                   {passages.filter(matchesFilter)
                     .map((passage) => (
@@ -201,21 +209,22 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                     ))}
                   {!passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
                 </div>
-                <div className="flex gap-3 items-start">
-                  <Checkbox checked={confirmed} disabled={disabled}
-                    aria-label={t("preliminary.confirmWhole")} onCheckedChange={setConfirmed} />
-                  <span>{t("preliminary.confirmWhole")}</span>
+                <div className="space-y-3 border-t border-md pt-3">
+                  <label className="flex gap-3 items-start">
+                    <Checkbox checked={confirmed} disabled={disabled}
+                      aria-label={t("preliminary.confirmWhole")} onCheckedChange={setConfirmed} />
+                    <span>{t("preliminary.confirmWhole")}</span>
+                  </label>
+                  <Button disabled={disabled || review.dirty || undecided > 0 || !confirmed || current.status === "reviewed"}
+                    onClick={() => void completeProcedure()}>
+                    {t("preliminary.complete")}
+                  </Button>
                 </div>
-                <Button disabled={disabled || review.dirty || undecided > 0 || !confirmed || current.status === "reviewed"}
-                  onClick={() => void completeProcedure()}>
-                  {t("preliminary.complete")}
-                </Button>
               </section>
             </div>
           </>
         )}
-        <div className="flex flex-wrap gap-3 justify-between">
-          <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
+        <div className="flex justify-end">
           <Button disabled={disabled || !complete || review.dirty} onClick={onGenerate}>
         {t("preliminary.generate")}
           </Button>

@@ -172,7 +172,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
   };
   return (
     <section className="min-w-0 space-y-2" aria-label={t("preliminary.reader")}>
-      <p className="text-sm text-fg-dim">{t(pdf ? "preliminary.pdfHelp" : "preliminary.wordHelp")}</p>
+      {!pdf ? <p className="text-sm text-fg-dim">{t("preliminary.wordHelp")}</p> : null}
       {manifest.error ? (
         <div role="alert" className="text-danger">
           {t("preliminary.readerError")}: {formatApiError(t, manifest.error)}
@@ -183,9 +183,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
       {sourcePageUnavailable ? <p role="status" className="text-warning">{t("preliminary.sourcePageUnavailable")}</p> : null}
       <div ref={container} data-testid="procedure-reader" tabIndex={0} role="region"
         aria-label={t("preliminary.reader")} onScroll={capture}
-        className={`h-96 overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 p-3 space-y-4 ${
-          pdf ? "lg:h-[calc(70vh_+_4rem)]" : "lg:h-[70vh]"
-        }`}>
+        className="h-96 overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 px-3 pb-3 pt-0 space-y-4 lg:h-[70vh]">
         {ready ? pageNumbers.map((pageNumber) => {
           const items = grouped.get(pageNumber) ?? [];
           const page = manifest.data?.find((p) => p.page === pageNumber);

@@ -87,7 +87,7 @@ describe("server-persisted procedural review", () => {
 
   it("flushes the last scroll position before a classification and serializes revisions", async () => {
     act(() => current.position("proc", { page: 2, scroll_top: 420.5, selected_id: "passage" }));
-    expect(current.dirty).toBe(true);
+    expect(current.dirty).toBe(false);
     await act(async () => {
       expect(await current.act({
         dm_id: "proc", op: "decide", passage_id: "passage", destination: "safety",
@@ -102,6 +102,19 @@ describe("server-persisted procedural review", () => {
     expect(current.state.revision).toBe(3);
     expect(current.dirty).toBe(false);
     expect(current.error).toBeNull();
+  });
+
+  it("keeps controls active while saving reader position in the background", async () => {
+    let acknowledge: (state: PreliminaryState) => void = () => {};
+    vi.mocked(preliminaryApi.save).mockImplementationOnce(() => new Promise((resolve) => {
+      acknowledge = resolve;
+    }));
+    act(() => current.position("proc", { page: 2, scroll_top: 420, selected_id: "passage" }));
+    expect(current.dirty).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(current.saving).toBe(false);
+    await act(async () => { acknowledge({ ...initial, revision: 2 }); });
+    expect(current.dirty).toBe(false);
   });
 
   it("does not claim a failed action was saved and blocks navigation until retry", async () => {
