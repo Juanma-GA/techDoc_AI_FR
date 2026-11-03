@@ -39,6 +39,17 @@ validation remain environment-dependent.
 	commented PDFs.
 - Export original, corrected, commented, and converted outputs when the local
 	converter supports them.
+- Include a paginated preparation plan in commented PDFs: selected PDF pages and
+  their documentary references, corrections, revised footer dates, LEP entries
+  with the new date and `*`, the ROR insertion date, and Highlights revision
+  fields. The plan uses the preparation mapping and saved decisions, not the
+  independent verification mapping or the existence of generated annotations.
+  Confirmed missing page types have separate creation instructions. Unresolved
+  references, undecided pages, conflicting unchanged decisions, and stale
+  preparation are explicitly flagged. Newly created pages and administrative
+  pages changed as a consequence must have their LEP/Highlights/TOC impacts
+  checked by the author. Original and corrected exports remain unchanged;
+  the plan does not edit the source or claim unperformed checks passed.
 - Show a degradation warning before PDF/Word format conversions.
 
 ## Auth
