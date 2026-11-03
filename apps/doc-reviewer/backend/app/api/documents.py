@@ -29,7 +29,14 @@ from app.core.document_context import (
     save_document_context_defaults,
 )
 from app.core.errors import AppError
+from app.core.pdf_annotate import MissingPageRepair, PreparationRepairRule
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.preparation_classification import (
+    load_absent_page_types,
+    page_requirements,
+    preparation_rules,
+)
+from app.core.preparation_state import get_record, state_payload
 from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
@@ -695,10 +702,90 @@ def render_page_png(
     )
 
 
-def _commented_pdf_response(doc: Document, db: Session) -> Response:
+def _preparation_repairs_for_export(
+    request: Request,
+    doc: Document,
+    db: Session,
+) -> tuple[MissingPageRepair, ...]:
+    if doc.working_format != "pdf":
+        return ()
+    record = get_record(db, doc.id)
+    if (
+        record is None
+        or record.source_version != doc.current_version
+        or not load_absent_page_types(record)
+    ):
+        return ()
+
+    configuration = get_request_client_configuration(request, db)
+    payload = state_payload(db, doc, configuration.bundle.client_code)
+    requirements = page_requirements(
+        db,
+        configuration.bundle,
+        record,
+        payload["page_decisions"],
+    )
+    absent_groups = requirements["absent_page_types"]
+    if not absent_groups:
+        return ()
+
+    rules = preparation_rules(db, configuration.bundle)
+    repairs: list[MissingPageRepair] = []
+    for group in absent_groups:
+        group_key = tuple(group)
+        matching_rules: list[PreparationRepairRule] = []
+        for rule in rules:
+            target_groups = []
+            if rule.target.page_type is not None:
+                target_groups.append((rule.target.page_type,))
+            if rule.target.page_types:
+                target_groups.append(tuple(rule.target.page_types))
+            if group_key not in target_groups:
+                continue
+            matching_rules.append(
+                PreparationRepairRule(
+                    title=rule.topic.strip() or rule.id,
+                    instructions=_preparation_rule_instructions(rule),
+                )
+            )
+        repairs.append(
+            MissingPageRepair(
+                page_types=tuple(group),
+                rules=tuple(matching_rules),
+            )
+        )
+    return tuple(repairs)
+
+
+def _preparation_rule_instructions(rule: Any) -> tuple[str, ...]:
+    instructions: list[str] = []
+    for value in (
+        rule.source_instruction,
+        rule.manual_instruction,
+        rule.semantic_instruction,
+        rule.failure_message,
+    ):
+        if isinstance(value, str) and value.strip() and value.strip() not in instructions:
+            instructions.append(value.strip())
+    if not instructions:
+        for check in rule.checks:
+            expected = check.expected_display
+            if expected is None and check.expected is not None:
+                expected = (
+                    ", ".join(str(item) for item in check.expected)
+                    if isinstance(check.expected, list)
+                    else str(check.expected)
+                )
+            criterion = f" — attendu : {expected}" if expected is not None else ""
+            instructions.append(f"Critère ({check.field}, {check.operator}){criterion}")
+    return tuple(instructions) or ("Détail non renseigné dans la règle.",)
+
+
+def _commented_pdf_response(doc: Document, db: Session, request: Request) -> Response:
     from app.core.pdf_annotate import build_commented_pdf
     from app.db.models import Suggestion as SuggestionModel
 
+    preparation_repairs = _preparation_repairs_for_export(request, doc, db)
     suggestions = list(db.scalars(
         select(SuggestionModel)
         .where(SuggestionModel.document_id == doc.id, SuggestionModel.status != "rejected")
@@ -706,7 +793,11 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
     ))
     if doc.working_format == "pdf":
         pdf_path = current_path(doc.storage_dir, doc.current_version)
-        pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+        pdf_bytes = build_commented_pdf(
+            str(pdf_path),
+            suggestions,
+            preparation_repairs=preparation_repairs,
+        )
     else:
         working = docx_versioning.version_path(doc.storage_dir, doc.current_version)
         if not working.is_file():
@@ -715,7 +806,11 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
             converted, _ = doc_convert.doc_to_pdf_bytes(working.read_bytes(), ".docx")
             pdf_path = Path(temp_dir) / "working.pdf"
             pdf_path.write_bytes(converted)
-            pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+            pdf_bytes = build_commented_pdf(
+                str(pdf_path),
+                suggestions,
+                preparation_repairs=preparation_repairs,
+            )
     stem = Path(doc.original_filename).stem
     return Response(
         content=pdf_bytes,
@@ -761,6 +856,7 @@ def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db))
 @router.get("/documents/{document_id}/export", response_model=None)
 def export_pdf(
     document_id: uuid.UUID,
+    request: Request,
     format: Optional[Literal["original", "corrected", "commented", "pdf", "docx", "doc"]] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> FileResponse | Response:
@@ -768,7 +864,7 @@ def export_pdf(
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if format == "commented":
-        return _commented_pdf_response(doc, db)
+        return _commented_pdf_response(doc, db, request)
     requested = format or "corrected"
     if requested == "original":
         if doc.source_format == "pdf":
@@ -869,14 +965,18 @@ def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> di
 
 
 @router.get("/documents/{document_id}/commented.pdf")
-def export_commented_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def export_commented_pdf(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
     """PDF **commente** : le PDF fidele + les anomalies retenues (non rejetees)
     estampillees en annotations, plus une page-sommaire. C'est le livrable sur
     lequel le relecteur s'appuie pour corriger son document Word."""
     doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    return _commented_pdf_response(doc, db)
+    return _commented_pdf_response(doc, db, request)
 
 
 @router.post("/documents/{document_id}/rollback", response_model=DocumentOut)

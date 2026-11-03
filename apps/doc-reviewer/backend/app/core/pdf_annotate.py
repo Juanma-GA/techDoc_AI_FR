@@ -14,12 +14,27 @@ dans la page-sommaire finale.
 from __future__ import annotations
 
 import json
+import textwrap
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import fitz  # PyMuPDF
 
 from app.db.models import Suggestion
+
+
+@dataclass(frozen=True)
+class PreparationRepairRule:
+    title: str
+    instructions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MissingPageRepair:
+    page_types: tuple[str, ...]
+    rules: tuple[PreparationRepairRule, ...]
+
 
 # Couleurs RGB (0..1) par severite pour le surlignage + la pastille.
 _SEVERITY_COLOR: dict[str, tuple[float, float, float]] = {
@@ -44,7 +59,11 @@ def _rect_of(bbox: dict) -> fitz.Rect | None:
     return rect if not rect.is_empty else None
 
 
-def build_commented_pdf(pdf_path: str | Path, suggestions: Iterable[Suggestion]) -> bytes:
+def build_commented_pdf(
+    pdf_path: str | Path,
+    suggestions: Iterable[Suggestion],
+    preparation_repairs: Iterable[MissingPageRepair] = (),
+) -> bytes:
     """Retourne les octets d'un PDF annote a partir de `pdf_path` et des
     suggestions (deja filtrees sur « non rejetees » par l'appelant)."""
     doc = fitz.open(pdf_path)
@@ -74,6 +93,7 @@ def build_commented_pdf(pdf_path: str | Path, suggestions: Iterable[Suggestion])
                 annot.update()
             summary.append((n, sug, located))
         _append_summary_page(doc, summary)
+        _append_preparation_repair_pages(doc, preparation_repairs)
         return doc.tobytes(deflate=True, garbage=3)
     finally:
         doc.close()
@@ -111,3 +131,74 @@ def _append_summary_page(doc: fitz.Document, summary: list[tuple[int, "Suggestio
         text.append("")
     rect = fitz.Rect(margin, margin, width - margin, height - margin)
     page.insert_textbox(rect, "\n".join(text), fontname="helv", fontsize=9, align=0)
+
+
+def _append_preparation_repair_pages(
+    doc: fitz.Document,
+    repairs: Iterable[MissingPageRepair],
+) -> None:
+    width, height = fitz.paper_size("a4")
+    margin = 48
+    lines_per_page = 52
+    for repair in repairs:
+        body_lines: list[str] = []
+        if not repair.rules:
+            body_lines.append("Aucune règle active n'est associée à ce type de page.")
+        for rule in repair.rules:
+            body_lines.extend(_wrapped_lines(f"- {rule.title}", 88))
+            if rule.instructions:
+                for instruction in rule.instructions:
+                    body_lines.extend(
+                        _wrapped_lines(instruction, 88, initial_indent="  ", subsequent_indent="    ")
+                    )
+            else:
+                body_lines.append("  Consigne détaillée non disponible.")
+
+        chunks = [
+            body_lines[index : index + lines_per_page]
+            for index in range(0, len(body_lines), lines_per_page)
+        ] or [[]]
+        page_type_label = f"Type(s) déclaré(s) absent(s) : {' / '.join(repair.page_types)}"
+        for page_number, chunk in enumerate(chunks, start=1):
+            page = doc.new_page(width=width, height=height)
+            page.insert_text(
+                (margin, margin),
+                "Annexe de préparation - pages à réparer",
+                fontname="helv",
+                fontsize=14,
+            )
+            heading_lines = _wrapped_lines(page_type_label, 88)
+            if page_number > 1:
+                heading_lines.append("(suite)")
+            page.insert_textbox(
+                fitz.Rect(margin, margin + 10, width - margin, margin + 52),
+                "\n".join(heading_lines),
+                fontname="helv",
+                fontsize=10,
+            )
+            page.insert_textbox(
+                fitz.Rect(margin, margin + 62, width - margin, height - margin),
+                "\n".join(chunk),
+                fontname="helv",
+                fontsize=9,
+                lineheight=1.2,
+            )
+
+
+def _wrapped_lines(
+    value: str,
+    width: int,
+    *,
+    initial_indent: str = "",
+    subsequent_indent: str = "",
+) -> list[str]:
+    lines: list[str] = []
+    for paragraph in value.splitlines() or [value]:
+        wrapped = textwrap.wrap(
+            paragraph,
+            width=width,
+            initial_indent=initial_indent,
+            subsequent_indent=subsequent_indent,
+        )
+        lines.extend(wrapped or [initial_indent.rstrip()])
+    return lines
