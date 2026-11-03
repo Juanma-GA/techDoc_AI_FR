@@ -3,11 +3,9 @@
 Domaine : optimisation d'arborescence CATIA a partir de donnees exportees
 (scan de dossier en metadonnees seules, ou import d'un listing CSV/JSON).
 
-- `AppConfig` (key/value) : config runtime (cle Mistral). Preservee au reset.
+- `AppConfig` (key/value) : chemins locaux et configuration Composer, preserves au reset.
 - `StructureImport` : une arborescence importee + ses metriques cachees.
 - `TreeNode` : un noeud (fichier ou dossier) de l'arborescence importee.
-- `OptimizationRun` : une execution de generation de plan de reorganisation.
-- `Suggestion` : une ligne du plan (deplacement / renommage / regroupement).
 """
 
 from __future__ import annotations
@@ -61,9 +59,6 @@ class StructureImport(Base):
     nodes: Mapped[list["TreeNode"]] = relationship(
         back_populates="import_", cascade="all, delete-orphan", passive_deletes=True
     )
-    runs: Mapped[list["OptimizationRun"]] = relationship(
-        back_populates="import_", cascade="all, delete-orphan", passive_deletes=True
-    )
 
 
 class TreeNode(Base):
@@ -85,59 +80,6 @@ class TreeNode(Base):
     mtime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     import_: Mapped["StructureImport"] = relationship(back_populates="nodes")
-
-
-# =============================================================================
-# Optimisation & suggestions
-# =============================================================================
-
-
-class OptimizationRun(Base):
-    __tablename__ = "optimization_runs"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    import_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("structure_imports.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    status: Mapped[str] = mapped_column(
-        String(30), default="running", server_default="running"
-    )  # running | completed | failed
-    config_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
-    summary: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    import_: Mapped["StructureImport"] = relationship(back_populates="runs")
-    suggestions: Mapped[list["Suggestion"]] = relationship(
-        back_populates="run", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-
-class Suggestion(Base):
-    __tablename__ = "suggestions"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("optimization_runs.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    node_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid, ForeignKey("tree_nodes.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    old_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    new_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    # move | rename | group | keep
-    action: Mapped[str] = mapped_column(String(16), nullable=False)
-    rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
-    # elevee | moyenne | faible (meme echelle que FTM Anomaly.confidence).
-    confidence: Mapped[str] = mapped_column(String(20), default="moyenne", server_default="moyenne")
-    # "llm" | "baseline" : permet de distinguer suggestions IA et heuristiques.
-    source: Mapped[str] = mapped_column(String(12), default="llm", server_default="llm")
-    status: Mapped[str] = mapped_column(
-        String(16), default="pending", server_default="pending", index=True
-    )  # pending | accepted | rejected
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
-
-    run: Mapped["OptimizationRun"] = relationship(back_populates="suggestions")
 
 
 # =============================================================================
@@ -180,43 +122,6 @@ class DiffEntry(Base):
 
 
 # =============================================================================
-# Module Verifications (checks configurables)
-# =============================================================================
-
-
-class CheckRun(Base):
-    __tablename__ = "check_runs"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    import_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("structure_imports.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    status: Mapped[str] = mapped_column(String(30), default="completed", server_default="completed")
-    config_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
-    summary: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
-
-    results: Mapped[list["CheckResult"]] = relationship(
-        back_populates="run", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-
-class CheckResult(Base):
-    __tablename__ = "check_results"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("check_runs.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    rule: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
-    severity: Mapped[str] = mapped_column(String(20), default="warning", server_default="warning")
-    rel_path: Mapped[str] = mapped_column(String(1000), default="", server_default="")
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-
-    run: Mapped["CheckRun"] = relationship(back_populates="results")
-
-
-# =============================================================================
 # Module Conversion (CATIA 3D -> Composer)
 # =============================================================================
 
@@ -253,45 +158,6 @@ class ConversionItem(Base):
     )  # pending | accepted | rejected
 
     run: Mapped["ConversionRun"] = relationship(back_populates="items")
-
-
-# =============================================================================
-# Module Remplacement (remplacement de pieces)
-# =============================================================================
-
-
-class ReplacementRun(Base):
-    __tablename__ = "replacement_runs"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    import_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("structure_imports.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    status: Mapped[str] = mapped_column(String(30), default="completed", server_default="completed")
-    mapping_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
-    summary: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
-
-    items: Mapped[list["ReplacementItem"]] = relationship(
-        back_populates="run", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-
-class ReplacementItem(Base):
-    __tablename__ = "replacement_items"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("replacement_runs.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    occurrence_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    old_ref: Mapped[str] = mapped_column(String(500), nullable=False)
-    new_ref: Mapped[str] = mapped_column(String(500), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), default="pending", server_default="pending", index=True
-    )  # pending | accepted | rejected
-
-    run: Mapped["ReplacementRun"] = relationship(back_populates="items")
 
 
 # =============================================================================
@@ -458,38 +324,3 @@ class SmgxmlChange(Base):
     new_value: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     run: Mapped["SmgxmlRun"] = relationship(back_populates="changes")
-
-
-# =============================================================================
-# Etape 5 - Controle Qualite (checklist interactive facon revue Word)
-# =============================================================================
-
-
-class QcChecklist(Base):
-    __tablename__ = "qc_checklists"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    title: Mapped[str] = mapped_column(String(300), default="", server_default="")
-    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")  # open | done
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
-
-    items: Mapped[list["QcItem"]] = relationship(
-        back_populates="checklist", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-
-class QcItem(Base):
-    __tablename__ = "qc_items"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
-    checklist_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("qc_checklists.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    label: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[str] = mapped_column(String(100), default="", server_default="")
-    # pending | ok | ko | na
-    status: Mapped[str] = mapped_column(String(12), default="pending", server_default="pending", index=True)
-    comment: Mapped[str] = mapped_column(Text, default="", server_default="")
-    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-
-    checklist: Mapped["QcChecklist"] = relationship(back_populates="items")

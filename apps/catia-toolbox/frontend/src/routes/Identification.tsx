@@ -1,4 +1,6 @@
+import { Badge, Button, Select, Spinner } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ScanLine, Search } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -35,8 +37,8 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
 const IDENTITY_FIELDS: (keyof NomenclatureMapping)[] = ["sin", "old_pn", "new_pn"];
 
-// Mapping par defaut du gabarit, applique tant qu'aucun mapping n'a ete
-// memorise : SIN en colonne B (index 1), Designation en colonne D (index 3).
+// Mapping du gabarit si les en-tetes du fichier ne sont pas reconnus :
+// SIN en colonne B (index 1), Designation en colonne D (index 3).
 const DEFAULT_MAPPING: Record<string, number> = { sin: 1, designation: 3 };
 
 // Registre des colonnes affichables (cle = cle backend du mapping). Le tableau
@@ -57,7 +59,7 @@ const COLUMN_DEFS: ColDef[] = [
     key: "replaced",
     labelKey: "identification.colReplaced",
     center: true,
-    render: (it, tr) => (it.replaced ? <span className="badge warn">{tr("common.yes")}</span> : null),
+    render: (it, tr) => (it.replaced ? <Badge variant="warning">{tr("common.yes")}</Badge> : null),
   },
   { key: "old_pn", labelKey: "identification.colOldPn", render: (it) => it.old_pn },
   { key: "new_pn", labelKey: "identification.colNewPn", render: (it) => it.new_pn },
@@ -69,7 +71,7 @@ const COLUMN_DEFS: ColDef[] = [
     key: "mono_body",
     labelKey: "identification.colMonoBody",
     center: true,
-    render: (it, tr) => (it.mono_body ? <span className="badge ok">{tr("common.yes")}</span> : null),
+    render: (it, tr) => (it.mono_body ? <Badge variant="success">{tr("common.yes")}</Badge> : null),
   },
   { key: "color", labelKey: "identification.colColor", center: true, render: (it) => <ColorDot item={it} /> },
 ];
@@ -210,15 +212,15 @@ function AnalysisAction({
   const { t } = useTranslation();
   return (
     <div className="analysis-preview-controls">
-      <button
+      <Button
         type="button"
-        className={mode === "analyze" ? "btn primary" : "btn secondary"}
+        variant={mode === "analyze" ? "primary" : "secondary"}
         onClick={onClick}
         disabled={disabled}
       >
-        {pending ? <span className="spinner" /> : null}
+        {pending ? <Spinner aria-label={t("common.loading")} /> : mode === "analyze" ? <ScanLine size={16} aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}
         <span>{t(mode === "analyze" ? "identification.analyze" : "identification.preview")}</span>
-      </button>
+      </Button>
       {extraAction}
       {hint ? <span className="hint">{hint}</span> : null}
       {error ? <span className="error">{error}</span> : null}
@@ -249,14 +251,12 @@ function MonoCorpsCard({
   runId,
   sourcePath,
   analysisStatus,
-  canAutoPreview,
   runIdentityFields,
   runIdentityFieldsLoading,
 }: {
   runId: string | null;
   sourcePath: string;
   analysisStatus: { matched: number; mono: number } | null;
-  canAutoPreview: boolean;
   runIdentityFields: string[];
   runIdentityFieldsLoading: boolean;
 }) {
@@ -279,11 +279,14 @@ function MonoCorpsCard({
     previewRequestId.current += 1;
     setPreview(null);
     setPreviewSourcePath("");
+    setSheet("");
+    setHeaderRow(1);
     setIdentityCol(undefined);
     setFirstSlotCol(undefined);
     setResult(null);
     setError(null);
     setNotice(null);
+    return () => { previewRequestId.current += 1; };
   }, [runId, sourcePath]);
 
   const previewMutation = useMutation({
@@ -340,22 +343,6 @@ function MonoCorpsCard({
     },
   });
   const mutatePreview = previewMutation.mutate;
-
-  useEffect(() => {
-    if (
-      !canAutoPreview ||
-      runIdentityFieldsLoading ||
-      !sourcePath.trim()
-    ) return;
-    const timeout = window.setTimeout(() => {
-      const requestId = ++previewRequestId.current;
-      mutatePreview({ path: sourcePath, requestId });
-    }, 250);
-    return () => {
-      window.clearTimeout(timeout);
-      previewRequestId.current += 1;
-    };
-  }, [canAutoPreview, mutatePreview, runIdentityFieldsLoading, sourcePath]);
 
   const requestPreview = (requestedSheet?: string) => {
     const requestId = ++previewRequestId.current;
@@ -462,8 +449,8 @@ function MonoCorpsCard({
       ? "analyze"
       : "preview";
   return (
-    <article className="card">
-      <h2 className="card-title">{t("identification.monoTitle")}</h2>
+    <section className="workflow-section">
+      <h2 className="section-title">{t("identification.monoTitle")}</h2>
       <AnalysisInfoBox {...analysisInfo} />
       <AnalysisAction
         mode={actionMode}
@@ -483,9 +470,9 @@ function MonoCorpsCard({
           else requestPreview(sheet || undefined);
         }}
         extraAction={result && monoItems.length ? (
-          <button type="button" className="btn secondary small" onClick={exportMonoCsv}>
+          <Button type="button" variant="secondary" size="sm" onClick={exportMonoCsv}>
             {t("common.exportCsv")}
-          </button>
+          </Button>
         ) : null}
       />
 
@@ -494,9 +481,9 @@ function MonoCorpsCard({
           <div className="row" style={{ alignItems: "flex-end" }}>
             <div className="field">
               <label htmlFor="mono-sheet" className="field-label">{t("identification.sheet")}</label>
-              <select
+              <Select options={[]}
                 id="mono-sheet"
-                className="input"
+
                 value={sheet}
                 onChange={(e) => {
                   setResult(null);
@@ -506,13 +493,13 @@ function MonoCorpsCard({
                 {preview.sheets.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="mono-header" className="field-label">{t("identification.headerRow")}</label>
-              <select
+              <Select options={[]}
                 id="mono-header"
-                className="input"
+
                 value={String(headerRow)}
                 onChange={(e) => {
                   const nextHeaderRow = parseInt(e.target.value, 10);
@@ -529,7 +516,7 @@ function MonoCorpsCard({
                 {preview.rows.map((_r, i) => (
                   <option key={i} value={String(i + 1)}>{String(i + 1)}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -554,9 +541,9 @@ function MonoCorpsCard({
               <label htmlFor="mono-identity-field" className="field-label">
                 {t("identification.monoIdentityField")}
               </label>
-              <select
+              <Select options={[]}
                 id="mono-identity-field"
-                className="input"
+
                 value={identityField}
                 onChange={(e) => {
                   const field = e.target.value as MonoIdentityField;
@@ -572,16 +559,16 @@ function MonoCorpsCard({
                 {MONO_IDENTITY_FIELDS.filter((f) => !runId || runIdentityFields.includes(f.field)).map((f) => (
                   <option key={f.field} value={f.field}>{t(f.labelKey)}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             {needsIdentityColumnSelection ? (
               <div className="field">
                 <label htmlFor="mono-identity-col" className="field-label">
                   {t("identification.monoIdentityColumn")}
                 </label>
-                <select
+                <Select options={[]}
                   id="mono-identity-col"
-                  className="input"
+
                   value={identityCol === undefined ? "" : String(identityCol)}
                   onChange={(e) => {
                     setIdentityCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10));
@@ -592,7 +579,7 @@ function MonoCorpsCard({
                   {colOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
-                </select>
+                </Select>
               </div>
             ) : (
               <span className="hint" style={{ paddingBottom: 8 }}>
@@ -606,9 +593,9 @@ function MonoCorpsCard({
               <label htmlFor="mono-first-slot" className="field-label">
                 {t("identification.monoFirstSlotCol")}
               </label>
-              <select
+              <Select options={[]}
                 id="mono-first-slot"
-                className="input"
+
                 value={firstSlotCol === undefined ? "" : String(firstSlotCol)}
                 onChange={(e) => {
                   setFirstSlotCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10));
@@ -619,7 +606,7 @@ function MonoCorpsCard({
                 {colOptions.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -667,7 +654,7 @@ function MonoCorpsCard({
                             <td key={i} style={{ textAlign: "center" }}>{it.slots[i] ?? ""}</td>
                           ))}
                           <td style={{ textAlign: "center" }}>
-                            {it.mono_body ? <span className="badge ok">{t("common.yes")}</span> : null}
+                            {it.mono_body ? <Badge variant="success">{t("common.yes")}</Badge> : null}
                           </td>
                         </tr>
                       ))}
@@ -676,7 +663,7 @@ function MonoCorpsCard({
                 </div>
               ) : (
                 <div className="empty-state">
-                  <h3 className="card-title">{t("identification.empty")}</h3>
+                  <h3 className="section-title">{t("identification.empty")}</h3>
                 </div>
               )}
             </div>
@@ -684,7 +671,7 @@ function MonoCorpsCard({
           {!result && analysisStatus ? (
             <div style={{ marginTop: 16 }}>
               {savedMonoItemsQuery.isLoading ? (
-                <span className="spinner" />
+                <Spinner aria-label={t("common.loading")} />
               ) : savedMonoItemsQuery.isError ? (
                 <p className="error">
                   {savedMonoItemsQuery.error instanceof Error
@@ -711,7 +698,7 @@ function MonoCorpsCard({
                           <td>{item.catpart}</td>
                           <td>{item.designation}</td>
                           <td style={{ textAlign: "center" }}>
-                            <span className="badge ok">{t("common.yes")}</span>
+                            <Badge variant="success">{t("common.yes")}</Badge>
                           </td>
                         </tr>
                       ))}
@@ -720,14 +707,14 @@ function MonoCorpsCard({
                 </div>
               ) : (
                 <div className="empty-state">
-                  <h3 className="card-title">{t("identification.empty")}</h3>
+                  <h3 className="section-title">{t("identification.empty")}</h3>
                 </div>
               )}
             </div>
           ) : null}
         </div>
       ) : null}
-    </article>
+    </section>
   );
 }
 
@@ -767,15 +754,12 @@ export function Identification() {
     queryFn: identificationApi.list,
   });
   const runs = runsQuery.data ?? [];
-  const activeRun = runs.find((run) => run.id === resultRunId);
+  const activeRun = runs.find((run) =>
+    run.id === resultRunId && comparablePath(run.source_ref) === comparablePath(nomenPath),
+  );
   const sourceRuns = nomenPath.trim()
     ? runs.filter((run) => comparablePath(run.source_ref) === comparablePath(nomenPath))
     : [];
-  useEffect(() => {
-    if (activeRun && comparablePath(nomenPath) !== comparablePath(activeRun.source_ref)) {
-      useWorkspace.getState().setSource("nomenclature", activeRun.source_ref);
-    }
-  }, [activeRun?.source_ref, nomenPath]);
   const runIdentityFields = activeRun
     ? detectedColumns(activeRun.summary).filter((field) =>
         MONO_IDENTITY_FIELDS.some((identity) => identity.field === field),
@@ -804,8 +788,10 @@ export function Identification() {
           complete: false,
         };
   const selectRun = (run: NomenclatureRunDto) => {
-    if (comparablePath(run.source_ref) !== comparablePath(nomenPath)) {
+    if (run.id !== resultRunId || comparablePath(run.source_ref) !== comparablePath(nomenPath)) {
       nomenPreviewRequestId.current += 1;
+      previewMutation.reset();
+      analyzeMappingMutation.reset();
       setPreview(null);
       setNomenPreviewPath("");
       setSheet("");
@@ -821,19 +807,6 @@ export function Identification() {
     setResultColumns(columns);
     setFilter(defaultFilter(columns));
   };
-
-  useEffect(() => {
-    if (resultRunId || !nomenPath.trim() || runsQuery.isLoading || runsQuery.isFetching) return;
-    const matchingRun = runs.find(
-      (run) => comparablePath(run.source_ref) === comparablePath(nomenPath),
-    );
-    if (!matchingRun) return;
-    setResultRunId(matchingRun.id);
-    useWorkspace.getState().setNomenclatureRun(matchingRun.id);
-    const columns = detectedColumns(matchingRun.summary);
-    setResultColumns(columns);
-    setFilter(defaultFilter(columns));
-  }, [nomenPath, resultRunId, runs, runsQuery.isFetching, runsQuery.isLoading]);
 
   useEffect(() => {
     if (!resultRunId) return;
@@ -880,14 +853,8 @@ export function Identification() {
       setPreview(data);
       setNomenPreviewPath(path);
       setSheet(data.sheet);
-      // Pre-remplit avec le dernier mapping memorise si present, sinon la
-      // detection automatique par mots-cles d'en-tete.
-      const saved = useWorkspace.getState().nomenMapping;
-      const hr = saved?.headerRow ?? (data.header_row_detected > 0 ? data.header_row_detected : 1);
-      setHeaderRow(hr);
-      // Priorite : mapping memorise > detection auto completee par le defaut
-      // du gabarit (SIN=B, Designation=D).
-      setMapping(saved ? { ...saved.cols } : { ...data.columns_map, ...DEFAULT_MAPPING });
+      setHeaderRow(data.header_row_detected > 0 ? data.header_row_detected : 1);
+      setMapping({ ...DEFAULT_MAPPING, ...data.columns_map });
     },
     onError: (e, request) => {
       if (request.requestId === nomenPreviewRequestId.current) {
@@ -901,28 +868,20 @@ export function Identification() {
     mutateNomenPreview({ path, sheet: requestedSheet, requestId });
   };
 
-  useEffect(() => {
-    if (!nomenPath.trim()) return;
-    const timeout = window.setTimeout(() => {
-      const requestId = ++nomenPreviewRequestId.current;
-      mutateNomenPreview({ path: nomenPath, requestId });
-    }, 250);
-    return () => {
-      window.clearTimeout(timeout);
-      nomenPreviewRequestId.current += 1;
-    };
-  }, [mutateNomenPreview, nomenPath]);
+  useEffect(() => () => { nomenPreviewRequestId.current += 1; }, []);
 
   // Analyse avec le mapping de colonnes choisi : "Analyser avec ce mapping".
   const analyzeMappingMutation = useMutation({
-    mutationFn: (body: NomenclatureMapping) =>
+    mutationFn: (request: NomenPreviewRequest & { mapping: NomenclatureMapping }) =>
       identificationApi.nomenclature({
         scope: "input",
-        path: nomenPath.trim(),
-        sheet: sheet || undefined,
-        mapping: body,
+        path: request.path,
+        sheet: request.sheet,
+        mapping: request.mapping,
       }),
-    onSuccess: (run) => {
+    onSuccess: (run, request) => {
+      void qc.invalidateQueries({ queryKey: ["identification"] });
+      if (request.requestId !== nomenPreviewRequestId.current) return;
       setNomenError(null);
       setNomenNotice(
         t("identification.analyzedShort", {
@@ -938,9 +897,12 @@ export function Identification() {
       // Filtre par defaut sur "Pieces remplacees" quand la colonne est mappee,
       // sinon toutes les lignes.
       setFilter(defaultFilter(cols));
-      void qc.invalidateQueries({ queryKey: ["identification"] });
     },
-    onError: onMutationError(setNomenError),
+    onError: (error, request) => {
+      if (request.requestId === nomenPreviewRequestId.current) {
+        onMutationError(setNomenError)(error);
+      }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -956,6 +918,9 @@ export function Identification() {
 
   // ----- Handlers nomenclature ---------------------------------------------
   const onNomenPathChange = (nextPath: string) => {
+    nomenPreviewRequestId.current += 1;
+    previewMutation.reset();
+    analyzeMappingMutation.reset();
     const matchedRun = nextPath.trim()
       ? runs.find((run) => comparablePath(run.source_ref) === comparablePath(nextPath))
       : undefined;
@@ -963,9 +928,9 @@ export function Identification() {
       selectRun(matchedRun);
       return;
     }
-    setNomenPath(nextPath);
     setResultRunId(null);
     useWorkspace.getState().setNomenclatureRun(null);
+    setNomenPath(nextPath);
     setResultColumns([]);
     setFilter("all");
     setPreview(null);
@@ -997,17 +962,18 @@ export function Identification() {
       return;
     }
     const body: NomenclatureMapping = { header_row: headerRow };
-    const cols: Record<string, number> = {};
     for (const { field } of MAPPING_FIELDS) {
       const v = mapping[field];
       if (v !== undefined) {
         body[field] = v;
-        cols[field] = v;
       }
     }
-    // Memorise ce mapping pour le pre-remplir au prochain preview.
-    useWorkspace.getState().setNomenMapping({ headerRow, cols });
-    analyzeMappingMutation.mutate(body);
+    analyzeMappingMutation.mutate({
+      path: nomenPath.trim(),
+      sheet: sheet || undefined,
+      mapping: body,
+      requestId: nomenPreviewRequestId.current,
+    });
   };
 
   // Nombre max de colonnes dans l'apercu (pour les selects de mapping).
@@ -1022,8 +988,8 @@ export function Identification() {
 
   return (
     <div className="identification-layout">
-      <article className="card">
-        <h2 className="card-title">{t("identification.sourceTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("identification.sourceTitle")}</h2>
         <div className="identification-top-grid">
           <div>
             <label className="label">{t("identification.nomenFileLabel")}</label>
@@ -1034,21 +1000,20 @@ export function Identification() {
           </div>
 
           <div className="identification-import-list">
-            <h3 className="card-sub" style={{ marginTop: 0 }}>{t("identification.importedListTitle")}</h3>
+            <h3 className="section-sub" style={{ marginTop: 0 }}>{t("identification.importedListTitle")}</h3>
             {runsQuery.isLoading ? (
-              <span className="spinner" />
+              <Spinner aria-label={t("common.loading")} />
             ) : runs.length || nomenPath.trim() ? (
               <ul className="item-list identification-run-list">
                 {nomenPath.trim() && sourceRuns.length === 0 ? (
                   <li
                     className="item-row"
                     aria-current="true"
-                    style={{ borderColor: "var(--brand-light)" }}
                   >
                     <span className="item-main grow" style={{ minWidth: 0 }}>
                       <span className="item-name">{fileName(nomenPath)}</span>
                     </span>
-                    <span className="badge warn">{t("identification.sourceNotAnalyzed")}</span>
+                    <Badge variant="warning">{t("identification.sourceNotAnalyzed")}</Badge>
                   </li>
                 ) : null}
                 {runs.map((r) => (
@@ -1056,38 +1021,37 @@ export function Identification() {
                     key={r.id}
                     className="item-row clickable"
                     aria-current={r.id === resultRunId ? "true" : undefined}
-                    style={r.id === resultRunId ? { borderColor: "var(--brand-light)" } : undefined}
                     onClick={() => selectRun(r)}
                   >
                     <span className="item-main grow" style={{ minWidth: 0 }}>
                       <span className="item-name">{fileName(r.source_ref)}</span>{" "}
-                      <span className="badge info">
+                      <Badge variant="info">
                         {t("identification.badgeLines", { count: summaryNum(r.summary, "rows") })}
-                      </span>{" "}
-                      <span className="badge warn">
+                      </Badge>{" "}
+                      <Badge variant="warning">
                         {t("identification.badgeReplaced", { count: summaryNum(r.summary, "replaced") })}
-                      </span>{" "}
-                      <span className="badge ok">
+                      </Badge>{" "}
+                      <Badge variant="success">
                         {t("identification.badgeMonoBody", { count: summaryNum(r.summary, "mono_body") })}
-                      </span>{" "}
-                      <span className="badge default">
+                      </Badge>{" "}
+                      <Badge variant="default">
                         {t("identification.badgeMono", { count: summaryNum(r.summary, "mono_color") })}
-                      </span>
+                      </Badge>
                     </span>
                     <span className="item-actions">
-                      <button type="button" className="btn secondary small">
+                      <Button type="button" variant="secondary" size="sm">
                         {t("common.view")}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="btn ghost small"
+                        variant="ghost" size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
                           deleteMutation.mutate(r.id);
                         }}
                       >
                         {t("common.delete")}
-                      </button>
+                      </Button>
                     </span>
                   </li>
                 ))}
@@ -1099,12 +1063,12 @@ export function Identification() {
             )}
           </div>
         </div>
-      </article>
+      </section>
 
       <div className="identification-analysis-grid">
       {/* ---- Analyse de la nomenclature ----------------------------------- */}
-      <article className="card">
-        <h2 className="card-title">{t("identification.nomenTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("identification.nomenTitle")}</h2>
         <AnalysisInfoBox {...nomenAnalysisInfo} />
         <AnalysisAction
           mode={nomenActionMode}
@@ -1131,9 +1095,9 @@ export function Identification() {
                   <label htmlFor="nomen-sheet" className="field-label">
                     {t("identification.sheet")}
                   </label>
-                  <select
+                  <Select options={[]}
                     id="nomen-sheet"
-                    className="input"
+
                     value={sheet}
                     onChange={(e) => onSheetChange(e.target.value)}
                   >
@@ -1142,15 +1106,15 @@ export function Identification() {
                         {s}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="field">
                   <label htmlFor="nomen-headerrow" className="field-label">
                     {t("identification.headerRow")}
                   </label>
-                  <select
+                  <Select options={[]}
                     id="nomen-headerrow"
-                    className="input"
+
                     value={String(headerRow)}
                     onChange={(e) => setHeaderRow(parseInt(e.target.value, 10))}
                   >
@@ -1159,7 +1123,7 @@ export function Identification() {
                         {String(i + 1)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <span className="hint">
                   {t("identification.dataFromRow", { row: headerRow + 1 })}
@@ -1208,9 +1172,9 @@ export function Identification() {
                       <label htmlFor={id} className="field-label">
                         {t(labelKey)}
                       </label>
-                      <select
+                      <Select options={[]}
                         id={id}
-                        className="input"
+
                         value={current === undefined ? "" : String(current)}
                         onChange={(e) =>
                           setMapping((m) => ({
@@ -1224,7 +1188,7 @@ export function Identification() {
                             {o.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   );
                 })}
@@ -1241,9 +1205,9 @@ export function Identification() {
                   <label htmlFor="nomen-filter" className="field-label">
                     {t("identification.filterLabel")}
                   </label>
-                  <select
+                  <Select options={[]}
                     id="nomen-filter"
-                    className="input"
+
                     value={filter}
                     onChange={(e) => setFilter(e.target.value as ItemFilter)}
                   >
@@ -1258,7 +1222,7 @@ export function Identification() {
                     {resultColumns.includes("optimized") ? (
                       <option value="optimized">{t("identification.optimizedOnly")}</option>
                     ) : null}
-                  </select>
+                  </Select>
                 </div>
                 <a
                   href={exportUrl.identificationCsv(
@@ -1280,7 +1244,7 @@ export function Identification() {
               </div>
 
               {itemsQuery.isLoading ? (
-                <span className="spinner" />
+                <Spinner aria-label={t("common.loading")} />
               ) : itemsQuery.isError ? (
                 <p className="error">
                   {itemsQuery.error instanceof Error
@@ -1324,19 +1288,19 @@ export function Identification() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <h3 className="card-title">{t("identification.empty")}</h3>
+                  <h3 className="section-title">{t("identification.empty")}</h3>
                 </div>
               )}
             </div>
           ) : null}
-      </article>
+      </section>
 
       {/* ---- Carte Mono-Corps : onglet Materiaux + n slots ---------------- */}
       <MonoCorpsCard
+        key={`${nomenPath}:${resultRunId ?? ""}`}
         runId={resultRunId}
-        sourcePath={activeRun?.source_ref ?? nomenPath}
+        sourcePath={nomenPath}
         analysisStatus={monoAnalysisStatus}
-        canAutoPreview={!!nomenPath.trim()}
         runIdentityFields={runIdentityFields}
         runIdentityFieldsLoading={!!resultRunId && (!activeRun || runsQuery.isLoading)}
       />

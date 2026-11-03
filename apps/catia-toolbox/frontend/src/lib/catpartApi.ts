@@ -1,43 +1,55 @@
-import { request } from "./apiClient";
+import { request, requestBlob } from "./apiClient";
 
-export type CatpartGeometryQuality = "partial" | "complete";
-
-export type CatpartExactSummaryDto = {
-  groups: number;
-  old_files: number;
-  new_files: number;
+export type CatpartSinMatchDto = {
+  sin: string;
+  old_pns: string[];
+  new_pns: string[];
+  old_files: string[];
+  new_files: string[];
 };
 
-export type CatpartCandidateDto = {
-  old_file: string;
-  new_file: string;
-  similarity: number;
-  confidence: "low";
-  old_geometry_quality: CatpartGeometryQuality;
-  new_geometry_quality: CatpartGeometryQuality;
-  binary_equal: boolean;
+export type CatpartSameGeDto = {
+  sin: string;
+  pn: string;
+  old_files: string[];
+  new_files: string[];
+};
+
+export type CatpartSoloDto = {
+  sin: string;
+  pn: string;
+  file: string;
 };
 
 export type CatpartCompareDto = {
   status: "complete" | "partial" | "empty";
   old_count: number;
   new_count: number;
-  exact: CatpartExactSummaryDto;
-  candidates: CatpartCandidateDto[];
-  unmatched_old: string[];
-  unmatched_new: string[];
+  matches: CatpartSinMatchDto[];
+  same_ge: CatpartSameGeDto[];
+  solo_a: CatpartSoloDto[];
+  solo_b: CatpartSoloDto[];
   issues: { file: string | null; code: string; message: string }[];
-  geometry_status: "not_requested" | "not_needed" | "available" | "missing" | "limit_exceeded";
 };
 
 export const catpartDiffApi = {
-  compare: (oldPath: string, newPath: string, includeGeometry = false) =>
+  compare: (oldPath: string, newPath: string) =>
     request<CatpartCompareDto>("/diff/catparts", {
       method: "POST",
       body: JSON.stringify({
         old_path: oldPath,
         new_path: newPath,
-        include_geometry: includeGeometry,
+      }),
+    }),
+  exportExcel: (oldPath: string, newPath: string) =>
+    requestBlob("/diff/catparts/export.xlsx", {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      body: JSON.stringify({
+        old_path: oldPath,
+        new_path: newPath,
       }),
     }),
 };

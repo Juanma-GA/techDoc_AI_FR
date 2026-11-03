@@ -24,18 +24,14 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     db: str
-    llm: str
 
 
-# ----- Settings (Mistral runtime config) ------------------------------------
+# ----- Settings ------------------------------------------------------------
 
 
 class SettingsIn(BaseModel):
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    chat_model: Optional[str] = None
-    embed_model: Optional[str] = None
-    llm_enabled: Optional[bool] = None
+    model_config = ConfigDict(extra="forbid")
+
     onedrive_input_root: Optional[str] = None
     onedrive_output_root: Optional[str] = None
     composer_license_server: Optional[str] = None
@@ -44,12 +40,6 @@ class SettingsIn(BaseModel):
 
 
 class SettingsOut(BaseModel):
-    api_key_set: bool
-    base_url: str
-    chat_model: str
-    embed_model: str
-    llm_enabled: bool
-    llm_tested: bool = False
     onedrive_input_root: str = ""
     onedrive_output_root: str = ""
     composer_license_server: str = ""
@@ -134,33 +124,19 @@ class ZipImportIn(BaseModel):
     max_nodes: int = Field(default=20000, ge=1, le=200000)
 
 
-# ----- Ecriture des livrables dans le dossier de sortie ---------------------
-
-
-class TestConnectionOut(BaseModel):
-    ok: bool
-    models: list[str] = Field(default_factory=list)
-    error: Optional[str] = None
-
-
 # ----- Admin (stats + reset) ------------------------------------------------
 
 
 class AdminStatsOut(BaseModel):
-    """Compteurs sommaires affiches dans l'onglet Donnees du preview."""
+    """Compteurs des modules actifs."""
 
     imports: int = 0
     nodes: int = 0
-    runs: int = 0
-    suggestions: int = 0
     diffs: int = 0
-    checks: int = 0
     conversions: int = 0
-    replacements: int = 0
     colorizations: int = 0
     nomenclatures: int = 0
     smgxml_runs: int = 0
-    qc_checklists: int = 0
     total_size_bytes: int = 0
 
 
@@ -232,38 +208,6 @@ class DiffRunOut(BaseModel):
     _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
 
 
-# ----- Module Verifications -------------------------------------------------
-
-
-class CheckIn(BaseModel):
-    rules: Optional[list[str]] = None
-    max_depth: int = 6
-    naming_style: str = "kebab"
-    forbidden_extensions: list[str] = Field(default_factory=lambda: ["tmp", "bak", "old"])
-
-
-class CheckResultOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    rule: str
-    severity: str
-    rel_path: str
-    message: str
-
-
-class CheckRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    status: str
-    summary: dict = Field(default_factory=dict)
-    created_at: datetime
-
-    _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
-
-
 # ----- Module Conversion ----------------------------------------------------
 
 
@@ -328,40 +272,6 @@ class ConversionRunOut(BaseModel):
     created_at: datetime
 
     _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
-
-
-# ----- Module Remplacement --------------------------------------------------
-
-
-class ReplacementItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    occurrence_path: str
-    old_ref: str
-    new_ref: str
-    status: str
-
-
-class ReplacementRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    status: str
-    summary: dict = Field(default_factory=dict)
-    created_at: datetime
-
-    _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
-
-
-class StatusIn(BaseModel):
-    status: str
-
-
-class ReplacementFromSourceIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
 
 
 # ----- Module Colorisation --------------------------------------------------
@@ -662,47 +572,6 @@ class SmgxmlRunOut(BaseModel):
     created_at: datetime
 
     _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
-
-
-# ----- Etape 5 : Controle Qualite (checklist) -------------------------------
-
-
-class QcItemIn(BaseModel):
-    label: str = Field(..., min_length=1)
-    category: str = ""
-
-
-class QcChecklistCreateIn(BaseModel):
-    title: str = Field(default="Controle qualite")
-    template: Optional[str] = None  # "assembly" | None -> items par defaut
-    items: list[QcItemIn] = Field(default_factory=list)
-
-
-class QcItemUpdateIn(BaseModel):
-    status: Optional[str] = None  # pending | ok | ko | na
-    comment: Optional[str] = None
-
-
-class QcItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    label: str
-    category: str
-    status: str
-    comment: str
-    position: int
-
-
-class QcChecklistOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    title: str
-    status: str
-    created_at: datetime
-    items: list[QcItemOut] = Field(default_factory=list)
-    summary: dict = Field(default_factory=dict)
 
 
 class TreeOptimizationCountIn(BaseModel):
