@@ -2,6 +2,21 @@
 chcp 65001 >nul
 setlocal
 
+REM Run through a temporary drive so pip's deep Qt paths stay below MAX_PATH.
+if defined CATIA_TOOLBOX_SHORT_PATH goto :path_ready
+set "SHORT_DRIVE="
+for %%D in (Z Y X W V U T S R Q P O N M) do if not defined SHORT_DRIVE if not exist "%%D:\" set "SHORT_DRIVE=%%D:"
+if not defined SHORT_DRIVE goto :path_ready
+subst %SHORT_DRIVE% "%~dp0..\.." >nul 2>nul
+if errorlevel 1 goto :path_ready
+set "CATIA_TOOLBOX_SHORT_PATH=1"
+call "%SHORT_DRIVE%\apps\catia-toolbox\_run.bat"
+set "RUN_RESULT=%ERRORLEVEL%"
+subst %SHORT_DRIVE% /d >nul 2>nul
+exit /b %RUN_RESULT%
+
+:path_ready
+
 REM ===========================================================================
 REM  catia-toolbox - Lancement local
 REM
