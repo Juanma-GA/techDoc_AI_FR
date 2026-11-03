@@ -38,6 +38,8 @@
     "dev:catia-toolbox": "concurrently -k -n back,front -c blue,green \"cd apps/catia-toolbox/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8004\" \"pnpm --filter @apps/catia-toolbox-frontend dev\"",
     "test:e2e:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend --if-present test:e2e",
     "openapi:gen:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend --if-present openapi:gen",
+    "desktop:dev:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend tauri:dev",
+    "desktop:build:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend tauri:build",
     "dev:ocr-vision": "concurrently -k -n back,front -c blue,green \"cd apps/ocr-vision/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8005\" \"pnpm --filter @apps/ocr-vision-frontend dev\"",
     "test:e2e:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present test:e2e",
     "openapi:gen:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present openapi:gen",

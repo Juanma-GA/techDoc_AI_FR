@@ -61,6 +61,12 @@ Double-click `start.bat`.
 
 Run `bash start.sh`.
 
+## Desktop (Windows x64)
+
+Run `pnpm desktop:dev:catia-toolbox` from the monorepo root for development. This requires Python 3.11+, Rust stable, Visual Studio C++ build tools, and WebView2.
+
+Run `package-desktop.bat` to build the native installer. The output is under `dist/tauri/release/bundle/`. The web launcher and web ZIP remain separate. Desktop SQLite data and staged files are stored in Tauri's per-user local-data directory, separately from `backend/data/`.
+
 ## Frontend Development
 
 From the repository root, run `pnpm dev:catia-toolbox` after confirming its configured backend port.
@@ -113,6 +119,7 @@ CATIA Toolbox auto-detects `ComposerConverter.exe` under the standard Dassault S
 - Metadata-only folder scanning may read directory structure outside `backend/data/storage/` because it is a core local workflow.
 - Business tables, file-browser layouts, workflow sections, and metrics remain app-specific because the shared package has no matching business components. Primitive controls and their appearance come from `@internal/ui`.
 - Windows and Unix launcher defaults are not yet aligned.
+- The optional Tauri shell is supported on Windows x64 and runs the existing FastAPI backend in a managed local child process.
 
 ## Technical References
 
