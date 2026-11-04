@@ -87,7 +87,7 @@ def _new_review(doc: Document, dm: dict, generation: int, rules: RulesConfig) ->
     return {
         "fingerprint": _fingerprint(doc, dm, generation, rules),
         "rules_revision": rules.revision,
-        "status": "pending", "passages": items,
+        "status": "pending", "partial": False, "passages": items,
         "position": {"page": next((item["page"] for item in items if item["page"]), 1),
                      "scroll_top": 0, "selected_id": None},
         "saved_at": None,
@@ -149,10 +149,10 @@ def require_complete(doc: Document, dm_id: str | None = None) -> None:
             continue
         if review["status"] == "skipped":
             continue
-        if review["status"] != "reviewed" or any(
+        if review["status"] != "reviewed" or (not review.get("partial") and any(
             item["decision"] not in detection.DESTINATIONS
             for item in review["passages"] if detection.is_reviewable(item)
-        ):
+        )):
             raise AppError(
                 "PRELIMINARY_REVIEW_REQUIRED",
                 "Terminez la revue des exigences preliminaires avant la generation ou l'export.",
@@ -175,6 +175,16 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         for candidate in load_dms(doc):
             if candidate["dm_type"] != "procedural":
                 continue
+            current = state["reviews"].get(candidate["dm_id"])
+            if current and current["fingerprint"] == _fingerprint(
+                doc, candidate, state["generation"], rules,
+            ):
+                if current.get("partial"):
+                    current["status"] = "reviewed"
+                    current["saved_at"] = _now()
+                    continue
+                if current["status"] in {"reviewed", "skipped"}:
+                    continue
             skipped = _new_review(doc, candidate, state["generation"], rules)
             skipped["status"] = "skipped"
             skipped["saved_at"] = _now()
@@ -227,6 +237,7 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
                 review["passages"][index:index + 1] = parts
                 review["position"]["selected_id"] = None
             review["status"] = "pending"
+            review["partial"] = True
         elif action.op == "complete":
             if not action.confirm_empty or any(
                 item["decision"] not in detection.DESTINATIONS
@@ -237,6 +248,7 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
                     409,
                 )
             review["status"] = "reviewed"
+            review["partial"] = False
         elif action.op == "cursor":
             pages = {p["page"] for p in review["passages"] if p["page"]} or {1}
             if action.page is not None and not min(pages) <= action.page <= max(pages):

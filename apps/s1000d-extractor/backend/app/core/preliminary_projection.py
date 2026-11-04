@@ -31,16 +31,22 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
     nodes = {node.id: node for node in copy.walk()}
     grouped: dict[tuple[str, int | None], list[dict]] = {}
     requirements: dict[str, list[IRNode]] = {key: [] for key in (*CATEGORIES, *EXTRA_DESTINATIONS)}
+    passages = [
+        {**passage, "decision": "body"}
+        if review.get("partial") and is_reviewable(passage) and passage["decision"] is None
+        else passage
+        for passage in review["passages"]
+    ]
     structural = {
         passage["node_id"]: passage["role"]
-        for passage in review["passages"]
+        for passage in passages
         if not is_reviewable(passage) and passage["row"] is None
     }
     heading_phases = {
         passage["node_id"]: passage["phase"]
-        for passage in review["passages"] if passage.get("role") == "heading" and "phase" in passage
+        for passage in passages if passage.get("role") == "heading" and "phase" in passage
     }
-    for passage in review["passages"]:
+    for passage in passages:
         if not is_reviewable(passage):
             continue
         grouped.setdefault((passage["node_id"], passage["row"]), []).append(passage)

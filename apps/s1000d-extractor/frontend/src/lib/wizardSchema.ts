@@ -27,6 +27,7 @@ const preliminarySchema: z.ZodType<PreliminaryState, z.ZodTypeDef, unknown> = z.
   reviews: z.record(z.object({
     fingerprint: z.string(), rules_revision: z.number().optional(),
     status: z.enum(["pending", "reviewed", "skipped", "stale"]),
+    partial: z.boolean().optional(),
     saved_at: z.string().nullable(),
     position: z.object({ page: z.number(), scroll_top: z.number(), selected_id: z.string().nullable() }),
     passages: z.array(z.object({

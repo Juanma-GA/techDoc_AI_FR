@@ -257,6 +257,40 @@ def test_skipping_reviews_generates_original_procedural_structure(procedure, cli
         assert json.loads(db.get(Document, doc_id).dms_json)[0]["tree"] == original
 
 
+def test_skipping_remaining_reviews_preserves_partial_edits_and_generates(procedure, client):
+    doc_id, _ = procedure
+    state = client.get(f"/api/v1/documents/{doc_id}/wizard").json()["preliminary"]
+    passages = [
+        item for item in state["reviews"]["proc"]["passages"]
+        if item.get("role", "content") == "content"
+    ]
+    edited = []
+    for index, passage in enumerate(passages[:3]):
+        text = f"Synthetic edited passage {index}."
+        response = _action(
+            client, doc_id, op="decide", passage_id=passage["id"],
+            destination="conditions" if index == 0 else "body", text=text,
+        )
+        assert response.status_code == 200, response.text
+        edited.append(text)
+
+    skipped = _action(client, doc_id, op="skip")
+    assert skipped.status_code == 200, skipped.text
+    partial = skipped.json()["reviews"]["proc"]
+    assert partial["status"] == "reviewed"
+    assert partial["partial"] is True
+    assert [item["text"] for item in partial["passages"] if item["text"] in edited] == edited
+
+    generated = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    assert generated.status_code == 200, generated.text
+    xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/proc/xml")
+    assert xml.status_code == 200, xml.text
+    for text in edited:
+        assert text in xml.text
+    assert "Consumables: grease." in xml.text
+    assert "Disconnect the connector." in xml.text
+
+
 def test_empty_review_requires_positive_confirmation_and_word_has_reading_pages(client):
     with SessionLocal() as db:
         doc = Document(filename="empty.docx", source_format="docx", storage_path="synthetic-unused",

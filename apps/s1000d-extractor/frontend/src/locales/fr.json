@@ -85,6 +85,12 @@
     "complete": "Marquer cette procédure comme vérifiée",
     "skip": "Ignorer les revues et générer en l'état",
     "skipConfirm": "Confirmer la génération sans revue",
+    "skipRemaining_one": "Ignorer la procédure restante et générer",
+    "skipRemaining_other": "Ignorer les {{count}} procédures restantes et générer",
+    "skipRemainingConfirm_one": "Confirmer : ignorer la procédure restante et générer",
+    "skipRemainingConfirm_other": "Confirmer : ignorer les {{count}} procédures restantes et générer",
+    "skipModified": "Générer avec les modifications",
+    "skipModifiedConfirm": "Confirmer la génération avec les modifications",
     "generate": "Générer et valider le XML",
     "sourceAt": "Voir la source — page {{page}}",
     "unlocated": "Page source non déterminée",
@@ -119,6 +125,7 @@
     "split": "Scinder le passage source",
     "status": {
       "pending": "Revue en cours",
+      "partial": "Modifications enregistrées",
       "reviewed": "Vérifié",
       "skipped": "Revue ignorée",
       "stale": "Revue obsolète"

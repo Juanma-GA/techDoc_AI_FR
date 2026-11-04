@@ -36,6 +36,7 @@ export type ProcedureReview = {
   fingerprint: string;
   rules_revision?: number;
   status: "pending" | "reviewed" | "skipped" | "stale";
+  partial?: boolean;
   passages: ReviewPassage[];
   position: ReaderPosition;
   saved_at: string | null;

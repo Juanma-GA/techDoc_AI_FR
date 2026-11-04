@@ -85,6 +85,12 @@
     "complete": "Mark this procedure as reviewed",
     "skip": "Skip reviews and generate as-is",
     "skipConfirm": "Confirm generation without review",
+    "skipRemaining_one": "Skip the remaining procedure and generate",
+    "skipRemaining_other": "Skip the {{count}} remaining procedures and generate",
+    "skipRemainingConfirm_one": "Confirm: skip the remaining procedure and generate",
+    "skipRemainingConfirm_other": "Confirm: skip the {{count}} remaining procedures and generate",
+    "skipModified": "Generate with edits",
+    "skipModifiedConfirm": "Confirm generation with edits",
     "generate": "Generate and validate XML",
     "sourceAt": "Show source — page {{page}}",
     "unlocated": "Source page unknown",
@@ -119,6 +125,7 @@
     "split": "Split source passage",
     "status": {
       "pending": "Review in progress",
+      "partial": "Edits saved",
       "reviewed": "Reviewed",
       "skipped": "Review skipped",
       "stale": "Outdated review"

@@ -92,10 +92,11 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
         const passage = review.passages.find((p) => p.id === action.passage_id)!;
         if ("destination" in action) passage.decision = action.destination ?? null;
         passage.text = action.text ?? passage.text;
+        review.partial = true;
       } else if (action.op === "complete") review.status = "reviewed";
       else if (action.op === "skip") {
         for (const skipped of Object.values(state.reviews)) {
-          skipped.status = "skipped";
+          skipped.status = skipped.partial ? "reviewed" : "skipped";
           skipped.saved_at = "2026-10-27T14:00:00Z";
         }
       }
@@ -409,6 +410,39 @@ test("skips every procedural review and starts generation directly", async ({ pa
 
   await expect.poll(() => Object.values(server.read().reviews)
     .every((review) => review.status === "skipped")).toBe(true);
+  await expect.poll(() => server.advances()).toBe(1);
+});
+
+test("saves edits and skips only the remaining procedures before generating", async ({ page }) => {
+  const server = await mockApplication(page, "docx", true);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+
+  const cards = page.locator("article");
+  for (const index of [0, 1, 2]) {
+    await chooseOption(
+      cards.nth(index).getByRole("button", { name: "Décision de classement" }),
+      ["Conditions", "Personnel", "Sécurité"][index]!,
+    );
+  }
+  await expect(page.getByRole("button", { name: "Ignorer la procédure restante et générer", exact: true }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  await expect(page.getByRole("button", {
+    name: "Skip the remaining procedure and generate", exact: true,
+  })).toBeVisible();
+  await page.getByRole("button", { name: "FR", exact: true }).click();
+  const skip = page.getByRole("button", { name: "Ignorer la procédure restante et générer", exact: true });
+  await expect(skip).toBeEnabled();
+  await skip.click();
+  await page.getByRole("button", {
+    name: "Confirmer : ignorer la procédure restante et générer", exact: true,
+  }).click();
+
+  await expect.poll(() => server.read().reviews.proc!.status).toBe("reviewed");
+  expect(server.read().reviews.proc!.partial).toBe(true);
+  expect(server.read().reviews.proc!.passages.slice(0, 3).every((passage) => passage.decision !== null)).toBe(true);
+  expect(server.read().reviews.empty!.status).toBe("skipped");
   await expect.poll(() => server.advances()).toBe(1);
 });
 

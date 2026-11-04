@@ -30,6 +30,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const [jump, setJump] = useState(0);
   const [readerEpoch, setReaderEpoch] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
+  const [pendingModified, setPendingModified] = useState(false);
   const [filter, setFilter] = useState("all");
   const [restartArmed, setRestartArmed] = useState(false);
   const [reloadArmed, setReloadArmed] = useState(false);
@@ -57,6 +58,17 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const complete = Object.values(review.state.reviews).every(
     (item) => item.status === "reviewed" || item.status === "skipped",
   );
+  const hasSavedProcedureWork = Object.values(review.state.reviews).some(
+    (item) => item.status === "reviewed" || (item.partial && item.status !== "stale"),
+  ) || pendingModified || Object.keys(review.edits).length > 0;
+  const remainingProcedures = procedures.filter((dm) => {
+    const item = review.state.reviews[dm.dm_id];
+    return !item || item.status === "stale" || (item.status === "pending" && !item.partial);
+  }).length;
+  const skipLabel = !hasSavedProcedureWork ? "skip"
+    : remainingProcedures > 0 ? "skipRemaining" : "skipModified";
+  const skipConfirmLabel = !hasSavedProcedureWork ? "skipConfirm"
+    : remainingProcedures > 0 ? "skipRemainingConfirm" : "skipModifiedConfirm";
 
   const changeProcedure = async (id: string) => {
     if (!await review.flush()) return;
@@ -69,12 +81,14 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     setSelectedId(target.position.selected_id);
     setJump(0);
     setConfirmed(false);
+    setPendingModified(false);
     setRestartArmed(false);
     setSkipArmed(false);
     clearTimeout(skipTimer.current);
   };
   const completeProcedure = async () => {
     if (!await review.act({ dm_id: active, op: "complete", confirm_empty: confirmed })) return;
+    setPendingModified(false);
     const next = procedures.slice(index + 1).concat(procedures.slice(0, index)).find((dm) => {
       if (dm.dm_id === active) return false;
       const status = review.state.reviews[dm.dm_id]?.status;
@@ -101,14 +115,14 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
           <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
           <h2 className="font-display text-lg">{t("preliminary.title")}</h2>
           <div className="ml-auto">
-            <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
-              {t(skipArmed ? "preliminary.skipConfirm" : "preliminary.skip")}
+            <Button variant="secondary" disabled={disabled} onClick={() => void skipReviews()}>
+              {t(`preliminary.${skipArmed ? skipConfirmLabel : skipLabel}`, { count: remainingProcedures })}
             </Button>
           </div>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
           <strong>{t("preliminary.progress", { current: index + 1, total: procedures.length })}</strong>
-          <span>{t(`preliminary.status.${current.status}`)}</span>
+          <span>{t(`preliminary.status.${current.partial && current.status === "pending" ? "partial" : current.status}`)}</span>
           <span role="status" aria-live="polite">{t(`preliminary.${savedLabel}`)}</span>
           {current.saved_at ? <time dateTime={current.saved_at}>{new Date(current.saved_at).toLocaleTimeString()}</time> : null}
         </div>
@@ -131,6 +145,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                     setSelectedId(next.reviews[next.active_dm_id]?.position.selected_id ?? null);
                     setJump(0);
                     setConfirmed(false);
+                    setPendingModified(false);
                     setReaderEpoch((value) => value + 1);
                   });
                 }
@@ -161,7 +176,11 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
               } else {
                 setRestartArmed(false);
                 void review.act({ dm_id: active, op: "restart" }).then((saved) => {
-                  if (saved) { setSelectedId(null); setJump(0); }
+                  if (saved) {
+                    setSelectedId(null);
+                    setJump(0);
+                    setPendingModified(false);
+                  }
                 });
               }
             }}>{t(restartArmed ? "preliminary.confirmAgain" : "preliminary.restart")}</Button>
@@ -202,10 +221,15 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                         disabled={disabled} editDisabled={busy} selected={selectedId === passage.id}
                         onSelect={() => { setSelectedId(passage.id); setJump((n) => n + 1); }}
                         onAction={async (action) => {
+                          if (action.op === "decide" || action.op === "split") setPendingModified(true);
                           const saved = await review.act(action);
+                          if (!saved && !review.state.reviews[active]?.partial) setPendingModified(false);
                           if (saved && action.op === "split") { setSelectedId(null); setJump(0); }
                           return saved;
-                        }} onEdit={review.edit} />
+                        }} onEdit={(action) => {
+                          setPendingModified(true);
+                          review.edit(action);
+                        }} />
                     ))}
                   {!passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
                 </div>

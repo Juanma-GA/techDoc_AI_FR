@@ -160,6 +160,7 @@ class ProcedureReviewOut(OutputModel):
     fingerprint: str
     rules_revision: int = 0
     status: Literal["pending", "reviewed", "skipped", "stale"]
+    partial: bool = False
     passages: list[ReviewPassageOut]
     position: ReaderPositionOut
     saved_at: str | None

@@ -160,11 +160,13 @@ generation. **Resume** restores the saved step without automatically advancing i
 - Word uses extracted structure with approximate reading pagination, **not**
   original Word page numbers. Tables, lists and warning blocks remain
   distinguishable.
-- A procedure is reviewed only after all content passages have decisions **and** the
-  reviewer confirms checking the whole DM, including empty categories. No
-  detection is not equivalent to a verified absence. The separate explicit skip
-  action marks every procedural review as skipped and generates from the original
-  extracted structure without applying review decisions.
+- A procedure is fully reviewed only after all content passages have decisions
+  **and** the reviewer confirms checking the whole DM, including empty categories.
+  No detection is not equivalent to a verified absence. The separate explicit
+  skip action preserves procedures with saved edits, applies those explicit
+  decisions, and keeps untouched passages in the original procedure body. Only
+  the remaining unmodified procedures are skipped; if nothing was edited, the
+  original extracted structure is generated unchanged.
 - Decisions, corrections, split source ranges, current procedure, selected
   passage, page and scroll position persist in SQLite, not browser storage.
   Saving failures remain visible and block leaving via wizard controls.
@@ -178,12 +180,13 @@ generation. **Resume** restores the saved step without automatically advancing i
   The procedural-rule version participates in the fingerprint: reviews made
   before the source-role/context change become stale and require an explicit
   restart, without silently migrating or discarding their saved decisions.
-- Human decisions, not heading heuristics, drive reviewed procedural XML in both
-  individual and ZIP exports. Skipped reviews remain distinct from reviewed ones
-  and preserve the original extracted structure for generation. The original
-  source tree is not rewritten. BREX-guided mapping choices remain persisted.
-  Incomplete/stale procedural reviews block generation and export until they are
-  reviewed or explicitly skipped against the current source. Single-document
+- Human decisions, not heading heuristics, drive reviewed or partially edited
+  procedural XML in both individual and ZIP exports. Skipped reviews preserve the
+  original extracted structure; partial reviews apply saved edits and keep
+  undecided passages in the procedure body. The original source tree is not
+  rewritten. BREX-guided mapping choices remain persisted. Incomplete/stale
+  procedural reviews block generation and export until reviewed or explicitly
+  skipped against the current source. Single-document
   extraction/override/XML APIs reject wizard documents rather than bypassing this
   workflow.
 

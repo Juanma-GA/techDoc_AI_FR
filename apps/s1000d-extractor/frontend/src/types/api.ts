@@ -1483,6 +1483,11 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "reviewed" | "skipped" | "stale";
+            /**
+             * Partial
+             * @default false
+             */
+            partial?: boolean;
             /** Passages */
             passages: components["schemas"]["ReviewPassageOut"][];
             position: components["schemas"]["ReaderPositionOut"];
