@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import i18next from "i18next";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { describe, expect, it, vi } from "vitest";
@@ -10,6 +11,8 @@ import { isReviewable, type ReviewPassage } from "../../lib/preliminaryTypes";
 import en from "../../locales/en.json";
 import fr from "../../locales/fr.json";
 import { PreliminaryPassage } from "./PreliminaryPassage";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const passage: ReviewPassage = {
   id: "p", node_id: "node", row: null, start: 0, end: 15,
@@ -68,6 +71,8 @@ describe.each([
     const { select, element, onAction } = await render(labels.language);
     expect(select?.textContent?.trim()).toBe(labels.proposed);
     expect(element.querySelector('button[aria-expanded="false"]')).not.toBeNull();
+    expect(element.querySelector("article")?.className).toContain("cursor-pointer");
+    expect(element.querySelector("article")?.className).toContain("hover:bg-bg-2");
     expect(element.querySelector("#preliminary-passage-p > p")?.textContent).not.toContain("Synthetic text.");
     expect(onAction).not.toHaveBeenCalled();
   });
@@ -89,4 +94,50 @@ describe.each([
     expect(select?.textContent?.trim()).toBe(labels.body);
     expect(onAction).not.toHaveBeenCalled();
   });
+});
+
+it("opens the whole passage and its edit details when clicking the passage box", async () => {
+  const instance = i18next.createInstance();
+  await instance.use(initReactI18next).init({
+    lng: "fr", resources: { fr: { translation: fr } },
+    interpolation: { escapeValue: false },
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(createElement(
+        I18nextProvider, { i18n: instance },
+        createElement(PreliminaryPassage, {
+          dmId: "procedure", passage, text: passage.text, disabled: false,
+          editDisabled: false, selected: false, onAction: vi.fn(async () => true),
+          onSelect: vi.fn(), onEdit: vi.fn(),
+        }),
+      ));
+    });
+
+    const passageText = host.querySelector("article > div p");
+    const details = host.querySelector("details");
+    expect(details?.open).toBe(false);
+    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(false);
+    expect(details?.open).toBe(true);
+
+    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(true);
+    expect(details?.open).toBe(false);
+
+    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(false);
+    expect(details?.open).toBe(true);
+
+    const collapse = host.querySelector<HTMLButtonElement>('button[aria-expanded="true"]');
+    await act(async () => collapse?.click());
+    expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(true);
+    expect(details?.open).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });

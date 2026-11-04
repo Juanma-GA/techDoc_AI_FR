@@ -1,6 +1,6 @@
 import { Button, Input, SelectMenu, Textarea } from "@internal/ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { reviewDestinations, type ReviewAction, type ReviewPassage } from "../../lib/preliminaryTypes";
@@ -32,6 +32,7 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const words = sourceWords(passage.source_text);
   const [splitAfter, setSplitAfter] = useState(Math.max(1, Math.floor(words.length / 2)));
   const [expanded, setExpanded] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const base = { dm_id: dmId, passage_id: passage.id };
   const pageLabel = passage.page === null
     ? t("preliminary.unlocated")
@@ -49,8 +50,22 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const decisionLabel = t(passage.decision ? "preliminary.decisionSummary" : "preliminary.proposed", {
     category: passage.decision ? t(`preliminary.category.${passage.decision}`) : pendingLabel,
   });
+  const togglePassage = () => {
+    const next = !expanded;
+    setExpanded(next);
+    setDetailsOpen(next);
+  };
+  const expandPassage = (event: MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element) ||
+        target.closest("button, input, textarea, select, label, summary, [data-passage-details]")) return;
+    togglePassage();
+  };
   return (
-    <article className={`rounded-sm border p-3 space-y-3 ${selected ? "border-bright bg-bg-3" : "bg-card"}`}>
+    <article onClick={expandPassage}
+      className={`cursor-pointer rounded-sm border p-3 space-y-3 transition-colors hover:bg-bg-2 ${
+        selected ? "border-bright bg-bg-3" : "bg-card"
+      }`}>
       <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-start">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -63,7 +78,7 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
             <Button variant="ghost" size="sm" aria-expanded={expanded}
               aria-controls={`preliminary-passage-${passage.id}`} className="shrink-0"
               aria-label={t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}
-              onClick={() => setExpanded((open) => !open)}>
+              onClick={togglePassage}>
               {expanded
                 ? <ChevronUp className="h-4 w-4" aria-hidden="true" />
                 : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
@@ -91,7 +106,9 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
       </div>
       <div id={`preliminary-passage-${passage.id}`} hidden={!expanded} className="space-y-3 border-t border-md pt-3">
         <p className="text-sm text-fg-dim">{t(`preliminary.rule.${passage.rule}`)}</p>
-        <details>
+        <details data-passage-details open={detailsOpen} onToggle={(event) => {
+          setDetailsOpen(event.currentTarget.open);
+        }}>
           <summary className="cursor-pointer text-fg-dim">{t("preliminary.editSplit")}</summary>
           <div className="space-y-3 pt-3">
             <label className="block">
