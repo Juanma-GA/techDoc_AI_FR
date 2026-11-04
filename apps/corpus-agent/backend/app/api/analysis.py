@@ -8,29 +8,34 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.checks.custom_rules import active_custom_rule_count, run_custom_rules
+from app.checks.cross_reference import run_reference_cross_checks
+from app.checks.custom_rules import (
+    CUSTOM_RULE_PROMPT_VERSION,
+    RuleEvaluationStats,
+    run_custom_rules,
+)
 from app.core.errors import AppError
 from app.core.indexer import index_file_version
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled, requires_llm
 from app.core.rules import ANOMALY_TYPES
-from app.db.models import AnalysisRun, Anomaly, File, Project
+from app.db.models import AnalysisRun, Anomaly, File, FileVersion, Project
 from app.db.session import get_db
 from app.parsers import parse_any
 from app.schemas import AnalysisRunIn, AnalysisRunOut
 
 router = APIRouter(tags=["analysis"])
+log = structlog.get_logger(__name__)
 
-# Pipeline de contrôle : corpus-agent n'évalue plus que via la checklist
-# (règles personnalisées importées / saisies, jugées par l'IA). Les checks
-# déterministes codés ont été retirés — cf. écart à la règle #6 documenté dans
-# le README (LLM OFF ⇒ analyse sans anomalie). Signature uniforme
-# `run_X(db, project, run_id, mistral, *, only_file_ids=None) -> list[Anomaly]`
-# (`only_file_ids` restreint l'analyse à un échantillon de fichiers).
+# Pipeline de contrôle : le check déterministe des références s'exécute quand
+# des colonnes du référentiel/BASL sont mappées ; la checklist métier reste
+# évaluée par l'IA. Les contrôles de références fonctionnent aussi LLM désactivé.
 _CHECKS = (
+    run_reference_cross_checks,
     run_custom_rules,
 )
 
@@ -104,12 +109,22 @@ def run_analysis(
     target_files = [
         f for f in project.files if target_ids is None or f.id in target_ids
     ]
+    coverage = {
+        "files_in_project": len(project.files),
+        "files_selected": len(target_files),
+        "files_without_version": 0,
+        "files_parse_failed": 0,
+        "files_parsed": 0,
+        "files_with_text": 0,
+        "files_empty": 0,
+        "indexing_failures": 0,
+    }
+    processable_ids: set[uuid.UUID] = set()
+    latest_by_file: dict[uuid.UUID, FileVersion] = {}
 
-    # Interrupteur global IA : si OFF, on force `mistral = None`. Comme toute
-    # l'évaluation passe désormais par la checklist (règles personnalisées
-    # jugées par l'IA), l'analyse aboutit (HTTP 200) mais SANS anomalie — il n'y
-    # a plus de contrôle déterministe local (écart assumé à la règle #6, cf.
-    # README). La clé Mistral reste préservée.
+    # Interrupteur global IA : si OFF, on force `mistral = None`. La checklist
+    # métier est alors ignorée ; les cross-checks déterministes référentiel/BASL
+    # continuent de tourner. La clé Mistral reste préservée.
     mistral: MistralClient | None
     if not get_llm_enabled(db):
         mistral = None
@@ -125,14 +140,29 @@ def run_analysis(
         # (`[ONGLET: …]`, `[PAGE: …]`) introduits par les parsers.
         for f in target_files:
             if not f.versions:
+                coverage["files_without_version"] += 1
                 continue
             latest = sorted(f.versions, key=lambda v: v.uploaded_at)[-1]
+            latest_by_file[f.id] = latest
             try:
                 parsed = parse_any(latest.storage_path)
                 text = parsed.get("text", "") or ""
                 # PDF/image scanné sans couche texte → OCR Mistral de secours.
                 latest.extracted_text = _ocr_if_needed(latest.storage_path, text, mistral)
-            except Exception:  # noqa: BLE001
+                coverage["files_parsed"] += 1
+                if latest.extracted_text.strip():
+                    coverage["files_with_text"] += 1
+                    processable_ids.add(f.id)
+                else:
+                    coverage["files_empty"] += 1
+            except Exception as exc:
+                coverage["files_parse_failed"] += 1
+                log.warning(
+                    "analysis_file_parse_failed",
+                    project_id=str(project.id),
+                    file_id=str(f.id),
+                    error_type=type(exc).__name__,
+                )
                 continue
         db.commit()
 
@@ -142,29 +172,60 @@ def run_analysis(
         def _sig(a: Anomaly) -> tuple[str, str]:
             return (
                 (a.category or "").strip().lower(),
-                (a.location or a.message or "").strip().lower(),
+                (a.evidence or a.location or a.message or "").strip().lower(),
             )
 
-        target_version_ids = {v.id for f in target_files for v in f.versions}
-        old_stmt = select(Anomaly).where(Anomaly.project_id == project.id)
-        if target_ids is not None:
-            old_stmt = old_stmt.where(Anomaly.file_version_id.in_(target_version_ids))
+        processable_version_ids = {
+            latest_by_file[file_id].id for file_id in processable_ids
+        }
+        old_stmt = select(Anomaly).where(
+            Anomaly.project_id == project.id,
+            Anomaly.file_version_id.in_(processable_version_ids),
+        )
         old_anomalies = list(db.scalars(old_stmt))
-        # Signatures deja REJETEES par le relecteur : a ne pas re-signaler.
-        rejected_sigs = {_sig(a) for a in old_anomalies if a.status == "rejected"}
-        # Purge les anciennes anomalies NON rejetees des fichiers analyses : met
-        # fin a l'accumulation de doublons a chaque re-run. Les rejetees sont
-        # CONSERVEES (decision du relecteur + memoire anti-faux-positif).
-        for a in old_anomalies:
-            if a.status != "rejected":
-                db.delete(a)
-        db.commit()
 
         # Exécution séquentielle des contrôles v4.
         produced: list[Anomaly] = []
+        evaluation_stats = RuleEvaluationStats()
         for check in _CHECKS:
-            produced.extend(check(db, project, run.id, mistral, only_file_ids=target_ids))
+            produced.extend(
+                check(
+                    db,
+                    project,
+                    run.id,
+                    mistral,
+                    only_file_ids=processable_ids,
+                    stats=evaluation_stats,
+                )
+            )
             db.commit()
+
+        evaluated_version_ids = {
+            latest_by_file[file_id].id
+            for file_id in evaluation_stats.evaluated_file_ids
+        }
+        evaluated_old_anomalies = [
+            anomaly for anomaly in old_anomalies
+            if anomaly.file_version_id in evaluated_version_ids
+        ]
+        evaluated_old_ids = {anomaly.id for anomaly in evaluated_old_anomalies}
+        evaluated_old_anomalies.extend(
+            anomaly
+            for anomaly in old_anomalies
+            if anomaly.type == "reference_cross_check"
+            and anomaly.id not in evaluated_old_ids
+        )
+        # Rejected signatures are retained only for documents successfully
+        # evaluated in this run; unavailable checks must not erase old findings.
+        rejected_sigs = {
+            _sig(anomaly)
+            for anomaly in evaluated_old_anomalies
+            if anomaly.status == "rejected"
+        }
+        for anomaly in evaluated_old_anomalies:
+            if anomaly.status != "rejected":
+                db.delete(anomaly)
+        db.commit()
 
         # Capitalisation des rejets : on retire les anomalies re-signalees
         # identiques a un ecart deja rejete (meme sujet + meme passage).
@@ -184,26 +245,56 @@ def run_analysis(
         summary.update(Counter(a.type for a in produced))
         if suppressed:
             summary["suppressed_rejected"] = suppressed
-        # Signal explicite : ce run a-t-il reellement eu de quoi verifier ?
-        # Sans ca, "0 anomalie car LLM indisponible / 0 regle active" et "0
-        # anomalie car tout est conforme" sont indiscernables cote UI, qui
-        # affichait a tort un livrable "conforme" (ecart README 2026-07-21:
-        # plus de fallback deterministe, tout passe par le LLM + la checklist).
+        has_verified_files = evaluation_stats.files_evaluated > 0
+        complete_coverage = (
+            coverage["files_selected"] > 0
+            and has_verified_files
+            and evaluation_stats.files_evaluated == coverage["files_selected"]
+            and evaluation_stats.evaluation_failures == 0
+            and coverage["files_without_version"] == 0
+            and coverage["files_parse_failed"] == 0
+            and coverage["files_empty"] == 0
+        )
         summary["llm_used"] = mistral is not None
-        summary["active_rules"] = active_custom_rule_count()
+        summary["active_rules"] = evaluation_stats.active_rules
+        summary["rule_set_sha256"] = evaluation_stats.rule_set_sha256
+        summary["prompt_version"] = CUSTOM_RULE_PROMPT_VERSION
+        summary["llm_model"] = str(getattr(mistral, "chat_model", "")) if mistral else ""
+        summary["files_in_project"] = coverage["files_in_project"]
+        summary["files_selected"] = coverage["files_selected"]
+        summary["files_without_version"] = coverage["files_without_version"]
+        summary["files_parse_failed"] = coverage["files_parse_failed"]
+        summary["files_parsed"] = coverage["files_parsed"]
+        summary["files_with_text"] = coverage["files_with_text"]
+        summary["files_empty"] = coverage["files_empty"]
+        summary["files_verified"] = evaluation_stats.files_evaluated
+        summary["evaluation_calls"] = evaluation_stats.evaluation_calls
+        summary["evaluation_failures"] = evaluation_stats.evaluation_failures
+        summary["rules_evaluated"] = evaluation_stats.rules_evaluated
+        summary["verification_status"] = (
+            "verified" if complete_coverage else "partial" if has_verified_files else "not_verified"
+        )
 
         # Indexation RAG pour le chatbot (best-effort, ignore les erreurs).
         indexed = 0
         if mistral is not None:
             for f in target_files:
-                if not f.versions:
+                if f.id not in processable_ids or not f.versions:
                     continue
                 latest = sorted(f.versions, key=lambda v: v.uploaded_at)[-1]
                 try:
                     indexed += index_file_version(db, latest, mistral)
-                except Exception:  # noqa: BLE001
+                except Exception as exc:
+                    coverage["indexing_failures"] += 1
+                    log.warning(
+                        "analysis_file_index_failed",
+                        project_id=str(project.id),
+                        file_id=str(f.id),
+                        error_type=type(exc).__name__,
+                    )
                     continue
         summary["indexed_chunks"] = indexed
+        summary["indexing_failures"] = coverage["indexing_failures"]
 
         run.status = "completed"
         run.finished_at = datetime.now(timezone.utc)

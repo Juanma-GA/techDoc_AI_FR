@@ -11,11 +11,13 @@ personnalisée n'est définie.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
-from typing import Optional
+from dataclasses import dataclass, field
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.checks.ftm_doc import latest_version, make_anomaly
@@ -36,6 +38,19 @@ _CONFIDENCE = {
     "medium": "moyenne", "high": "elevee",
 }
 _MAX_TEXT = 15000  # cap d'envoi à Mistral (caractères)
+CUSTOM_RULE_PROMPT_VERSION = "custom-rules-v1"
+log = structlog.get_logger(__name__)
+
+
+@dataclass
+class RuleEvaluationStats:
+    active_rules: int = 0
+    evaluation_calls: int = 0
+    evaluation_failures: int = 0
+    files_evaluated: int = 0
+    rules_evaluated: int = 0
+    evaluated_file_ids: set[uuid.UUID] = field(default_factory=set)
+    rule_set_sha256: str = ""
 
 
 def _normalize_for_verify(s: str) -> str:
@@ -51,7 +66,7 @@ def _is_extract_grounded(extrait: str, text: str) -> bool:
     return _normalize_for_verify(extrait) in _normalize_for_verify(text)
 
 
-def _load_custom_rules() -> list[dict]:
+def _load_custom_rules(configuration: dict | None = None) -> list[dict]:
     """Règles personnalisées valides (consigne non vide, validées, activées).
 
     Deux filtres indépendants excluent une règle de l'analyse :
@@ -64,7 +79,8 @@ def _load_custom_rules() -> list[dict]:
     ascendante (règles saisies à la main ou créées avant ces champs).
     """
     out: list[dict] = []
-    for r in (load_rules().get("regles_personnalisees") or []):
+    source = configuration if configuration is not None else load_rules()
+    for r in (source.get("regles_personnalisees") or []):
         if not isinstance(r, dict):
             continue
         if r.get("validated") is False:
@@ -93,7 +109,7 @@ def _resolve_placeholders(consigne: str, project: Project) -> str:
     homonyme du projet — registre de reference (`reference_columns`) d'abord,
     registre BASL (`basl_columns`) en repli. Un `{nom}` sans colonne
     correspondante est laisse tel quel (l'IA le verra comme du texte)."""
-    def _values_for(name: str) -> "tuple[str, list[str]] | None":
+    def _values_for(name: str) -> tuple[str, list[str]] | None:
         """(source_label, valeurs) de la colonne `name`, ou None si inconnue."""
         col = reference_column(project, name)
         if col is not None:
@@ -107,7 +123,7 @@ def _resolve_placeholders(consigne: str, project: Project) -> str:
             )
         return None
 
-    def _sub(match: "re.Match[str]") -> str:
+    def _sub(match: re.Match[str]) -> str:
         name = match.group(1)
         resolved = _values_for(name)
         if resolved is None:
@@ -135,14 +151,28 @@ def run_custom_rules(
     db: Session,
     project: Project,
     run_id: uuid.UUID,
-    mistral: Optional[MistralClient] = None,
+    mistral: MistralClient | None = None,
     *,
-    only_file_ids: Optional[set[uuid.UUID]] = None,
+    only_file_ids: set[uuid.UUID] | None = None,
+    stats: RuleEvaluationStats | None = None,
 ) -> list[Anomaly]:
     """Évalue les règles personnalisées actives contre chaque fichier du projet.
     `only_file_ids` (optionnel) restreint l'analyse à un échantillon de fichiers
     (réanalyse ciblée) ; `None` = tous les fichiers."""
-    rules = _load_custom_rules()
+    configuration = load_rules()
+    rules = _load_custom_rules(configuration)
+    if stats is not None:
+        stats.active_rules = len(rules)
+        digest_input = json.dumps(
+            {
+                "rules": rules,
+                "instructions": (configuration.get("instructions_libres") or "").strip(),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        stats.rule_set_sha256 = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
     anomalies: list[Anomaly] = []
     if mistral is None or not rules:
         return anomalies
@@ -163,7 +193,22 @@ def run_custom_rules(
         text = (latest.extracted_text or "").strip()
         if not text:
             continue
-        for item in _llm_eval(mistral, text, rules):
+        if stats is not None:
+            stats.evaluation_calls += 1
+        items, succeeded = _llm_eval(
+            mistral,
+            text,
+            rules,
+            (configuration.get("instructions_libres") or "").strip(),
+        )
+        if stats is not None:
+            if succeeded:
+                stats.files_evaluated += 1
+                stats.rules_evaluated += len(rules)
+                stats.evaluated_file_ids.add(f.id)
+            else:
+                stats.evaluation_failures += 1
+        for item in items:
             rule = by_id.get(str(item.get("regle_id") or ""))
             severity = rule["severity"] if rule else _SEVERITY.get(
                 str(item.get("severity") or "medium").lower(), "medium"
@@ -181,9 +226,10 @@ def run_custom_rules(
                 project, latest, run_id, "personnalisee", severity,
                 f"[{label}] {message}",
                 (item.get("suggestion") or "").strip(),
-                extrait[:200],
+                "",
                 confidence=confidence,
                 category=label,
+                evidence=extrait,
             )
             db.add(a)
             anomalies.append(a)
@@ -191,14 +237,18 @@ def run_custom_rules(
     return anomalies
 
 
-def _llm_eval(mistral: MistralClient, text: str, rules: list[dict]) -> list[dict]:
+def _llm_eval(
+    mistral: MistralClient,
+    text: str,
+    rules: list[dict],
+    general_instructions: str = "",
+) -> tuple[list[dict], bool]:
     """Soumet les règles personnalisées + le contenu FTM à Mistral.
-    Renvoie la liste d'écarts (dicts), `[]` en cas d'erreur."""
+    Renvoie les écarts et indique si l'appel a abouti."""
     # Contenu de document non fiable -> neutralise les sequences d'injection
     # (tokens speciaux, delimiteurs d'instruction) avant de l'envoyer au LLM.
     text = sanitize_document(text)
     excerpt = text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT] + "\n[...document tronqué...]"
-    general = (load_rules().get("instructions_libres") or "").strip()
     rules_json = json.dumps(
         [{"id": r["id"], "label": r["label"], "consigne": r["consigne"]} for r in rules],
         ensure_ascii=False,
@@ -210,7 +260,7 @@ def _llm_eval(mistral: MistralClient, text: str, rules: list[dict]) -> list[dict
         "CONTENU d'un document. Pour CHAQUE règle, repère dans le document les écarts à "
         "cette règle. Ne signale que des écarts réels et vérifiables, n'invente "
         "rien. "
-        + (f"Consignes générales : {general}. " if general else "")
+        + (f"Consignes générales : {general_instructions}. " if general_instructions else "")
         + 'Règle absolue sur le champ « extrait » : il DOIT être une COPIE '
         'VERBATIM (caractère pour caractère, sans paraphrase, sans correction, '
         'sans inversion de sens) d\'un passage présent dans le CONTENU DU '
@@ -235,7 +285,14 @@ def _llm_eval(mistral: MistralClient, text: str, rules: list[dict]) -> list[dict
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ])
-        items = result.get("anomalies", []) if isinstance(result, dict) else []
-        return [x for x in items if isinstance(x, dict)]
-    except Exception:  # noqa: BLE001
-        return []
+        if not isinstance(result, dict) or not isinstance(result.get("anomalies"), list):
+            raise ValueError("Invalid custom-rule response shape")
+        return [x for x in result["anomalies"] if isinstance(x, dict)], True
+    except Exception as exc:
+        log.exception(
+            "custom_rule_evaluation_failed",
+            error_type=type(exc).__name__,
+            rule_count=len(rules),
+            text_length=len(text),
+        )
+        return [], False

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any, Optional
@@ -16,8 +17,26 @@ from app.core.mistral_client import MistralClient
 from app.core.plain_text import PLAIN_TEXT_RULE_EN, PLAIN_TEXT_RULE_FR, PlainTextStream, strip_markdown
 from app.db.models import Anomaly, ChatMessage, ChatSession, Project
 
-
 log = logging.getLogger("corpus-agent.chat")
+
+_TITLE_STOP_WORDS = {
+    "a", "au", "aux", "avec", "can", "comment", "dans", "de", "des", "du", "en",
+    "est", "et", "la", "le", "les", "moi", "mon", "ma", "mes", "où", "par",
+    "peux", "pour", "que", "quel", "quelle", "quels", "quelles", "sur", "un",
+    "une", "the", "what", "which", "how", "is", "are", "for", "to", "of", "you",
+}
+
+
+def _session_title(question: str) -> str:
+    words = re.findall(r"[^\W_]+(?:[-'][^\W_]+)*", question, flags=re.UNICODE)
+    if not words:
+        return "Nouvelle conversation"
+    meaningful = [word for word in words if word.casefold() not in _TITLE_STOP_WORDS]
+    selected = (meaningful or words)[:3]
+    if len(selected) == 1 and len(words) > 1:
+        selected = words[:2]
+    title = " ".join(selected)
+    return title[:1].upper() + title[1:]
 
 
 SYSTEM_PROMPT_FR = (
@@ -167,6 +186,8 @@ def build_context_messages(
         )
         if a.location:
             line += f", emplacement : {a.location}"
+        if a.evidence:
+            line += f"\n  preuve source : {a.evidence}"
         line += f"\n  message : {a.message}"
         if a.suggestion:
             line += f"\n  suggestion : {a.suggestion}"
@@ -179,6 +200,8 @@ def build_context_messages(
             f"- [{a.type} | sévérité {a.severity} | statut {a.status}{cat}] "
             f"fichier « {_file_of(a)} » — {a.message} (résolue le {resolved})"
         )
+        if a.evidence:
+            line += f"\n  preuve source : {a.evidence}"
         # Motif de rejet saisi par le relecteur : signal cle pour reviser la
         # checklist (faux positif recurrent -> regle a affiner ou retirer).
         if a.feedback:
@@ -232,7 +255,7 @@ def get_or_create_session(
         s = db.get(ChatSession, session_id)
         if s is not None:
             return s
-    title = question[:60] + ("…" if len(question) > 60 else "")
+    title = _session_title(question)
     primary = project_ids[0] if project_ids else None
     s = ChatSession(
         project_id=primary,

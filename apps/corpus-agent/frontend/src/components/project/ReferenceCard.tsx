@@ -27,6 +27,12 @@ export function ReferenceCard({ pid }: { pid: string }) {
   const [baslPreview, setBaslPreview] = useState<Record<string, SheetPreviewOut>>({});
   const [baslMsg, setBaslMsg] = useState<string | null>(null);
 
+  const invalidateAnalysis = () => {
+    void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+    void qc.invalidateQueries({ queryKey: ["kpis"] });
+    void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
+  };
+
   const ref = refQuery.data;
   useEffect(() => {
     if (ref) {
@@ -93,13 +99,18 @@ export function ReferenceCard({ pid }: { pid: string }) {
 
   const upload = useMutation({
     mutationFn: (file: File) => referenceApi.upload(pid, file),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["reference", pid] }),
+    onSuccess: (res) => {
+      setFeedback(res.analysis_run_id ? t("referentiel.analysisUpdated") : t("referentiel.mappingSaved"));
+      void qc.invalidateQueries({ queryKey: ["reference", pid] });
+      invalidateAnalysis();
+    },
   });
   const uploadBasl = useMutation({
     mutationFn: (file: File) => referenceApi.uploadBasl(pid, file),
-    onSuccess: () => {
-      setBaslMsg(t("referentiel.baslSaved"));
+    onSuccess: (res) => {
+      setBaslMsg(res.analysis_run_id ? t("referentiel.analysisUpdated") : t("referentiel.baslSaved"));
       void qc.invalidateQueries({ queryKey: ["basl", pid] });
+      invalidateAnalysis();
     },
   });
   const saveBasl = useMutation({
@@ -108,9 +119,10 @@ export function ReferenceCard({ pid }: { pid: string }) {
         columns: baslRows.map((r) => ({ name: r.name, sheet: r.sheet, column: r.column })),
         header_rows: baslHeaderRows,
       }),
-    onSuccess: () => {
-      setBaslMsg(t("referentiel.baslMappingSaved"));
+    onSuccess: (res) => {
+      setBaslMsg(res.analysis_run_id ? t("referentiel.analysisUpdated") : t("referentiel.baslMappingSaved"));
       void qc.invalidateQueries({ queryKey: ["basl", pid] });
+      invalidateAnalysis();
     },
   });
   const save = useMutation({
@@ -119,9 +131,10 @@ export function ReferenceCard({ pid }: { pid: string }) {
         columns: rows.map((r) => ({ name: r.name, sheet: r.sheet, column: r.column })),
         header_rows: headerRows,
       }),
-    onSuccess: () => {
-      setFeedback(t("referentiel.mappingSaved"));
+    onSuccess: (res) => {
+      setFeedback(res.analysis_run_id ? t("referentiel.analysisUpdated") : t("referentiel.mappingSaved"));
       void qc.invalidateQueries({ queryKey: ["reference", pid] });
+      invalidateAnalysis();
     },
   });
 
