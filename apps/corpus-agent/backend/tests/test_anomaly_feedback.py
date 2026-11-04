@@ -5,18 +5,30 @@ from __future__ import annotations
 import uuid as _uuid
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.anomalies import router as anomalies_router
 from app.db.models import Anomaly, Project
-from app.db.session import Base, SessionLocal, engine
-from app.main import create_app
+from app.db.session import Base, SessionLocal, engine, get_db
+
+
+def _test_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture
 def client() -> TestClient:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    return TestClient(create_app())
+    app = FastAPI()
+    app.include_router(anomalies_router, prefix="/api/v1")
+    app.dependency_overrides[get_db] = _test_db
+    return TestClient(app)
 
 
 def _make_anomaly() -> str:
@@ -27,7 +39,8 @@ def _make_anomaly() -> str:
         db.flush()
         a = Anomaly(
             project_id=p.id, type="personnalisee", category="Sécurité",
-            severity="high", message="écart", suggestion="", location="", status="open",
+            severity="high", message="écart", suggestion="", evidence="preuve synthétique",
+            location="", status="open",
         )
         db.add(a)
         db.commit()
@@ -43,6 +56,24 @@ def test_reject_with_feedback_persists(client: TestClient) -> None:
     body = resp.json()
     assert body["status"] == "rejected"
     assert body["feedback"] == "faux positif"
+    assert body["evidence"] == "preuve synthétique"
+    assert body["run_id"] is None
+
+
+def test_anomaly_csv_exports_source_evidence(client: TestClient) -> None:
+    anomaly_id = _make_anomaly()
+    with SessionLocal() as db:
+        anomaly = db.get(Anomaly, _uuid.UUID(anomaly_id))
+        assert anomaly is not None
+        project_id = str(anomaly.project_id)
+
+    response = client.get(f"/api/v1/projects/{project_id}/anomalies/export.csv")
+
+    assert response.status_code == 200
+    assert "file_version_id" in response.text.splitlines()[0]
+    assert "run_id" in response.text.splitlines()[0]
+    assert "evidence" in response.text.splitlines()[0]
+    assert "preuve synthétique" in response.text
 
 
 def test_status_without_feedback_keeps_existing(client: TestClient) -> None:

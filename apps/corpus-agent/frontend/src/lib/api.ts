@@ -21,6 +21,7 @@ import type {
   ChecklistImportMode,
   ChecklistImportResult,
   CorpusPathOut,
+  ConnectivityOut,
   CustomRule,
   FileOut,
   FolderListOut,
@@ -136,7 +137,10 @@ async function downloadBlob(path: string, fallbackName: string): Promise<void> {
 
 // --- Clients ----------------------------------------------------------------
 
-export const healthApi = { read: () => api.get<HealthResponse>("/health") };
+export const healthApi = {
+  read: () => api.get<HealthResponse>("/health"),
+  connectivity: () => api.get<ConnectivityOut>("/health/connectivity"),
+};
 
 export const i18nApi = {
   lang: (lng: string) => api.get<I18nLangOut>(`/i18n/${lng}`),
@@ -205,6 +209,7 @@ export const referenceApi = {
 };
 
 export const analysisApi = {
+  runs: (pid: string) => api.get<AnalysisRunOut[]>(`/projects/${pid}/analysis/runs`),
   // `fileIds` optionnel : restreint l'analyse a un echantillon de fichiers
   // (reanalyse ciblee). Vide / absent = tout le projet.
   run: (pid: string, fileIds?: string[]) =>

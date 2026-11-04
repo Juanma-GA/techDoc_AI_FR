@@ -11,20 +11,32 @@ import json
 import uuid as _uuid
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.analysis import router as analysis_router
 from app.checks import custom_rules
 from app.core.mistral_client import set_llm_enabled
 from app.db.models import Project
-from app.db.session import Base, SessionLocal, engine
-from app.main import create_app
+from app.db.session import Base, SessionLocal, engine, get_db
+
+
+def _test_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture
 def client() -> TestClient:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    return TestClient(create_app())
+    app = FastAPI()
+    app.include_router(analysis_router, prefix="/api/v1")
+    app.dependency_overrides[get_db] = _test_db
+    return TestClient(app)
 
 
 def _project() -> str:
@@ -54,6 +66,7 @@ def test_llm_used_false_when_llm_disabled(client: TestClient) -> None:
 
     summary = _run_summary(client, pid)
     assert summary["llm_used"] is False
+    assert summary["verification_status"] == "not_verified"
     # Pas de rules.json configure dans ce test -> 0 regle active par defaut.
     assert summary["active_rules"] == 0
 

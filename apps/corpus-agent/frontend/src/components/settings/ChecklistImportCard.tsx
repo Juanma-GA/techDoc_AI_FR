@@ -1,3 +1,4 @@
+import { FileDropzone } from "@internal/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -167,7 +168,14 @@ export function ChecklistImportCard() {
             ))}
           </select>
         </label>
-        <input type="file" accept=".xlsx,.xlsm" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+        <FileDropzone
+          accept=".xlsx,.xlsm"
+          multiple={false}
+          disabled={busy || directBusy}
+          label={t("settings.chooseChecklist")}
+          description={file?.name ?? t("settings.checklistFormats")}
+          onFiles={(files) => void onPick(files[0] ?? null)}
+        />
       </div>
       {mode === "replace" && <div className="banner warn">{t("settings.importReplaceWarn")}</div>}
 

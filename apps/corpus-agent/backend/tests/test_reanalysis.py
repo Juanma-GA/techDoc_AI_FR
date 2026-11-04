@@ -12,20 +12,32 @@ import uuid as _uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.models import Project
+from app.checks.ftm_doc import latest_version
+from app.db.models import File, FileVersion, Project
 from app.db.session import Base, SessionLocal, engine
 from app.main import create_app
 
 
-def _fake_check(db, project, run_id, mistral, only_file_ids=None):  # type: ignore[no-untyped-def]
+def _fake_check(db, project, run_id, mistral, only_file_ids=None, stats=None):  # type: ignore[no-untyped-def]
     from app.checks.ftm_doc import make_anomaly
 
-    a = make_anomaly(
-        project, None, run_id, "personnalisee", "medium",
-        "[Script] ecart detecte", "", "le passage fautif", category="Script",
-    )
-    db.add(a)
-    return [a]
+    anomalies = []
+    for file in project.files:
+        if only_file_ids is not None and file.id not in only_file_ids:
+            continue
+        version = latest_version(file)
+        if version is None:
+            continue
+        if stats is not None:
+            stats.files_evaluated += 1
+            stats.evaluated_file_ids.add(file.id)
+        anomaly = make_anomaly(
+            project, version, run_id, "personnalisee", "medium",
+            "[Script] ecart detecte", "", "le passage fautif", category="Script",
+        )
+        db.add(anomaly)
+        anomalies.append(anomaly)
+    return anomalies
 
 
 @pytest.fixture
@@ -36,19 +48,39 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
-def _project() -> str:
+def _project(storage_path) -> str:
     db = SessionLocal()
     try:
         p = Project(name=f"P-{_uuid.uuid4().hex[:8]}")
         db.add(p)
+        db.flush()
+        file = File(
+            project_id=p.id,
+            current_name="document.txt",
+            mime_type="text/plain",
+        )
+        db.add(file)
+        db.flush()
+        db.add(
+            FileVersion(
+                file_id=file.id,
+                filename=file.current_name,
+                storage_path=str(storage_path),
+                sha256="synthetic",
+                size=storage_path.stat().st_size,
+                extracted_text="",
+            )
+        )
         db.commit()
         return str(p.id)
     finally:
         db.close()
 
 
-def test_rerun_does_not_accumulate(client: TestClient) -> None:
-    pid = _project()
+def test_rerun_does_not_accumulate(client: TestClient, tmp_path) -> None:
+    storage_path = tmp_path / "document.txt"
+    storage_path.write_text("Synthetic maintenance instructions to be checked.", encoding="utf-8")
+    pid = _project(storage_path)
     client.post(f"/api/v1/projects/{pid}/analysis/run")
     client.post(f"/api/v1/projects/{pid}/analysis/run")
     anoms = client.get(f"/api/v1/projects/{pid}/anomalies").json()
@@ -56,8 +88,10 @@ def test_rerun_does_not_accumulate(client: TestClient) -> None:
     assert len(anoms) == 1
 
 
-def test_rejected_not_reflagged(client: TestClient) -> None:
-    pid = _project()
+def test_rejected_not_reflagged(client: TestClient, tmp_path) -> None:
+    storage_path = tmp_path / "document.txt"
+    storage_path.write_text("Synthetic maintenance instructions to be checked.", encoding="utf-8")
+    pid = _project(storage_path)
     client.post(f"/api/v1/projects/{pid}/analysis/run")
     anoms = client.get(f"/api/v1/projects/{pid}/anomalies").json()
     assert len(anoms) == 1

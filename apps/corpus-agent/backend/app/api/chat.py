@@ -17,14 +17,14 @@ from app.core.chat_engine import (
     session_scope_ids,
     stream_answer,
 )
+from app.core.demo_mode import get_demo_enabled, visible_projects
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled, requires_llm
+from app.core.plain_text import strip_markdown
 from app.core.prompt_sanitizer import sanitize_prompt
 from app.db.models import ChatMessage, ChatSession, Project
 from app.db.session import SessionLocal, get_db
 from app.schemas import ChatAskIn, ChatMessageOut, ChatSessionOut
-from app.core.plain_text import strip_markdown
-
 
 log = logging.getLogger("corpus-agent.chat")
 
@@ -34,7 +34,13 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.get("/sessions", response_model=list[ChatSessionOut])
 def list_sessions(db: Session = Depends(get_db)) -> list[ChatSession]:
     """Liste TOUTES les sessions, multi-scope inclus (plus de filtre projet_id)."""
-    return list(db.scalars(select(ChatSession).order_by(ChatSession.created_at.desc())))
+    statement = select(ChatSession).order_by(ChatSession.created_at.desc())
+    if get_demo_enabled(db):
+        project_ids = [project.id for project in visible_projects(db)]
+        statement = statement.where(ChatSession.project_id.in_(project_ids))
+        sessions = list(db.scalars(statement))
+        return [session for session in sessions if session_scope_ids(session) == project_ids]
+    return list(db.scalars(statement))
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
@@ -66,6 +72,11 @@ def delete_session(session_id: uuid.UUID, db: Session = Depends(get_db)) -> Resp
 
 def _resolve_projects(db: Session, project_ids: list[uuid.UUID]) -> list[Project]:
     """Liste vide → tous les projets. Sinon, valide chaque ID."""
+    if get_demo_enabled(db):
+        projects = visible_projects(db, project_ids or None)
+        if not projects or (project_ids and {p.id for p in projects} != set(project_ids)):
+            raise AppError("PROJECT_NOT_FOUND", "Projet introuvable", status_code=404)
+        return projects
     if not project_ids:
         return []
     out: list[Project] = []
@@ -86,6 +97,10 @@ def _resolve_projects(db: Session, project_ids: list[uuid.UUID]) -> list[Project
 @requires_llm("corpus-agent.chat.ask")
 async def ask(body: ChatAskIn, db: Session = Depends(get_db)):
     projects = _resolve_projects(db, list(body.project_ids))
+    if body.session_id and get_demo_enabled(db):
+        session = db.get(ChatSession, body.session_id)
+        if session is None or session_scope_ids(session) != [project.id for project in projects]:
+            raise AppError("CHAT_SESSION_NOT_FOUND", "Session introuvable", status_code=404)
 
     # Interrupteur global IA : le chatbot dépend entièrement du LLM. Si OFF, on
     # réutilise le même garde-fou que « Mistral non configuré » → 400 explicite

@@ -1,0 +1,146 @@
+{
+  "version": "1.0",
+  "domain_packs": [
+    {
+      "domain": "ged",
+      "scenarios": [
+        {
+          "id": "ged-missing-revision",
+          "documents": [
+            {
+              "id": "ged-record",
+              "text": "Document: PROC-104\nOwner: Quality\nStatus: Approved\n"
+            }
+          ],
+          "expected_findings": [
+            {
+              "source_id": "ged-record",
+              "category": "metadata",
+              "severity": "medium",
+              "evidence": "Status: Approved"
+            }
+          ]
+        },
+        {
+          "id": "ged-complete-metadata",
+          "documents": [
+            {
+              "id": "ged-complete",
+              "text": "Document: PROC-105\nRevision: C\nOwner: Quality\nStatus: Approved\n"
+            }
+          ],
+          "expected_findings": []
+        }
+      ]
+    },
+    {
+      "domain": "technical-documentation",
+      "scenarios": [
+        {
+          "id": "technical-reference-conflict",
+          "documents": [
+            {
+              "id": "manual",
+              "text": "The pressure limit is 12 bar."
+            },
+            {
+              "id": "specification",
+              "text": "Maximum operating pressure: 10 bar."
+            }
+          ],
+          "expected_findings": [
+            {
+              "source_id": "specification",
+              "category": "cross-document consistency",
+              "severity": "high",
+              "evidence": "Maximum operating pressure: 10 bar."
+            }
+          ]
+        },
+        {
+          "id": "technical-ambiguous-reference",
+          "documents": [
+            {
+              "id": "ambiguous",
+              "text": "Refer to the latest approved procedure."
+            }
+          ],
+          "expected_findings": [],
+          "expected_abstention": true
+        }
+      ]
+    },
+    {
+      "domain": "testability",
+      "scenarios": [
+        {
+          "id": "testability-unverified-requirement",
+          "documents": [
+            {
+              "id": "requirement",
+              "text": "REQ-201: The controller shall record each failed startup attempt."
+            }
+          ],
+          "expected_findings": [
+            {
+              "source_id": "requirement",
+              "category": "verification coverage",
+              "severity": "high",
+              "evidence": "REQ-201: The controller shall record each failed startup attempt."
+            }
+          ]
+        },
+        {
+          "id": "testability-linked-case",
+          "documents": [
+            {
+              "id": "test-case",
+              "text": "TC-201 verifies REQ-201 by checking the failed-startup counter."
+            }
+          ],
+          "expected_findings": []
+        }
+      ]
+    },
+    {
+      "domain": "industrial-maintenance",
+      "scenarios": [
+        {
+          "id": "maintenance-unlisted-tool",
+          "documents": [
+            {
+              "id": "work-card",
+              "text": "Step 4: Tighten the flange using tool TL-900."
+            },
+            {
+              "id": "tool-register",
+              "text": "TL-901: Torque wrench, calibrated."
+            }
+          ],
+          "expected_findings": [
+            {
+              "source_id": "work-card",
+              "category": "tooling reference",
+              "severity": "medium",
+              "evidence": "Step 4: Tighten the flange using tool TL-900."
+            }
+          ]
+        },
+        {
+          "id": "maintenance-listed-tool",
+          "documents": [
+            {
+              "id": "work-card-valid",
+              "text": "Step 5: Use TL-901, torque wrench, calibrated through 2027-06."
+            },
+            {
+              "id": "tool-register-valid",
+              "text": "TL-901: Torque wrench, calibration due 2027-06."
+            }
+          ],
+          "expected_findings": []
+        }
+      ]
+    }
+  ]
+}

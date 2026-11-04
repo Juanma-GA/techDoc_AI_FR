@@ -1,7 +1,13 @@
 import {
   AppShell,
+  Button,
   DemoModeBadge,
   DemoModeProvider,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
   ErrorBoundary,
   LanguageSwitcher,
   PortalLink,
@@ -9,6 +15,7 @@ import {
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
+import { MessageCircle } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -33,7 +40,7 @@ const Chatbot = lazy(() => import("./routes/Chatbot").then((m) => ({ default: m.
 const Architecture = lazy(() =>
   import("./routes/Architecture").then((m) => ({ default: m.Architecture })),
 );
-const Data = lazy(() => import("./routes/Data").then((m) => ({ default: m.Data })));
+const Knowledge = lazy(() => import("./routes/Knowledge").then((m) => ({ default: m.Knowledge })));
 const Settings = lazy(() => import("./routes/Settings").then((m) => ({ default: m.Settings })));
 
 // Coquille pixel-identique au preview.html (.layout / .sidebar / .nav-item /
@@ -42,8 +49,7 @@ const navItems = [
   { to: "/", labelKey: "nav.manager", icon: "home" },
   { to: "/projects", labelKey: "nav.projects", icon: "project" },
   { to: "/redacteur", labelKey: "nav.redacteur", icon: "file" },
-  { to: "/chatbot", labelKey: "nav.chatbot", icon: "chat" },
-  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/knowledge", labelKey: "nav.knowledge", icon: "data" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
@@ -63,6 +69,11 @@ export function App() {
   // Onglet cible en attente de confirmation (clic intercepte pendant qu'une
   // page a des modifications non enregistrees, cf. useUnsavedGuardStore).
   const [pendingTo, setPendingTo] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  useEffect(() => {
+    if (location.pathname === "/chatbot") setChatOpen(true);
+  }, [location.pathname]);
 
   // Fermeture d'onglet / rechargement / URL tapee a la main : seul le
   // navigateur peut demander confirmation a ce stade (dialogue natif standard
@@ -115,9 +126,7 @@ export function App() {
         </>
       }
       llmStatus={<LlmBadge />}
-      navigation={navItems
-        .filter(({ to }) => !(demoEnabled && to === "/data"))
-        .map(({ to, labelKey, icon }) => {
+      navigation={navItems.map(({ to, labelKey, icon }) => {
         const label = t(labelKey);
         return (
           <NavLink
@@ -162,18 +171,54 @@ export function App() {
       <DemoModeProvider mode={demoEnabled ? "demo" : "normal"} isReady={settingsQuery.isSuccess}>
         <ErrorBoundary>
           <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
-            <Routes>
+            {settingsQuery.isPending ? (
+              <div className="empty-state">{t("common.loading")}</div>
+            ) : settingsQuery.isError ? (
+              <div role="alert" className="error">{settingsQuery.error.message}</div>
+            ) : <Routes>
               <Route path="/" element={<Manager />} />
               <Route path="/projects" element={<Projects />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/redacteur" element={<Redacteur />} />
-              <Route path="/chatbot" element={<Chatbot />} />
+              <Route path="/chatbot" element={<Navigate to="/" replace />} />
+              <Route path="/knowledge" element={<Knowledge />} />
               <Route path="/architecture" element={<Architecture />} />
-              <Route path="/data" element={demoEnabled ? <Navigate to="/" replace /> : <Data />} />
+              <Route path="/data" element={<Navigate to="/" replace />} />
               <Route path="/settings" element={<Settings />} />
-            </Routes>
+            </Routes>}
           </Suspense>
         </ErrorBoundary>
+        {settingsQuery.isSuccess && (
+          <Dialog open={chatOpen} onOpenChange={setChatOpen} modal={false}>
+            <DialogTrigger asChild>
+              <Button
+                size="icon"
+                className="fixed bottom-6 right-6 z-40 h-16 w-16 rounded-full shadow-card"
+                aria-label={t("chatbot.open")}
+                title={t("chatbot.open")}
+              >
+                <MessageCircle size={28} aria-hidden="true" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent
+              closeLabel={t("chatbot.close")}
+              onInteractOutside={(event) => event.preventDefault()}
+              style={{
+                left: "auto", right: 0, top: 0, transform: "none",
+                width: "min(100vw, 42rem)", maxWidth: "100vw", height: "100dvh",
+                borderRadius: 0, display: "flex", flexDirection: "column", gap: "0.75rem",
+              }}
+            >
+              <DialogTitle className="pr-8">{t("nav.chatbot")}</DialogTitle>
+              <DialogDescription>{t("page.chatbot")}</DialogDescription>
+              <ErrorBoundary>
+                <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
+                  <Chatbot />
+                </Suspense>
+              </ErrorBoundary>
+            </DialogContent>
+          </Dialog>
+        )}
       </DemoModeProvider>
     </AppShell>
   );

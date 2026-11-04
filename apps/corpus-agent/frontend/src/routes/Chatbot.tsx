@@ -1,5 +1,6 @@
+import { Button, CollapsibleSection } from "@internal/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ProjectSlicer } from "../components/ProjectSlicer";
@@ -14,11 +15,10 @@ export function Chatbot() {
   const { t, i18n } = useTranslation();
   const lang = (i18n.language || "fr").slice(0, 2);
   const qc = useQueryClient();
-  const [question, setQuestion] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { scopeProjectIds, currentSessionId, pendingNew, messages, streaming } = useChatStore();
+  const { scopeProjectIds, currentSessionId, pendingNew, messages, streaming, draft: question, setDraft: setQuestion } = useChatStore();
   const store = useChatStore();
   const { send } = useSseChat();
 
@@ -79,18 +79,11 @@ export function Chatbot() {
   };
 
   return (
-    <>
-      <div className="page-header">
-        <h1>{t("nav.chatbot")}</h1>
-        <p>{t("page.chatbot")}</p>
-      </div>
-
-      <div className="chat-layout">
-        <div className="card chat-sessions">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <span className="card-title" style={{ margin: 0 }}>{t("chatbot.sessions")}</span>
-            <button type="button" className="btn ghost small" onClick={() => store.startNew()}>{t("chatbot.new")}</button>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex shrink-0 justify-end">
+          <Button variant="secondary" size="sm" disabled={streaming} onClick={() => store.startNew()}>{t("chatbot.new")}</Button>
+        </div>
+        <CollapsibleSection title={t("chatbot.sessions")} defaultOpen={false} className="shrink-0 max-h-48 overflow-y-auto">
           <div className="session-list" style={{ marginTop: 10 }}>
             {pendingNew && !currentSessionId && (
               <div className="session-row active">
@@ -101,19 +94,19 @@ export function Chatbot() {
               </div>
             )}
             {sessions.map((s) => (
-              <div key={s.id} className={`session-row${s.id === currentSessionId ? " active" : ""}`} onClick={() => void pickSession(s)}>
-                <div className="session-row-main">
+              <div key={s.id} className={`session-row${s.id === currentSessionId ? " active" : ""}`}>
+                <Button variant="ghost" disabled={streaming} className="session-row-main" onClick={() => void pickSession(s)}>
                   <div className="session-row-title">{s.title}</div>
                   <div className="session-row-badges">{scopeBadge(s.scope_project_ids)}</div>
-                </div>
-                <button type="button" className="btn ghost small" title={t("common.delete")} aria-label={t("common.delete")} onClick={(e) => { e.stopPropagation(); void deleteSession(s.id); }}>×</button>
+                </Button>
+                <button type="button" className="btn ghost small" disabled={streaming} title={t("common.delete")} aria-label={t("common.delete")} onClick={() => void deleteSession(s.id)}>×</button>
               </div>
             ))}
             {!sessions.length && !pendingNew && <div className="empty-state">—</div>}
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <div className="card chat-thread">
+        <div className="card chat-thread flex-1 min-w-0">
           <div className="chat-scope-bar">
             <span className="label">{t("chatbot.selectProject")}</span>
             <ProjectSlicer projects={projects} value={scopeProjectIds} onChange={store.setScope} />
@@ -156,6 +149,7 @@ export function Chatbot() {
                 rows={1}
                 value={question}
                 placeholder={t("chatbot.placeholder")}
+                aria-label={t("chatbot.placeholder")}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -170,6 +164,5 @@ export function Chatbot() {
           </div>
         </div>
       </div>
-    </>
   );
 }

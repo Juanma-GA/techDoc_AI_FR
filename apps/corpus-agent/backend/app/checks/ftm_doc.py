@@ -136,6 +136,7 @@ def make_anomaly(
     message_params: Optional[dict[str, Any]] = None,
     suggestion_key: Optional[str] = None,
     suggestion_params: Optional[dict[str, Any]] = None,
+    evidence: str = "",
 ) -> Anomaly:
     """Fabrique une `Anomaly` `status="open"` — signature unique pour tous
     les checks v4. `confidence` ∈ {elevee, moyenne, faible} : par défaut
@@ -159,6 +160,7 @@ def make_anomaly(
         confidence=confidence if confidence in ("elevee", "moyenne", "faible") else "elevee",
         message=message,
         suggestion=suggestion,
+        evidence=evidence,
         message_key=message_key,
         message_params_json=params_msg,
         suggestion_key=suggestion_key,
