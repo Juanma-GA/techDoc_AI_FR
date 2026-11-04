@@ -25,9 +25,10 @@ import { useTranslation } from "react-i18next";
 import { CompressTool } from "./features/compress/CompressTool";
 import { CleanTool } from "./features/clean/CleanTool";
 import { CommentsTool } from "./features/comments/CommentsTool";
+import { AppShell } from "@internal/techdoc-brand";
+
 import { CropTool } from "./features/crop/CropTool";
 import {
-  AppShell,
   DemoModeBadge,
   DemoModeProvider,
   LanguageSwitcher,

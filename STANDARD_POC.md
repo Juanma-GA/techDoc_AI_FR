@@ -4,6 +4,14 @@ Référence technique des règles de développement. Lue par les humains et par 
 
 **Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
 
+**Provenance consommateur** : ce fichier est le standard effectif de TECHDOC_AI,
+adapté du standard commun du framework épinglé dans
+[`framework/STANDARD_POC.md`](./framework/STANDARD_POC.md).
+Les adaptations de chemins, du registre, des ports et des intégrations restent
+propres au consommateur. Elles ne se mettent pas à jour automatiquement : toute
+mise à jour du pointeur du submodule doit réconcilier ce fichier et ses
+suppléments, conformément à [`docs/index.md`](./docs/index.md).
+
 Les règles complémentaires relatives au registre des apps et aux profils sont définies dans [`docs/standards/profiles-and-registry.md`](./docs/standards/profiles-and-registry.md).
 
 **Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker ni de déploiement dans le périmètre du standard. Si un POC sort de ce périmètre local, il bascule vers un autre standard (hors scope ici).
@@ -55,12 +63,11 @@ internal-poc-monorepo/
 │       ├── index.html
 │       ├── src/
 │       └── tests/
-├── apps/_template/                   # squelette canonique copié pour chaque nouveau POC
-├── packages/
-│   └── ui/                           # @internal/ui (shadcn + Radix + Lucide)
-├── design-tokens/
-│   ├── tokens.json                   # source unique des couleurs/typo/dimensions, dual-theme
-│   └── tailwind-preset.ts            # preset Tailwind partagé qui consomme tokens.json
+├── framework/                        # submodule privé, commit précis du framework
+│   ├── apps/_template/               # squelette canonique copié pour chaque nouveau POC
+│   ├── packages/ui/                  # @internal/ui (shadcn + Radix + Lucide)
+│   └── design-tokens/                # source unique des couleurs/typo/dimensions
+├── packages/techdoc-brand/           # marque propre à TECHDOC_AI
 ├── tools/
 ├── scripts/
 │   └── check_standard.sh             # vérification automatique avant commit
@@ -70,16 +77,16 @@ internal-poc-monorepo/
 └── package.json                      # scripts par POC : dev:<poc>, test:<poc>
 ```
 
-**Règle**. Tout code partagé vit dans `packages/ui/` (côté front) ou `design-tokens/`. Aucune dépendance runtime entre apps. Si deux POCs ont besoin du même composant UI, il monte dans `packages/ui/`.
+**Règle**. Tout code partagé du framework vit dans `framework/packages/ui/` (côté front) ou `framework/design-tokens/`. Aucune dépendance runtime entre apps. Si deux POCs ont besoin du même composant UI, il est ajouté au framework avec revue dédiée. La marque TECHDOC_AI reste dans `packages/techdoc-brand/`.
 
 ## 2. Mutualisé vs propre au POC
 
 | Élément | Mutualisé | Propre à l'app (`apps/<poc>/`) |
 |---|---|---|
-| Composants UI atomiques (Button, Card, Dialog…) | ✅ `packages/ui/` | ❌ jamais |
+| Composants UI atomiques (Button, Card, Dialog…) | ✅ `framework/packages/ui/` | ❌ jamais |
 | Composants métier (AnomalyTable, SuggestionPanel) | ❌ | ✅ `frontend/src/components/business/` |
-| Tokens design (couleurs, typo, dimensions) | ✅ `design-tokens/tokens.json` | ❌ jamais |
-| Preset Tailwind | ✅ `design-tokens/tailwind-preset.ts` | ✅ extends preset dans `tailwind.config.ts` |
+| Tokens design (couleurs, typo, dimensions) | ✅ `framework/design-tokens/tokens.json` | ❌ jamais |
+| Preset Tailwind | ✅ `framework/design-tokens/tailwind-preset.ts` | ✅ extends preset dans `tailwind.config.ts` |
 | Config TypeScript de base | ✅ `tsconfig.base.json` racine | ✅ extends dans `frontend/tsconfig.json` |
 | Logique métier backend (parsers, checks, endpoints) | ❌ | ✅ `backend/app/` |
 | Migrations Alembic | ❌ | ✅ `backend/alembic/` |
@@ -348,21 +355,21 @@ apps/<poc>/frontend/src/
 └── types/                   # api.ts généré par openapi-typescript, domain.ts
 ```
 
-**Règle**. Pas de dossier `components/ui/` dans l'app — les primitives viennent de `@internal/ui`. Tout composant qui mérite réutilisation cross-POC monte dans `packages/ui/`.
+**Règle**. Pas de dossier `components/ui/` dans l'app — les primitives viennent de `@internal/ui`. Tout composant qui mérite réutilisation cross-POC monte dans `framework/packages/ui/`.
 
 ## 5. Design system
 
 ### 5.1 Tokens
 
-Trois fichiers à la racine de `design-tokens/`, source unique de vérité (détail complet : [supplément design system](./docs/standards/design-system.md)) :
+Trois fichiers à la racine de `framework/design-tokens/`, source unique de vérité (détail complet : [supplément design system](./docs/standards/design-system.md)) :
 
 | Fichier | Rôle |
 |---|---|
 | `tokens.json` | Valeurs brutes : couleurs dark (à plat sous `color.*`) + overrides light sous `themes.light.color.*` / `themes.light.shadow.*` + tokens non-thèmes (font, fontSize, radius, shadow, motion, layout). Validé par `tokens.schema.json`. |
-| `theme.css` | **Généré** depuis `tokens.json` par `pnpm tokens:build` (`design-tokens/scripts/build-theme.mjs`) — ne jamais l'éditer à la main ; `pnpm tokens:check` échoue s'il est périmé. `:root { … }` = palette light + tokens statiques, `.dark { … }` = palette dark. Chaque couleur hex émet `--color-x` (couleur complète, rétrocompatible) et `--color-x-rgb` (canaux). |
+| `theme.css` | **Généré** depuis `tokens.json` par `pnpm tokens:build` (`framework/design-tokens/scripts/build-theme.mjs`) — ne jamais l'éditer à la main ; `pnpm tokens:check` échoue s'il est périmé. `:root { … }` = palette light + tokens statiques, `.dark { … }` = palette dark. Chaque couleur hex émet `--color-x` (couleur complète, rétrocompatible) et `--color-x-rgb` (canaux). |
 | `tailwind-preset.ts` | Preset Tailwind partagé. Mappe les classes (`bg-bg`, `text-fg`…) vers `rgb(var(--color-x-rgb) / <alpha-value>)` : dual-theme automatique **et** modificateurs d'opacité (`bg-success/15`) fonctionnels. |
 
-**Structure de `tokens.json`** (extrait — fichier complet dans `design-tokens/tokens.json`) :
+**Structure de `tokens.json`** (extrait — fichier complet dans `framework/design-tokens/tokens.json`) :
 
 ```json
 {
@@ -411,7 +418,7 @@ Les polices sont **self-hosted** (`@fontsource`) et chargées une seule fois par
 
 ### 5.3 Composants `@internal/ui` (canoniques)
 
-Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./packages/ui/src/index.ts) :
+Liste à jour des composants disponibles dans [`framework/packages/ui/src/index.ts`](./framework/packages/ui/src/index.ts) :
 
 | Catégorie | Composants |
 |---|---|
@@ -424,7 +431,7 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 
 Usage, états et a11y de chaque primitive : [supplément design system §5](./docs/standards/design-system.md#5-shared-primitives).
 
-**Règle d'extension** : tout composant atomique nouveau se crée dans `packages/ui/` **avant** d'être consommé dans une app, avec un test Vitest. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/` (en-têtes de page, onglets, tableaux, bandeaux, infobulles, champs de formulaire et sections repliables existent déjà).
+**Règle d'extension** : tout composant atomique nouveau se crée dans `framework/packages/ui/` **avant** d'être consommé dans une app, avec un test Vitest et une PR dédiée au framework. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/` (en-têtes de page, onglets, tableaux, bandeaux, infobulles, champs de formulaire et sections repliables existent déjà).
 
 **Bannis** :
 - `alert()` natif (bloquant, pas stylable, pas a11y) → utiliser `Dialog`.
@@ -539,11 +546,11 @@ while (true) {
 | Périmètre | Outil | Minimum |
 |---|---|---|
 | Backend | pytest + httpx AsyncClient | 1 test par route |
-| Composants atomiques | Vitest + Testing Library | 1 test par composant de `packages/ui/` |
+| Composants atomiques | Vitest + Testing Library | 1 test par composant de `framework/packages/ui/` |
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 22 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM, 1 de robustesse du launcher, 2 de registre/thème et 5 de design system (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 22 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM, 1 de robustesse du launcher, 2 de registre/thème et 5 de design system. Le template canonique est dans `framework/apps/_template/`, hors des apps instanciées. Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
 1. Préfixe `/api/v1/` monté dans chaque backend : routeur FastAPI ou groupe Gin pour Go.
@@ -565,15 +572,15 @@ while (true) {
 
 **Design system** (checks 18 à 22, détail : [supplément design system §8](./docs/standards/design-system.md#8-guardrails)) :
 
-18. `design-tokens/theme.css` est à jour avec `tokens.json` (`pnpm tokens:check`).
-19. Aucun CDN de polices (`fonts.googleapis.com` / `fonts.gstatic.com`) dans les frontends, `packages/` et `design-tokens/`.
-20. Aucun `@fontsource` ni nom de police littéral (`Inter`, `Orbitron`, `JetBrains Mono`) dans `apps/*/frontend/src`, `packages/ui/src` et les `package.json` d'apps : utiliser `var(--font-*)`.
+18. `framework/design-tokens/theme.css` est à jour avec `tokens.json` (`pnpm tokens:check`).
+19. Aucun CDN de polices (`fonts.googleapis.com` / `fonts.gstatic.com`) dans les frontends, `packages/` et `framework/`.
+20. Aucun `@fontsource` ni nom de police littéral (`Inter`, `Orbitron`, `JetBrains Mono`) dans `apps/*/frontend/src`, `framework/packages/ui/src` et les `package.json` d'apps : utiliser `var(--font-*)`.
 21. Chaque `apps/*/frontend/index.html` déclare `<meta name="color-scheme">` et chaque `src/index.css` importe `@internal/design-tokens/base.css`.
 22. Aucune règle CSS d'app dont le sélecteur commence par une classe `.ui-*` (le shell et les primitives restent stylés par `@internal/ui`).
 
 ## 9. Lanceurs locaux et packaging
 
-Chaque POC fournit **sept** fichiers à la racine de `apps/<poc>/` (cinq `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/`. `package-desktop.bat` est copié dans toutes les apps mais n'est fonctionnel que pour une app générée avec `--desktop` (sinon il s'arrête avec un message explicite) :
+Chaque POC fournit **sept** fichiers à la racine de `apps/<poc>/` (cinq `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `framework/apps/_template/`. `package-desktop.bat` est copié dans toutes les apps mais n'est fonctionnel que pour une app générée avec `--desktop` (sinon il s'arrête avec un message explicite) :
 
 Les commandes Python ci-dessous s'appliquent au template FastAPI. Un backend Go
 utilise son binaire et un packager Node ; le frontend peut être embarqué via
@@ -765,15 +772,15 @@ const fire = () => {
 ### Méthode recommandée — script d'instanciation
 
 ```bash
-node scripts/new_poc.mjs <slug> [<port>] [--profile llm] [--profile files] [--desktop] [--dry-run]
+node framework/scripts/new_poc.mjs --repo-root . <slug> [<port>] [--profile llm] [--profile files] [--desktop] [--dry-run]
 ```
 
-Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) automatise les substitutions et :
+Le script du framework `framework/scripts/new_poc.mjs` automatise les substitutions et :
 
 - Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
 - Utilise `local-first` par défaut. Le LLM et la gestion de fichiers sont opt-in et peuvent être combinés avec des options `--profile` répétées.
 - Choisit automatiquement le prochain port cible non attribué depuis `scripts/apps.json` si le port est omis, ou refuse un port déjà réservé.
-- Copie `apps/_template/` → `apps/<slug>/`, superpose uniquement les profils demandés, puis substitue les marqueurs `TEMPLATE` / port / `'template'` dans les fichiers concernés.
+- Copie `framework/apps/_template/` → `apps/<slug>/`, superpose uniquement les profils demandés, puis substitue les marqueurs `TEMPLATE` / port / `'template'` dans les fichiers concernés.
 - Génère `scripts/package_<slug>.py` depuis `package_TEMPLATE.py` avec les bons `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX`.
 - Met à jour `scripts/apps.json`; les commandes de développement, raccourcis de tests et inventaires dérivent de ce registre.
 - Écrase `apps/<slug>/README.md` par un stub avec bannière **« À RÉÉCRIRE »** + section `## Auth` palier 1.
@@ -791,14 +798,14 @@ Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) autom
 ### Méthode manuelle (fallback)
 
 Sans Bash, utiliser directement Node. L'option `--desktop` instancie le catalogue
-`apps/_template/desktop` avec les mêmes identité, backend HTTP et UI que le web.
+`framework/apps/_template/desktop` avec les mêmes identité, backend HTTP et UI que le web.
 Les validations restent à exécuter après génération. En fallback manuel :
 
-1. `cp -r apps/_template apps/<slug>`.
+1. `cp -r framework/apps/_template apps/<slug>`.
 2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
 3. Réserver un port unique dans `scripts/apps.json` et le synchroniser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), le proxy (`vite.config.ts`), `openapi:gen` (`frontend/package.json`) et `cors_origins` (`config.py`).
 4. `cp scripts/package_TEMPLATE.py scripts/package_<slug>.py` puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête. Mettre à jour `_package.bat` pour appeler le nouveau script.
-5. Ajouter l'app à `scripts/apps.json`, puis synchroniser les commandes et inventaires avec `node scripts/sync_app_registry.mjs`.
+5. Ajouter l'app à `scripts/apps.json`, puis synchroniser les commandes et inventaires avec `node framework/scripts/sync_app_registry.mjs --repo-root .`.
 6. Vérifier `bash scripts/check_standard.sh` exit 0 — les checks 8 à 13 valident l'instanciation (nom `pyproject`, README réécrit, DB renommée, section Auth, scripts racine, bind 127.0.0.1).
 7. Premier commit : `feat(<slug>): bootstrap from template`.
 

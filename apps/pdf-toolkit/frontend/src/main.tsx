@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ErrorBoundary, setAi4TechDocFavicon } from "@internal/ui";
+import { ErrorBoundary } from "@internal/ui";
+import { setAi4TechDocFavicon } from "@internal/techdoc-brand";
 
 import "./index.css";
 import "./i18n";

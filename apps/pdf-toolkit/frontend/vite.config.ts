@@ -18,7 +18,10 @@ export default defineConfig(({ mode }) => {
           this.emitFile({
             type: "asset",
             fileName: "theme.css",
-            source: readFileSync(path.resolve(frontendRoot, "../../../design-tokens/theme.css"), "utf8"),
+            source: readFileSync(
+              path.resolve(frontendRoot, "../../../framework/design-tokens/theme.css"),
+              "utf8",
+            ),
           });
         },
       },

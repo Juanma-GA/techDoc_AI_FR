@@ -2,7 +2,8 @@ import "./index.css";
 import "./i18n";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ErrorBoundary, setAi4TechDocFavicon } from "@internal/ui";
+import { ErrorBoundary } from "@internal/ui";
+import { setAi4TechDocFavicon } from "@internal/techdoc-brand";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

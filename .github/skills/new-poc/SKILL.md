@@ -1,13 +1,13 @@
 ---
 name: new-poc
-description: "Use when: creating or scaffolding a new POC application from apps/_template, choosing its slug and port, or planning template substitutions. Do not use for: copying an existing POC, modifying an existing application, or creating files without explicit approval."
+description: "Use when: creating or scaffolding a new POC application from the framework template, choosing its slug and port, or planning template substitutions. Do not use for: copying an existing POC, modifying an existing application, or creating files without explicit approval."
 ---
 
 # New POC
 
 ## Purpose And Non-Goals
 
-Create a standards-aligned POC from `apps/_template` with controlled, reviewable mutations. Never use another instantiated app as the source.
+Create a standards-aligned POC from the pinned framework template with controlled, reviewable mutations. Never use another instantiated app as the source.
 
 ## Expected Inputs
 
@@ -26,24 +26,24 @@ Ask for missing values and reject ambiguous or unsafe slugs.
 3. `CLAUDE.md` for local safety and structural-change approval.
 4. `docs/standards/app-readme-template.md` for application documentation.
 5. `docs/apps/README.md` for target port assignments.
-6. `docs/standards/design-system.md` for the inherited visual framework: `design-tokens/base.css` entry stylesheet, dark default and light palette, self-hosted fonts, shared `@internal/ui` primitives (including `LlmSettingsPanel` and `DemoModeSettingsCard`), the `/design` gallery, and the `check_standard` design-system checks 18-22.
+6. `docs/standards/design-system.md` for the inherited visual framework: `framework/design-tokens/base.css` entry stylesheet, dark default and light palette, self-hosted fonts, shared `@internal/ui` primitives (including `LlmSettingsPanel` and `DemoModeSettingsCard`), the `/design` gallery, and the `check_standard` design-system checks 18-22.
 
 ## Procedure
 
 1. Validate that the slug is lowercase kebab-case, unused under `apps/`, and suitable for package and database names.
 2. Confirm the business scope, profiles, display name, and unique target default port.
-3. Inspect `apps/_template` and the documented creation procedure without reading prohibited data.
+3. Inspect `framework/apps/_template` and the documented creation procedure without reading prohibited data.
 4. Present one mutation batch listing every path to create or modify, substitutions, expected scripts, and validations.
 5. Obtain explicit approval for that exact batch.
-6. Prefer `node scripts/new_poc.mjs <slug> [port] [--desktop]` (or the compatible `new_poc.sh` wrapper). Use `--dry-run` to review resolved identity and port without mutations. The default backend remains FastAPI; do not convert existing Go apps to Python.
-7. Otherwise use the documented manual fallback: copy `_template`, exclude generated/data directories, replace template markers, create the matching packaging script from `scripts/package_TEMPLATE.py`, and update root workspace scripts.
+6. Prefer `node framework/scripts/new_poc.mjs <slug> [port] [--desktop] --repo-root .` (or the compatible wrapper). Use `--dry-run` to review resolved identity and port without mutations. The default backend remains FastAPI; do not convert existing Go apps to Python.
+7. Otherwise use the documented manual fallback: copy `_template`, exclude generated/data directories, replace template markers, create the matching packaging script from `framework/scripts/package_TEMPLATE.py`, and update root workspace scripts.
 8. Search the created source and configuration for unresolved `TEMPLATE`, `_template`, template logger, database, package, and port markers.
 9. Validate README sections, launchers, backend tests, frontend tests, and packaging paths.
-10. Build the business screens from the template patterns in `docs/standards/design-system.md` §5-6: `PageHeader` on every page, shared primitives instead of local components, `LlmSettingsPanel` for the Mistral block (extra models via `modelFields`, app options as children) and `DemoModeSettingsCard` for the operating mode. Add every visible string to both `locales/fr.json` and `locales/en.json` (`src/locales/locales.test.ts` checks key parity and accents).
+10. Build the business screens from the template patterns in `framework/docs/standards/design-system.md` §5-6: `PageHeader` on every page, shared primitives instead of local components, `LlmSettingsPanel` for the LLM settings (extra models via `modelFields`, app options as children) and `DemoModeSettingsCard` for the operating mode. Add every visible string to both `locales/fr.json` and `locales/en.json` (`src/locales/locales.test.ts` checks key parity and accents).
 11. Report every executed and blocked validation separately.
 
 For desktop scaffolding, copy only the canonical optional assets under
-`apps/_template/desktop`, never an existing application's Tauri sources.
+`framework/apps/_template/desktop`, never an existing application's Tauri sources.
 The scaffold also supplies `package-desktop.bat`. On Windows, use it for the
 Tauri build; `package.bat` without arguments creates the web package. The desktop
 wrapper delegates to `_package.bat desktop` and requires an app generated with

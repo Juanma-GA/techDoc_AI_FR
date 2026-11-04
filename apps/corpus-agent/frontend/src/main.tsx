@@ -1,7 +1,7 @@
 import "./index.css";
 import "./styles/preview-skin.css";
 
-import { setAi4TechDocFavicon } from "@internal/ui";
+import { setAi4TechDocFavicon } from "@internal/techdoc-brand";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

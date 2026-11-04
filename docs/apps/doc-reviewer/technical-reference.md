@@ -196,7 +196,7 @@ limitations explicitement :
   le React réutilise un CSS sur-mesure `frontend/src/styles/preview-skin.css`
   (classes `.card/.btn/.kpi/.badge/.sev/.reviewer-*`...) plutôt que les
   composants `@internal/ui`. Les variables CSS reprennent les valeurs de
-  `design-tokens/tokens.json` (`:root` clair, `.dark` sombre) — donc zéro hex
+  `framework/design-tokens/tokens.json` (`:root` clair, `.dark` sombre) — donc zéro hex
   « magique ». Les primitives riches (`Dialog`) viennent quand même de
   `@internal/ui`. Plan de retour : migrer les classes skin vers `@internal/ui`
   si l'app est pérennisée.

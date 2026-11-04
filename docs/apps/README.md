@@ -13,7 +13,7 @@ the same registered value.
 <!-- APP_REGISTRY_START -->
 | Application | Backend | Profiles | Target default port | Desktop |
 |---|---|---|---:|---:|
-| [_template](../../apps/_template/README.md) | fastapi | `local-first` | 8000 | Yes |
+| [_template](../../framework/apps/_template/README.md) | fastapi | `local-first` | 8000 | Yes |
 | [corpus-agent](../../apps/corpus-agent/README.md) | fastapi | `local-first`, `llm`, `files` | 8001 | No |
 | [doc-writer](../../apps/doc-writer/README.md) | fastapi | `local-first`, `llm`, `files` | 8002 | No |
 | [doc-reviewer](../../apps/doc-reviewer/README.md) | fastapi | `local-first`, `llm`, `files` | 8003 | No |

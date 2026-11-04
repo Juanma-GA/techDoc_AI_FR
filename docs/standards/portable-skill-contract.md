@@ -1,5 +1,9 @@
 # Portable Skill Contract
 
+TECHDOC_AI adaptation of the [framework contract](../../framework/docs/standards/portable-skill-contract.md).
+The framework owns reusable skill guidance; this file records consumer
+discovery and synchronization requirements.
+
 Portable skills live at `.github/skills/<skill-name>/SKILL.md`. A skill is the workflow source of truth; harness-specific agents and prompts are thin compatibility adapters.
 
 ## Required Frontmatter
@@ -71,7 +75,7 @@ For every skill:
 - confirm that prohibited data locations are excluded;
 - test discovery manually when automatic discovery is unavailable.
 
-Read-only skills must be trialed against `_template` and `ocr-vision`. Record the harness used, actions actually executed, fallbacks used, and any portability gaps.
+Read-only skills must be trialed against `framework/apps/_template` and `apps/ocr-vision`. Record the harness used, actions actually executed, fallbacks used, and any portability gaps.
 
 ## Adapter Contract
 
