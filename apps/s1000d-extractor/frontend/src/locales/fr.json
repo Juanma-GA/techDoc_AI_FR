@@ -402,13 +402,12 @@
     "match": {
       "notFound": "non localisé",
       "exact": "localisé p.{{page}}",
-      "prefix": "à vérifier (préfixe)",
-      "contains": "à vérifier"
+      "infoCodeReview": "InfoCode à vérifier"
     },
     "dmrl": {
       "title": "Valider la DMRL ({{count}} Data Modules)",
       "help": "Vérifie les DM attendus avant le découpage. Les lignes « Titre PM » restent dans la PMC sans générer de DM.",
-      "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier, {{pmTitles}} titre(s) PM (PMC uniquement).",
+      "counts": "{{missing}} non localisé(s), {{typeIssues}} anomalie(s) InfoCode/DMRL, {{pmTitles}} titre(s) PM (PMC uniquement).",
       "missingAlert_one": "{{count}} DM de la DMRL n'a pas été retrouvé dans le document.",
       "missingAlert_other": "{{count}} DM de la DMRL n'ont pas été retrouvés dans le document.",
       "missingAlertHelp_one": "Utilisez « Exclure » ci-dessous si vous ne souhaitez pas conserver ce DM.",

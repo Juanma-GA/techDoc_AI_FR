@@ -402,13 +402,12 @@
     "match": {
       "notFound": "not found",
       "exact": "found p.{{page}}",
-      "prefix": "check (prefix)",
-      "contains": "check"
+      "infoCodeReview": "InfoCode to review"
     },
     "dmrl": {
       "title": "Validate the DMRL ({{count}} Data Modules)",
       "help": "Review the expected DMs before splitting. \"PM title\" rows remain in the PMC and do not generate DMs.",
-      "counts": "{{missing}} not found, {{uncertain}} to check, {{pmTitles}} PM title(s) (PMC only).",
+      "counts": "{{missing}} not found, {{typeIssues}} InfoCode/DMRL issue(s), {{pmTitles}} PM title(s) (PMC only).",
       "missingAlert_one": "{{count}} DMRL data module was not found in the source document.",
       "missingAlert_other": "{{count}} DMRL data modules were not found in the source document.",
       "missingAlertHelp_one": "Use Exclude below if you do not want to keep this DM.",
