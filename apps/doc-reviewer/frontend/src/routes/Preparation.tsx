@@ -49,7 +49,7 @@ export function Preparation() {
         ) : null}
       </section>
       <section className="card">
-        <h2 className="card-title">{t("preparation.resumeTitle")}</h2>
+        <h2 className="card-title">{t("preparation.documentsTitle")}</h2>
         {remove.isError ? (
           <p className="error" role="alert">
             {t("documents.deleteFailed", {

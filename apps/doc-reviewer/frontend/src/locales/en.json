@@ -115,7 +115,7 @@
     "title": "Control",
     "subtitle": "Import, analyze, and verify technical documents.",
     "uploadTitle": "Import documents",
-    "listTitle": "Imported documents (including those from Preparation)",
+    "listTitle": "Imported documents",
     "empty": "No document imported",
     "uploading": "Uploading…",
     "upload.importDemo": "Import demo PDF",
