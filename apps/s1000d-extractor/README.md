@@ -26,9 +26,12 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Keep XML and ZIP downloads available when generation reports XSD or mapping problems.
 - Use **Conversion S1000D** at `/migration` and `/migration/:docId`, with resumable
   document URLs and a direct return link from Validation.
-- Preserve unsubmitted files and options across page navigation in a memory-only
-  Zustand store; no document, workflow or session is written to browser storage.
-- Restore saved filenames without downloading their content until Start is used.
+- Preserve the latest selected source and resource files independently from
+  document history in a memory-only Zustand store; document deletion caches
+  available files before removing their server copies. Files are discarded on
+  reload and no document, workflow or session is written to browser storage.
+- Restore saved filenames without downloading their content until Start is used,
+  except when a document deletion requires caching them in memory.
   Repeated uploads reuse document/resource hashes instead of creating duplicates.
 - Validate imported XML in batches of 20 with two concurrent requests and visible
   progress; generated DMs are validated directly on the server.
