@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CollapsibleSection } from "@internal/ui";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -41,31 +42,53 @@ export function Redacteur() {
   const [fSev, setFSev] = useState("");
   const [fConf, setFConf] = useState("");
   const [fStatus, setFStatus] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const projectsQuery = useQuery<ProjectOut[]>({ queryKey: ["projects"], queryFn: projectsApi.list });
-  const filesQuery = useQuery<FileOut[]>({ queryKey: ["files", pid], queryFn: () => filesApi.list(pid), enabled: !!pid });
-  const anomaliesQuery = useQuery<AnomalyOut[]>({ queryKey: ["anomalies", pid], queryFn: () => anomaliesApi.list(pid), enabled: !!pid });
+  const scope = pid ? [pid] : [];
+  const projects = (projectsQuery.data ?? []).filter((project) => !scope.length || scope.includes(project.id));
+  const fileQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["files", project.id],
+      queryFn: () => filesApi.list(project.id),
+    })),
+  });
+  const anomalyQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["anomalies", project.id],
+      queryFn: () => anomaliesApi.list(project.id),
+    })),
+  });
+  const invalidateTickets = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["anomalies"] }),
+      qc.invalidateQueries({ queryKey: ["kpis"] }),
+      qc.invalidateQueries({ queryKey: ["rejections-summary"] }),
+    ]);
+  };
+  const error = projectsQuery.error
+    ?? fileQueries.find((query) => query.error)?.error
+    ?? anomalyQueries.find((query) => query.error)?.error;
 
   const setStatus = useMutation({
     mutationFn: ({ id, status, feedback }: { id: string; status: AnomalyStatus; feedback?: string }) =>
       anomaliesApi.setStatus(id, status, feedback),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
+    onSuccess: invalidateTickets,
   });
   const bulk = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: AnomalyStatus }) => anomaliesApi.bulkStatus(ids, status),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
+    onSuccess: invalidateTickets,
   });
 
-  const filenameOf = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const f of filesQuery.data ?? []) for (const v of f.versions) m.set(v.id, f.current_name);
+  const sourceVersionOf = useMemo(() => {
+    const m = new Map<string, FileOut["versions"][number]>();
+    for (const query of fileQueries) for (const f of query.data ?? []) for (const v of f.versions) m.set(v.id, v);
     return m;
-  }, [filesQuery.data]);
+  }, [fileQueries]);
 
   const anomalies = useMemo(
-    () => (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing"),
-    [anomaliesQuery.data],
+    () => anomalyQueries.flatMap((query) => query.data ?? []).filter((a) => a.type !== "dmc_missing"),
+    [anomalyQueries],
   );
 
   // Options du filtre « Catégorie » = Sujets réellement présents dans le projet
@@ -87,7 +110,7 @@ export function Redacteur() {
   const byFile = useMemo(() => {
     const groups = new Map<string, AnomalyOut[]>();
     for (const a of filtered) {
-      const key = a.file_version_id ?? "—";
+      const key = `${a.project_id}:${a.file_version_id ?? ""}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(a);
     }
@@ -95,7 +118,7 @@ export function Redacteur() {
   }, [filtered]);
 
   const toggle = (key: string) =>
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -111,21 +134,24 @@ export function Redacteur() {
 
       <div className="card">
         <div className="row">
-          <select value={pid} onChange={(e) => setPid(e.target.value)} style={{ maxWidth: 280 }}>
-            <option value="">{t("redacteur.selectProject")}</option>
+          <label>
+          <span className="label">{t("redacteur.selectProject")}</span>
+          <select value={pid} onChange={(e) => { setPid(e.target.value); setExpanded(new Set()); }} style={{ maxWidth: 280 }}>
+            <option value="">{t("common.allProjects")}</option>
             {(projectsQuery.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          </label>
           {pid && (
             <button type="button" className="btn ghost small" onClick={() => void anomaliesApi.exportCsv(pid)}>
               CSV
             </button>
           )}
         </div>
+        <div className="label">{t("tickets.count", { count: filtered.length })}</div>
       </div>
 
-      {pid && (
         <div className="card">
           <div className="row">
             <Filter value={fCategory} onChange={setFCategory} label={t("redacteur.filterCategory")} options={catOptions} allLabel={t("redacteur.filterAll")} />
@@ -134,46 +160,53 @@ export function Redacteur() {
             <Filter value={fStatus} onChange={setFStatus} label={t("redacteur.filterStatus")} options={STATUSES.map((s) => [s, t(STATUS_KEY[s])])} allLabel={t("redacteur.filterAll")} />
           </div>
           <div className="row" style={{ marginTop: 10 }}>
-            <button type="button" className="btn ghost small" onClick={() => setCollapsed(new Set(byFile.map(([k]) => k)))}>{t("redacteur.collapseAll")}</button>
-            <button type="button" className="btn ghost small" onClick={() => setCollapsed(new Set())}>{t("redacteur.expandAll")}</button>
+            <button type="button" className="btn ghost small" onClick={() => setExpanded(new Set())}>{t("redacteur.collapseAll")}</button>
+            <button type="button" className="btn ghost small" onClick={() => setExpanded(new Set(byFile.map(([k]) => k)))}>{t("redacteur.expandAll")}</button>
           </div>
         </div>
-      )}
 
-      {pid && (anomaliesQuery.isLoading ? (
+      {(error || setStatus.error || bulk.error) && <div className="card" role="alert">
+        <div className="error">{(error ?? setStatus.error ?? bulk.error)?.message}</div>
+      </div>}
+      {projectsQuery.isLoading || fileQueries.some((query) => query.isLoading) || anomalyQueries.some((query) => query.isLoading) ? (
         <div className="card"><div className="empty-state">{t("common.loading")}</div></div>
       ) : byFile.length === 0 ? (
-        <div className="card"><div className="empty-state">—</div></div>
+        !error && <div className="card"><div className="empty-state">{t("tickets.empty")}</div></div>
       ) : (
         byFile.map(([key, items]) => {
-          const isCollapsed = collapsed.has(key);
+          const isCollapsed = !expanded.has(key);
           const openIds = items.filter((a) => a.status === "open" || a.status === "acknowledged").map((a) => a.id);
           return (
-            <div className={`red-file-block${isCollapsed ? " collapsed" : ""}`} key={key}>
-              <div className="red-file-header" onClick={() => toggle(key)}>
-                <span><span className="caret">▼</span>{filenameOf.get(key) ?? "—"} <span className="badge danger">{items.length}</span></span>
-                <span className="red-file-actions" onClick={(e) => e.stopPropagation()}>
+            <CollapsibleSection
+              key={key}
+              title={<span className="break-words">{sourceVersionOf.get(items[0]?.file_version_id ?? "")?.filename ?? t("tickets.projectLevel")} ({items.length})</span>}
+              description={projects.find((project) => project.id === items[0]?.project_id)?.name}
+              open={!isCollapsed}
+              onOpenChange={() => toggle(key)}
+              className="mb-3"
+            >
+                <div className="row mb-3" style={{ flexWrap: "wrap" }}>
                   <button type="button" className="btn ghost small" disabled={!openIds.length} onClick={() => bulk.mutate({ ids: openIds, status: "fixed" })}>
                     {t("redacteur.bulkFix")} ({openIds.length})
                   </button>
                   <button type="button" className="btn ghost small" disabled={!openIds.length} onClick={() => bulk.mutate({ ids: openIds, status: "rejected" })}>
                     {t("redacteur.bulkReject")} ({openIds.length})
                   </button>
-                </span>
-              </div>
+                </div>
               <div className="red-anomalies-wrap">
                 {items.map((a) => (
                   <AnomalyRow
                     key={a.id}
                     a={a}
+                    sourceVersion={a.file_version_id ? sourceVersionOf.get(a.file_version_id) : undefined}
                     onStatus={(status, feedback) => setStatus.mutate({ id: a.id, status, feedback })}
                   />
                 ))}
               </div>
-            </div>
+            </CollapsibleSection>
           );
         })
-      ))}
+      )}
     </>
   );
 }
@@ -194,9 +227,11 @@ function Filter({ value, onChange, label, options, allLabel }: { value: string; 
 
 function AnomalyRow({
   a,
+  sourceVersion,
   onStatus,
 }: {
   a: AnomalyOut;
+  sourceVersion?: FileOut["versions"][number];
   onStatus: (s: AnomalyStatus, feedback?: string) => void;
 }) {
   const { t } = useTranslation();
@@ -222,6 +257,24 @@ function AnomalyRow({
       </div>
       <div className="red-anomaly-msg">{message}</div>
       {a.location && <div className="red-anomaly-loc">{a.location}</div>}
+      {a.evidence && (
+        <div className="red-anomaly-evidence">
+          <strong>{t("redacteur.evidenceLabel")}</strong> {a.evidence}
+        </div>
+      )}
+      {sourceVersion && (
+        <div className="red-anomaly-loc">
+          {t("redacteur.sourceVersion", {
+            filename: sourceVersion.filename,
+            sha256: sourceVersion.sha256,
+          })}
+        </div>
+      )}
+      {a.run_id && (
+        <div className="red-anomaly-loc">
+          {t("redacteur.analysisRun", { id: a.run_id })}
+        </div>
+      )}
       {suggestion && <div className="red-anomaly-suggestion">→ {suggestion}</div>}
       {rejected && (
         <>

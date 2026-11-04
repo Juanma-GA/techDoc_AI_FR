@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.demo_mode import visible_projects
 from app.core.errors import AppError
 from app.db.models import AnalysisRun, Anomaly, Project
 from app.db.session import get_db
@@ -135,11 +136,11 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
 
 @router.get("/projects/{project_id}/kpis", response_model=KpiOut)
 def get_kpis_single(project_id: uuid.UUID, db: Session = Depends(get_db)) -> KpiOut:
-    project = db.get(Project, project_id)
-    if project is None:
+    projects = visible_projects(db, [project_id])
+    if not projects:
         raise AppError("PROJECT_NOT_FOUND", "Projet introuvable",
                        status_code=404, detail={"id": str(project_id)})
-    return compute_kpis(db, [project])
+    return compute_kpis(db, projects)
 
 
 @router.get("/kpis", response_model=KpiOut)
@@ -153,7 +154,7 @@ def get_kpis_scope(
             ids = [uuid.UUID(s.strip()) for s in project_ids.split(",") if s.strip()]
         except ValueError as e:
             raise AppError("PROJECT_IDS_INVALID", f"UUID invalide : {e}", status_code=422) from e
-        projects = list(db.scalars(select(Project).where(Project.id.in_(ids))))
+        projects = visible_projects(db, ids)
     else:
-        projects = list(db.scalars(select(Project)))
+        projects = visible_projects(db)
     return compute_kpis(db, projects)

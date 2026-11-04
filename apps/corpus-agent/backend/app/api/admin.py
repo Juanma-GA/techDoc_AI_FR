@@ -13,10 +13,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.demo_mode import get_demo_enabled, visible_projects
 from app.db.models import (
     AnalysisRun,
     Anomaly,
@@ -28,7 +29,6 @@ from app.db.models import (
     Project,
 )
 from app.db.session import get_db
-
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -77,6 +77,13 @@ def _sqlite_path() -> Path | None:
 
 @router.get("/stats", response_model=AdminStatsOut)
 def get_stats(db: Session = Depends(get_db)) -> AdminStatsOut:
+    project_ids = [project.id for project in visible_projects(db)]
+    file_ids = select(File.id).where(File.project_id.in_(project_ids))
+    version_ids = select(FileVersion.id).where(FileVersion.file_id.in_(file_ids))
+    session_filter = ChatSession.project_id.in_(project_ids)
+    if not get_demo_enabled(db):
+        session_filter = or_(session_filter, ChatSession.project_id.is_(None))
+    session_ids = select(ChatSession.id).where(session_filter)
     db_path = _sqlite_path()
     db_bytes = 0
     if db_path is not None:
@@ -86,15 +93,29 @@ def get_stats(db: Session = Depends(get_db)) -> AdminStatsOut:
         except OSError:
             db_bytes = 0
     return AdminStatsOut(
-        projects=db.scalar(select(func.count(Project.id))) or 0,
-        files=db.scalar(select(func.count(File.id))) or 0,
-        file_versions=db.scalar(select(func.count(FileVersion.id))) or 0,
-        anomalies=db.scalar(select(func.count(Anomaly.id))) or 0,
-        analysis_runs=db.scalar(select(func.count(AnalysisRun.id))) or 0,
-        chat_sessions=db.scalar(select(func.count(ChatSession.id))) or 0,
-        chat_messages=db.scalar(select(func.count(ChatMessage.id))) or 0,
-        document_chunks=db.scalar(select(func.count(DocumentChunk.id))) or 0,
-        storage_bytes=_dir_size(Path(settings.storage_dir)),
+        projects=len(project_ids),
+        files=db.scalar(select(func.count()).select_from(File).where(File.id.in_(file_ids))) or 0,
+        file_versions=db.scalar(
+            select(func.count()).select_from(FileVersion).where(FileVersion.id.in_(version_ids))
+        ) or 0,
+        anomalies=db.scalar(
+            select(func.count()).select_from(Anomaly).where(Anomaly.project_id.in_(project_ids))
+        ) or 0,
+        analysis_runs=db.scalar(
+            select(func.count()).select_from(AnalysisRun).where(AnalysisRun.project_id.in_(project_ids))
+        ) or 0,
+        chat_sessions=db.scalar(
+            select(func.count()).select_from(ChatSession).where(ChatSession.id.in_(session_ids))
+        ) or 0,
+        chat_messages=db.scalar(
+            select(func.count()).select_from(ChatMessage).where(ChatMessage.session_id.in_(session_ids))
+        ) or 0,
+        document_chunks=db.scalar(
+            select(func.count()).select_from(DocumentChunk).where(DocumentChunk.file_version_id.in_(version_ids))
+        ) or 0,
+        storage_bytes=sum(
+            _dir_size(Path(settings.storage_dir) / f"project_{project_id}") for project_id in project_ids
+        ),
         db_bytes=db_bytes,
     )
 

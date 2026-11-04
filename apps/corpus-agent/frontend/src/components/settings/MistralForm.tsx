@@ -12,12 +12,10 @@ export function MistralForm() {
   const [form, setForm] = useState({ api_key: "", base_url: "", chat_model: "", embed_model: "", vision_model: "" });
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const [models, setModels] = useState<string[]>([]);
-  const [openOverride, setOpenOverride] = useState<boolean | null>(null);
+  const [open, setOpen] = useState(false);
 
   const settingsQuery = useQuery<MistralSettingsOut>({ queryKey: ["mistral-settings"], queryFn: settingsApi.read });
   const s = settingsQuery.data;
-  // Replie une fois la cle configuree ; deplie tant que le LLM n'est pas configure.
-  const open = openOverride ?? (settingsQuery.isSuccess && !s?.api_key_set);
   useEffect(() => {
     if (s) setForm({ api_key: "", base_url: s.base_url, chat_model: s.chat_model, embed_model: s.embed_model, vision_model: s.vision_model });
   }, [s]);
@@ -62,7 +60,7 @@ export function MistralForm() {
         style={{ width: "100%", justifyContent: "space-between", background: "none", border: 0, padding: 0, cursor: "pointer", color: "inherit" }}
         aria-expanded={open}
         aria-controls="llm-settings-body"
-        onClick={() => setOpenOverride(!open)}
+        onClick={() => setOpen(!open)}
       >
         <h2 className="card-title" style={{ margin: 0 }}>{t("settings.llmSection")}</h2>
         <ChevronDown size={16} aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined }} />

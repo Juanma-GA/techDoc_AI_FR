@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-import json
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 
 # =============================================================================
 # Project
@@ -69,6 +67,7 @@ class FileOut(BaseModel):
 
 class UploadResultOut(BaseModel):
     uploaded: list[dict[str, Any]]
+    analysis_run_id: uuid.UUID | None = None
 
 
 class CorpusFolderIn(BaseModel):
@@ -118,6 +117,7 @@ class ReferenceOut(BaseModel):
     # Ligne d'en-tête choisie par onglet (1-based) — {onglet: ligne}. Vide =
     # détection auto. Sert à lire les bons libellés de colonnes dans le mapping.
     header_rows: dict[str, int] = Field(default_factory=dict)
+    analysis_run_id: uuid.UUID | None = None
 
 
 class SheetColumnOut(BaseModel):
@@ -157,6 +157,7 @@ class AnomalyOut(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     file_version_id: Optional[uuid.UUID]
+    run_id: Optional[uuid.UUID] = None
     type: str
     # Categorie metier (Sujet de la regle checklist) — dimension de regroupement KPI.
     category: str = ""
@@ -164,6 +165,7 @@ class AnomalyOut(BaseModel):
     confidence: str = "elevee"
     message: str
     suggestion: str
+    evidence: str = ""
     # Motif de rejet / commentaire du relecteur (vide par défaut).
     feedback: str = ""
     # i18n : si `message_key` est non-null, le front résout via t(key, params)

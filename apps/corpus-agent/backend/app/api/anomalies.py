@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import structlog
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,11 +21,9 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, get_llm_enabled
 from app.core.plain_text import PLAIN_TEXT_RULE_FR, strip_markdown
-from app.db.models import AppConfig, Anomaly, Project
+from app.db.models import Anomaly, AppConfig, Project
 from app.db.session import get_db
 from app.schemas import AnomalyBulkStatusIn, AnomalyBulkStatusOut, AnomalyOut, AnomalyStatusIn
-
-import structlog
 
 router = APIRouter(tags=["anomalies"])
 
@@ -124,18 +123,21 @@ def export_anomalies_csv(project_id: uuid.UUID, db: Session = Depends(get_db)) -
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
     writer.writerow([
-        "id", "type", "category", "severity", "status", "message", "suggestion",
-        "feedback", "location", "created_at", "resolved_at",
+        "id", "file_version_id", "run_id", "type", "category", "severity", "status", "message", "suggestion",
+        "evidence", "feedback", "location", "created_at", "resolved_at",
     ])
     for a in project.anomalies:
         writer.writerow([
             str(a.id),
+            str(a.file_version_id or ""),
+            str(a.run_id or ""),
             a.type,
             a.category or "",
             a.severity,
             a.status,
             (a.message or "").replace("\n", " "),
             (a.suggestion or "").replace("\n", " "),
+            (a.evidence or "").replace("\n", " "),
             (a.feedback or "").replace("\n", " "),
             a.location or "",
             a.created_at.isoformat() if a.created_at else "",
