@@ -25,6 +25,16 @@ the same registered value.
 | [pdf-toolkit](../../apps/pdf-toolkit/README.md) | go | `local-first`, `files` | 8085 | Yes |
 <!-- APP_REGISTRY_END -->
 
+## Exception hors registre
+
+[`image-processor`](../../apps/image-processor/README.md) reste une application
+utilisable, mais n'est volontairement pas dans `scripts/apps.json`. Son
+`pnpm dev:image-processor` personnalisé démarre l'API, LaMa dans son
+environnement Python séparé et Vite. Le synchroniseur du registre ne sait
+générer que le lanceur FastAPI + Vite standard : l'y ajouter remplacerait ce
+script et omettrait LaMa. Utilise `pnpm dev:image-processor` pour le
+développement ou `apps\image-processor\start.bat` pour le lancement local.
+
 ## Adding an App
 
 Use `node scripts/new_poc.mjs <slug> [port] [--profile llm] [--profile files] [--desktop]`.

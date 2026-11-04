@@ -35,9 +35,13 @@ _RGB_FALLBACK = {
 def _tokens_path() -> Path | None:
     here = Path(__file__).resolve()
     for parent in here.parents:
-        candidate = parent / "design-tokens" / "tokens.json"
-        if candidate.is_file():
-            return candidate
+        candidates = (
+            parent / "framework" / "design-tokens" / "tokens.json",
+            parent / "design-tokens" / "tokens.json",
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
     return None
 
 

@@ -44,7 +44,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Renommer les fichiers exportés (et le dossier/ZIP de découpage) depuis chaque onglet. Au lancement de l'export, le sélecteur « Enregistrer sous » permet de choisir le nom et l'emplacement ; si le navigateur ne le prend pas en charge, le téléchargement standard est utilisé.
 - En mode bureau Tauri, les PDF intermédiaires du découpage apparaissent dans le dossier du ZIP pendant le traitement, puis sont supprimés après création de l’archive ou en cas d’échec. Le ZIP choisi reste le seul résultat.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
-- Shell et thème visuel repris de `apps/_template` et `packages/ui` : seize onglets, modes clair/sombre et interface française/anglaise.
+- Shell et thème visuel repris de `framework/apps/_template` et `framework/packages/ui` : seize onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
@@ -76,7 +76,7 @@ Prérequis :
 
 Double-cliquez sur [`start.bat`](./start.bat). Si Go est absent, le lanceur demande confirmation puis tente `winget install --id GoLang.Go --exact`; si winget est absent ou échoue, installez Go manuellement depuis [go.dev/dl](https://go.dev/dl/). L'installation peut nécessiter une connexion Internet et une autorisation Windows. Le script ouvre une console persistante, construit le frontend si nécessaire, choisit un port libre à partir de `8085`, puis démarre l'application sur `127.0.0.1`. Au premier démarrage, Go et pnpm téléchargent les dépendances de build et la compilation Go peut prendre un moment; la console affiche les paquets compilés et les logs HTTP. Le navigateur s'ouvre automatiquement une fois le serveur démarré, plutôt qu'avant la fin de la compilation.
 
-Le rebuild surveille aussi `packages/ui`, `design-tokens`, les assets publics et le lockfile racine.
+Le rebuild surveille aussi `framework/packages/ui`, `framework/design-tokens`, les assets publics et le lockfile racine.
 Les dépendances pnpm ne sont installées que si `frontend/node_modules` est absent.
 Si un rebuild échoue, un bundle antérieur valide est restauré avec un avertissement explicite ;
 sans bundle utilisable, le lancement échoue. Le binaire Go est ensuite compilé incrémentalement.

@@ -17,13 +17,17 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/catia-toolbox/`](apps/catia-toolbox/) | Outils de traitement documentaire CATIA | 8004 |
 | [`apps/ocr-vision/`](apps/ocr-vision/) | OCR et extraction visuelle sur documents techniques | 8005 |
 | [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
-| [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
-| [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
 | [`apps/ecm-automation/`](apps/ecm-automation/) | Préparation de dossiers ECM/ECN et mise à jour de tracker | 8009 |
 | [`apps/flowchart-generator/`](apps/flowchart-generator/) | Génération de logigrammes industriels | 8010 |
-| [`apps/image-processor/`](apps/image-processor/) | Détection OCR locale et remplacement de texte dans les images (PaddleOCR + LaMa) | 8010 |
 | [`apps/pdf-toolkit/`](apps/pdf-toolkit/) | Outils PDF Go, web et bureau Tauri optionnel | 8085 |
 | [`framework/apps/_template/`](framework/apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
+
+[`apps/image-processor/`](apps/image-processor/README.md) reste disponible comme
+exception hors registre : son lanceur de développement démarre l'API, le service
+LaMa et Vite ensemble. Il est donc exclu de `scripts/apps.json` et des inventaires
+générés. Son API utilise `8010` par défaut (également cible de Flowchart
+Generator) et ses lanceurs choisissent un port libre si nécessaire ; LaMa utilise
+`8011` par défaut.
 
 Les ports cibles et profils canoniques sont définis dans
 [`scripts/apps.json`](scripts/apps.json); le launcher utilise le premier port

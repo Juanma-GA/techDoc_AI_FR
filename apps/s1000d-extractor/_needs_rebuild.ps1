@@ -32,11 +32,15 @@ $roots = @(
 )
 
 foreach ($root in $roots) {
-    if (-not (Test-Path $root)) { continue }
-    $newer = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -gt $distTime } |
-        Select-Object -First 1
-    if ($newer) { exit 1 }
+    if (-not (Test-Path -LiteralPath $root)) { continue }
+    $item = Get-Item -LiteralPath $root
+    if ($item.PSIsContainer) {
+        foreach ($file in [IO.Directory]::EnumerateFiles($root, '*', [IO.SearchOption]::AllDirectories)) {
+            if ([IO.File]::GetLastWriteTime($file) -gt $distTime) { exit 1 }
+        }
+    } elseif ($item.LastWriteTime -gt $distTime) {
+        exit 1
+    }
 }
 
 exit 0
