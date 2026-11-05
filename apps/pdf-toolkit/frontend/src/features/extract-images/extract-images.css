@@ -8,7 +8,7 @@
 
 .extract-images-gallery-heading h2 {
   margin: 0 0 4px;
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 500;
 }
@@ -103,13 +103,13 @@
 
 .extract-images-size {
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
 }
 
 .extract-images-occurrences {
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
 }
 

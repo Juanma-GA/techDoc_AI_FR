@@ -25,6 +25,7 @@ export function FilesCard({ pid }: { pid: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [results, setResults] = useState<UploadItemResult[]>([]);
+  const [analysisUpdated, setAnalysisUpdated] = useState(false);
   const [folderPath, setFolderPath] = useState("");
   // Aperçu du dossier (liste des fichiers) + sélection avant import.
   const [listing, setListing] = useState<FolderFileOut[] | null>(null);
@@ -40,7 +41,11 @@ export function FilesCard({ pid }: { pid: string }) {
     mutationFn: (files: File[]) => filesApi.upload(pid, files),
     onSuccess: (res) => {
       setResults(res.uploaded);
+      setAnalysisUpdated(!!res.analysis_run_id);
       void qc.invalidateQueries({ queryKey: ["files", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
     },
   });
   // Parcourir un dossier : liste ses fichiers pour sélection (sans ingérer).
@@ -58,8 +63,12 @@ export function FilesCard({ pid }: { pid: string }) {
       filesApi.syncFolder(pid, path, only),
     onSuccess: (res) => {
       setResults(res.uploaded);
+      setAnalysisUpdated(!!res.analysis_run_id);
       void qc.invalidateQueries({ queryKey: ["files", pid] });
       void qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
     },
   });
   const disconnectFolder = useMutation({
@@ -72,7 +81,13 @@ export function FilesCard({ pid }: { pid: string }) {
   });
   const remove = useMutation({
     mutationFn: (fileId: string) => filesApi.remove(pid, fileId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["files", pid] }),
+    onSuccess: () => {
+      setAnalysisUpdated(true);
+      void qc.invalidateQueries({ queryKey: ["files", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
+    },
   });
 
   const connectedPath = folderQuery.data?.path ?? null;
@@ -125,6 +140,7 @@ export function FilesCard({ pid }: { pid: string }) {
         label={t("projects.upload")}
         accept=".docx,.pdf,.xlsx,.xlsm,.xml,.csv,.txt"
       />
+      {analysisUpdated && <div className="banner">{t("files.analysisUpdated")}</div>}
 
       {/* Connexion d'un dossier corpus (chemin local / OneDrive synchronise) */}
       <div className="folder-connect" style={{ marginTop: 12 }}>
