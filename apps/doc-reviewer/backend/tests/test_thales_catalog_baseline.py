@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 85
+    assert len(payload) == 89
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "612ca3ec963e6b32516d77de65ca4d38c0ad8178a73e18d9bd9c91266fa96385"
+        "409ed171a1c1c0a00b5d5e160bcf7519da7ba2b69588d8e38b089d93c4d099e9"
     )
 
     expected_controls = {
@@ -83,6 +83,22 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE": (
             "document_structure",
             {"control": "list_materials_supplier_country_uppercase"},
+        ),
+        "CUSTOM_LEP_PAGE_COLUMN_ALIGNMENT": (
+            "ata100_lep_page_column_alignment",
+            {},
+        ),
+        "CUSTOM_MATERIALS_TABLE_NO_NOTE": (
+            "ata100_materials",
+            {"control": "no_notes_in_tables"},
+        ),
+        "CUSTOM_LIST_OF_MATERIALS_ROW_ALIGNMENT": (
+            "ata100_materials",
+            {"control": "row_alignment"},
+        ),
+        "CUSTOM_LIST_OF_MATERIALS_CODE_SUPPLIER_DEFAULTS": (
+            "ata100_materials",
+            {"control": "code_supplier_defaults"},
         ),
         "CUSTOM_REVISION_BAR_NEW_PAGE": (
             "document_structure",

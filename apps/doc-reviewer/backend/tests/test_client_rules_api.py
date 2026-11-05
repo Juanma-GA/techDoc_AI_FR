@@ -23,7 +23,7 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.3.0"
+    assert config["bundle_version"] == "1.3.2"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert [catalog["code"] for catalog in config["catalogs"]] == [
@@ -31,8 +31,8 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
         "THALES-S1000D",
         "ASD-STE100",
     ]
-    assert len(rules) == 124
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 125))
+    assert len(rules) == 128
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 129))
     assert any(
         rule["code"] == "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE"
         for rule in rules
@@ -64,7 +64,7 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     ata_rules = [rule for rule in rules if rule["bundle_code"] == "ata100"]
     s1000d_rules = [rule for rule in rules if rule["bundle_code"] == "s1000d"]
     ste_rules = [rule for rule in rules if rule["bundle_code"] == "ste100_rules"]
-    assert (len(ata_rules), len(s1000d_rules), len(ste_rules)) == (85, 32, 7)
+    assert (len(ata_rules), len(s1000d_rules), len(ste_rules)) == (89, 32, 7)
     assert {rule["bundle_label"] for rule in ata_rules} == {"ATA100"}
     assert {rule["bundle_label"] for rule in s1000d_rules} == {"S1000D"}
     assert {rule["catalog_code"] for rule in ata_rules} == {"THALES-CUSTOM"}

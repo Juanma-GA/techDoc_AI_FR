@@ -13,6 +13,14 @@ from app.core.compiled_rules import (
     FieldRef,
     RuleTarget,
 )
+from .additional_rules import (
+    LEP_RULE_DEFINITIONS,
+    MATERIALS_RULE_DEFINITIONS,
+)
+from .note_patterns import (
+    REPAIR_RELATIVE_HUMIDITY as _REPAIR_RELATIVE_HUMIDITY,
+    REPAIR_RELATIVE_HUMIDITY_PATTERN as _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+)
 
 
 _STANDARD_CODE = "THALES-CUSTOM"
@@ -166,23 +174,12 @@ _NOTE_INTRODUCTION_TEXT = {
         "are as follows:"
     ),
 }
-_REPAIR_RELATIVE_HUMIDITY = (
-    "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
-    "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
-)
 _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"\(F9111\)", "(F9111)"),
     (r"75-77\s+Avenue\s+Marcel\s+Dassault", "75-77 Avenue Marcel Dassault"),
     (r"33700\s+M\u00e9rignac\s+-\s+France", "33700 Mérignac - France"),
     (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
     (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
-)
-_REPAIR_RELATIVE_HUMIDITY_PATTERN = (
-    "(?i:"
-    + re.escape(_REPAIR_RELATIVE_HUMIDITY)
-    .replace(r"\ ", r"\s+")
-    .replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
-    + ")"
 )
 _NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
 
@@ -503,7 +500,9 @@ CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
     code="CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION",
     name="Description obligatoire pour les lignes R des Highlights",
     description=(
-        "Toute ligne R des Highlights doit avoir une description en face. "
+        "Toute ligne R des Highlights doit avoir une description en face, sauf "
+        "les lignes qui indiquent uniquement une page ou une plage de pages "
+        "continuant l'entree precedente. "
         "Pour l'Illustrated Parts List, la description peut figurer en face "
         "de sa rubrique et s'appliquer aux lignes R suivantes."
     ),
@@ -524,7 +523,8 @@ CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
         "en": {
             "description": (
                 "Every R row in Highlights must have a description, except that "
-                "Illustrated Parts List may use the description on its section row."
+                "page-only rows may continue the preceding entry and Illustrated "
+                "Parts List may use the description on its section row."
             ),
             "message": "A revised Highlights row is missing its description.",
         }
@@ -729,13 +729,13 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
     code="CUSTOM_REVISION_BAR_NEW_PAGE",
     name="Barre de revision pleine hauteur sur les pages nouvelles",
     description=(
-        "Chaque page declaree N dans les Highlights, hors pages LEP et HIGHLIGHTS, "
-        "doit porter une barre de revision noire presque pleine hauteur, du haut "
-        "du contenu jusqu'au pied de page."
+        "Chaque page declaree N dans les Highlights, hors pages LEP/HIGHLIGHTS et "
+        "hors VCL, NI, EDI, PARTS LIST, Geo loc et OPL, doit porter une barre de "
+        "revision noire presque pleine hauteur."
     ),
     message=(
-        "Une page nouvelle hors LEP/HIGHLIGHTS ne comporte pas de barre de revision "
-        "pleine hauteur."
+        "Une page nouvelle hors sections LEP/HIGHLIGHTS et listes exemptes ne "
+        "comporte pas de barre de revision pleine hauteur."
     ),
     kind="field_required",
     severity="error",
@@ -749,19 +749,19 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
         )
     ],
     failure_message=(
-        "Chaque page N hors LEP/HIGHLIGHTS doit porter une barre de revision noire "
-        "du logo au pied de page."
+        "Chaque page N hors LEP/HIGHLIGHTS, VCL, NI, EDI, PARTS LIST, Geo loc et "
+        "OPL doit porter une barre de revision noire du logo au pied de page."
     ),
     translations={
         "en": {
             "description": (
-                "Every page declared N in Highlights, except LEP and HIGHLIGHTS "
-                "pages, must have a nearly full-height black revision bar from the "
-                "top of the content to the footer."
+                "Every page declared N in Highlights, except LEP/HIGHLIGHTS, VCL, "
+                "NI, EDI, PARTS LIST, Geo loc, and OPL pages, must have a nearly "
+                "full-height black revision bar."
             ),
             "message": (
-                "A new page outside LEP/HIGHLIGHTS is missing its full-height "
-                "revision bar."
+                "A new page outside LEP/HIGHLIGHTS and the exempted list sections "
+                "is missing its full-height revision bar."
             ),
         }
     },
@@ -771,12 +771,11 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
     code="CUSTOM_REVISION_BAR_MODIFIED_PAGE",
     name="Barre de revision presente sur les pages modifiees",
     description=(
-        "Chaque page declaree R dans les Highlights, hors pages LEP, HIGHLIGHTS, "
-        "Equipment Designator Index, Numerical Index et Parts List, doit porter "
-        "au moins une barre de revision noire. Les pages EDI/NI/PL sont reconnues "
-        "par leur titre dans le contenu de la page."
+        "Chaque page declaree R dans les Highlights, hors pages LEP/HIGHLIGHTS, "
+        "VCL, NI, EDI, PARTS LIST, Geo loc et OPL, doit porter au moins une barre "
+        "de revision noire."
     ),
-    message="Une page modifiee hors LEP/HIGHLIGHTS/EDI/NI/PL ne comporte pas de barre de revision.",
+    message="Une page modifiee hors LEP/HIGHLIGHTS et listes exemptes ne comporte pas de barre de revision.",
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -789,18 +788,20 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
         )
     ],
     failure_message=(
-        "Chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL doit comporter au moins une barre de "
-        "revision noire."
+        "Chaque page R hors LEP/HIGHLIGHTS, VCL, NI, EDI, PARTS LIST, Geo loc et "
+        "OPL doit comporter au moins une barre de revision noire."
     ),
     translations={
         "en": {
             "description": (
-                "Every page declared R in Highlights, except LEP, HIGHLIGHTS, "
-                "Equipment Designator Index, Numerical Index and Parts List "
-                "pages, must have at least one black revision bar. EDI/NI/PL "
-                "pages are identified by their title in the page content."
+                "Every page declared R in Highlights, except LEP/HIGHLIGHTS, VCL, "
+                "NI, EDI, PARTS LIST, Geo loc, and OPL pages, must have at least "
+                "one black revision bar."
             ),
-            "message": "A modified page outside LEP/HIGHLIGHTS/EDI/NI/PL is missing a revision bar.",
+            "message": (
+                "A modified page outside LEP/HIGHLIGHTS and the exempted list "
+                "sections is missing a revision bar."
+            ),
         }
     },
 )
@@ -809,13 +810,13 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
     code="CUSTOM_REVISION_BAR_MARGIN_POSITION",
     name="Position de la barre de revision par rapport a la marge",
     description=(
-        "Sur les pages N et R hors LEP/HIGHLIGHTS portant une barre, son ecart "
-        "horizontal par rapport a la marge gauche doit etre l=-0,38 cm "
-        "(tolerance +/- 0,10 cm)."
+        "Sur les pages N et R hors LEP/HIGHLIGHTS, VCL, NI, EDI, PARTS LIST, Geo "
+        "loc et OPL portant une barre, son ecart horizontal a la marge gauche "
+        "doit etre l=-0,38 cm (tolerance +/- 0,10 cm)."
     ),
     message=(
-        "Une barre de revision hors LEP/HIGHLIGHTS est mal positionnee par rapport "
-        "a la marge."
+        "Une barre de revision hors sections LEP/HIGHLIGHTS et listes exemptes "
+        "est mal positionnee par rapport a la marge."
     ),
     kind="field_required",
     severity="error",
@@ -829,19 +830,19 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
         )
     ],
     failure_message=(
-        "Hors LEP/HIGHLIGHTS, la barre de revision doit etre a l=-0,38 cm de la "
-        "marge gauche."
+        "Hors LEP/HIGHLIGHTS, VCL, NI, EDI, PARTS LIST, Geo loc et OPL, la barre "
+        "doit etre a l=-0,38 cm de la marge gauche."
     ),
     translations={
         "en": {
             "description": (
-                "On N and R pages outside LEP/HIGHLIGHTS with a revision bar, its "
-                "horizontal offset from the left margin must be l=-0.38 cm "
-                "(tolerance +/- 0.10 cm)."
+                "On N and R pages outside LEP/HIGHLIGHTS, VCL, NI, EDI, PARTS LIST, "
+                "Geo loc, and OPL, a revision bar's offset from the left margin "
+                "must be l=-0.38 cm (tolerance +/- 0.10 cm)."
             ),
             "message": (
-                "A revision bar outside LEP/HIGHLIGHTS is incorrectly positioned "
-                "relative to the margin."
+                "A revision bar outside LEP/HIGHLIGHTS and the exempted list "
+                "sections is incorrectly positioned relative to the margin."
             ),
         }
     },
@@ -3214,6 +3215,7 @@ REVISION_RULE_DEFINITIONS = (
 RULE_DEFINITIONS = (
     *REVISION_RULE_DEFINITIONS,
     *PREPARATION_RULE_DEFINITIONS,
+    *LEP_RULE_DEFINITIONS,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_MAPPING_SUSPECT,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
@@ -3235,6 +3237,7 @@ RULE_DEFINITIONS = (
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
     CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM,
     CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE,
+    *MATERIALS_RULE_DEFINITIONS,
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_MARGIN_POSITION,

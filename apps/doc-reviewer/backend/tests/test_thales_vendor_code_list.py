@@ -122,6 +122,26 @@ def test_thales_code_and_address_are_checked_without_other_vendor_references() -
     ).status == "PASS"
 
 
+def test_thales_address_allows_an_optional_trailing_revision_marker() -> None:
+    page = _vendor_page(
+        1,
+        [("VF9111", _THALES_ADDRESS, "", "")],
+        title=True,
+        headers=False,
+    )
+    page.spans.extend(
+        [
+            _span(1, "CODE", 20.0, 40.0, width=30.0),
+            _span(1, "VENDOR'S ADDRESS", 90.0, 40.0, width=110.0),
+        ]
+    )
+    page.spans.append(_span(1, "R", 230.0, 65.0, width=8.0))
+
+    findings = _vendor_findings(_context(page))
+
+    assert findings == []
+
+
 def test_thales_code_with_wrong_address_fails() -> None:
     context = _context(
         _vendor_page(

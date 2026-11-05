@@ -53,7 +53,9 @@ du manifest de la norme) avec son bouton « Tout activer / Tout desactiver ».
 ## Ajouter une regle a une norme
 
 1. Ajouter une definition avec la fabrique `rule(...)` dans le `rules.py` de la
-   norme (`app/checks/thales_rules/ata100/rules.py` ou `s1000d/rules.py`).
+   norme (`app/checks/thales_rules/ata100/rules.py` ou `s1000d/rules.py`). Pour
+   une norme dont ce fichier est deja volumineux, placer les definitions dans un
+   module de domaine et les exporter/importer dans le `RULE_DEFINITIONS` central.
 2. Fournir dans cette definition son code, nom, description, message, type de
    presentation, severite, cible, checks et eventuelles traductions.
 3. Ajouter la definition a `RULE_DEFINITIONS` a l'endroit correspondant a l'ordre

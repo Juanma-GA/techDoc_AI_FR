@@ -24,6 +24,9 @@ from . import revision_engine as revision
 from .preparation_operations import PREPARATION_CHECK
 from .revision_engine import _highlights_previous_revision_findings
 from .storage_operations import STORAGE_NOTE_REFERENCE
+from .lep_alignment_operations import LEP_PAGE_COLUMN_ALIGNMENT
+from .materials_operations import MATERIALS_CHECKS
+from .revision_bar_scope import is_revision_bar_exempt_page
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
@@ -87,9 +90,6 @@ _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
 _TP1_REVISION_BAR_VERTICAL_TOLERANCE = 8.0
-_REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE = re.compile(
-    r"(?im)^\s*(?:EQUIPMENT\s+DESIGNATOR\s+INDEX|NUMERICAL\s+INDEX|PARTS\s+LIST)\s*$"
-)
 _TP1_REVISION_LABEL_RE = re.compile(r"(?i)\bRevision\s+No\b")
 _TP1_FIRST_ISSUE_RE = re.compile(r"(?i)\bFirst\s+issue\b")
 _TP1_COPYRIGHT_FOOTER_RE = re.compile(
@@ -127,6 +127,9 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
     }
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
+_HIGHLIGHTS_PAGE_ONLY_RE = re.compile(
+    r"(?i)^\s*pages?\s+\d+(?:\s*(?:to|[-\u2010-\u2015\u2212])\s*(?:pages?\s*)?\d+)?\s*$"
+)
 _ENVIRONMENTAL_CONDITIONS = "environmental conditions"
 _ENVIRONMENTAL_CONDITIONS_COMPACT = "environmentalconditions"
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
@@ -147,6 +150,7 @@ _THALES_VENDOR_ADDRESS = (
     "CAMPUS THALES BORDEAUX 33700 MERIGNAC FRANCE"
 )
 _THALES_VENDOR_ADDRESS_MARKER = "THALES AVS FRANCE SAS"
+_VENDOR_REVISION_MARKER_RE = re.compile(r"(?i)(?<!\w)R(?!\w)")
 _VENDOR_TABLE_END_RE = re.compile(
     r"(?i)(?:\u00a9|\ufffd)\s*\d{4}\s*[-\u2010-\u2015]\s*\d{4}\s+"
     r"THALES\s+AVS\s+FRANCE\b|\bCopyright\b|"
@@ -1337,7 +1341,9 @@ def _highlights_description_findings(
             original = entry.description
             bbox = entry.description_bbox
         elif control == "highlights_revised_description":
-            if entry.status != "R":
+            if entry.status != "R" or _HIGHLIGHTS_PAGE_ONLY_RE.fullmatch(
+                entry.pages_text
+            ):
                 continue
             illustrated_parts_list = (
                 revision.match_highlights_chapter(entry.subject) == "Illustrated Parts List"
@@ -2169,7 +2175,12 @@ def _vendor_thales_findings(
     checked = 0
     for row in entries:
         code_key = _vendor_normalize_code(row.code)
-        address_key = _vendor_normalize_address(row.address)
+        address_without_revision = (
+            _VENDOR_REVISION_MARKER_RE.sub(" ", row.address)
+            if code_key == expected_code
+            else row.address
+        )
+        address_key = _vendor_normalize_address(address_without_revision)
         if code_key != expected_code and thales_marker not in address_key:
             continue
         checked += 1
@@ -2304,13 +2315,16 @@ def _revision_bar_findings(
 ) -> tuple[list[OperationResult], int, str]:
     expected_by_control = {
         "revision_bar_new": (
-            "Barre noire presque pleine hauteur pour chaque page N hors LEP/HIGHLIGHTS"
+            "Barre noire presque pleine hauteur pour chaque page N hors LEP/HIGHLIGHTS "
+            "et hors VCL/NI/EDI/PARTS LIST/Geo loc/OPL"
         ),
         "revision_bar_modified": (
-            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL"
+            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS et "
+            "hors VCL/NI/EDI/PARTS LIST/Geo loc/OPL"
         ),
         "revision_bar_margin": (
-            "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS"
+            "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS "
+            "et hors VCL/NI/EDI/PARTS LIST/Geo loc/OPL"
         ),
         "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
         "revision_bar_tp2_body": (
@@ -2342,14 +2356,11 @@ def _revision_bar_findings(
         ):
             continue
         status, page_key = _revision_page_status(page, state)
+        if is_revision_bar_exempt_page(page, page_key):
+            continue
         if control == "revision_bar_new" and status != "N":
             continue
         if control == "revision_bar_modified" and status != "R":
-            continue
-        if (
-            control == "revision_bar_modified"
-            and _REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE.search(page.text)
-        ):
             continue
         if control == "revision_bar_margin" and status not in {"N", "R"}:
             continue
@@ -3302,6 +3313,8 @@ OPERATIONS = {
         PAGE_CONTENT_POSITION,
         DOCUMENT_STRUCTURE,
         VENDOR_CODE_LIST,
+        LEP_PAGE_COLUMN_ALIGNMENT,
+        MATERIALS_CHECKS,
         PDF_BOOKMARKS,
         CMM_MAPPING_CONSISTENCY,
     )
