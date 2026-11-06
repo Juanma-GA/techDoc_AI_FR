@@ -90,6 +90,9 @@ class RawBlock:
     is_table: bool = False
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete du tableau si connue
+    table_cell_bboxes: list[list[list[float] | None]] | None = None
+    table_cell_titles: list[list[str | None]] | None = None
+    page_width: float | None = None
     # Geometrie (PDF uniquement) : coin haut/bas du bloc + hauteur de page, pour
     # detecter entetes/pieds. `None` cote DOCX/OCR (degradation gracieuse -> body).
     y0: float | None = None
@@ -140,6 +143,11 @@ class IRNode:
     children: list[IRNode] = field(default_factory=_empty_children)
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete (-> thead CALS)
+    table_cell_bboxes: list[list[list[float] | None]] | None = None
+    table_cell_titles: list[list[str | None]] | None = None
+    reviewed_table_cell_tags: list[list[str | None]] | None = None
+    page_width: float | None = None
+    page_height: float | None = None
     icn: str | None = None                     # nom de fichier illustration associee
     icns: list[str] = field(default_factory=list)  # plusieurs fichiers pour une figure composee
     is_pictogram: bool = False                 # image-signaleur sans legende de figure
@@ -181,6 +189,11 @@ def from_dict(data: dict) -> IRNode:
         children=[from_dict(c) for c in data.get("children", [])],
         table_rows=data.get("table_rows"),
         table_header=data.get("table_header"),
+        table_cell_bboxes=data.get("table_cell_bboxes"),
+        table_cell_titles=data.get("table_cell_titles"),
+        reviewed_table_cell_tags=data.get("reviewed_table_cell_tags"),
+        page_width=data.get("page_width"),
+        page_height=data.get("page_height"),
         icn=data.get("icn"),
         icns=list(data.get("icns", [])),
         is_pictogram=bool(data.get("is_pictogram", False)),
@@ -232,6 +245,11 @@ def to_dict(node: IRNode) -> dict:
         ],
         "table_rows": node.table_rows,
         "table_header": node.table_header,
+        "table_cell_bboxes": node.table_cell_bboxes,
+        "table_cell_titles": node.table_cell_titles,
+        "reviewed_table_cell_tags": node.reviewed_table_cell_tags,
+        "page_width": node.page_width,
+        "page_height": node.page_height,
         "icn": node.icn,
         "icns": node.icns,
         "is_pictogram": node.is_pictogram,

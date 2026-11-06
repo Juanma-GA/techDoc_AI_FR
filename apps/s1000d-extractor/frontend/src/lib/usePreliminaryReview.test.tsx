@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "./api/client";
 import { preliminaryApi } from "./preliminaryApi";
 import type { PreliminaryState } from "./preliminaryTypes";
 import { preliminaryRulesQueryKey } from "./preliminaryRules";
@@ -87,7 +88,7 @@ describe("server-persisted procedural review", () => {
 
   it("flushes the last scroll position before a classification and serializes revisions", async () => {
     act(() => current.position("proc", { page: 2, scroll_top: 420.5, selected_id: "passage" }));
-    expect(current.dirty).toBe(true);
+    expect(current.dirty).toBe(false);
     await act(async () => {
       expect(await current.act({
         dm_id: "proc", op: "decide", passage_id: "passage", destination: "safety",
@@ -104,6 +105,41 @@ describe("server-persisted procedural review", () => {
     expect(current.error).toBeNull();
   });
 
+  it("returns the complete server state from a saved action", async () => {
+    const updated: PreliminaryState = {
+      ...initial,
+      revision: 2,
+      reviews: {
+        ...initial.reviews,
+        second: {
+          ...initial.reviews.proc!,
+          fingerprint: "second",
+          status: "reviewed",
+        },
+      },
+    };
+    vi.mocked(preliminaryApi.save).mockResolvedValueOnce(updated);
+    let result: PreliminaryState | null = null;
+    await act(async () => {
+      result = await current.actWithState({ dm_id: "proc", op: "complete", confirm_empty: true });
+    });
+    expect(result).toEqual(updated);
+    expect(current.state.reviews.second?.status).toBe("reviewed");
+  });
+
+  it("keeps controls active while saving reader position in the background", async () => {
+    let acknowledge: (state: PreliminaryState) => void = () => {};
+    vi.mocked(preliminaryApi.save).mockImplementationOnce(() => new Promise((resolve) => {
+      acknowledge = resolve;
+    }));
+    act(() => current.position("proc", { page: 2, scroll_top: 420, selected_id: "passage" }));
+    expect(current.dirty).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(current.saving).toBe(false);
+    await act(async () => { acknowledge({ ...initial, revision: 2 }); });
+    expect(current.dirty).toBe(false);
+  });
+
   it("does not claim a failed action was saved and blocks navigation until retry", async () => {
     vi.mocked(preliminaryApi.save).mockRejectedValueOnce(new Error("Synthetic save failure"));
     await act(async () => {
@@ -117,6 +153,30 @@ describe("server-persisted procedural review", () => {
     expect(current.state.revision).toBe(2);
   });
 
+  it("allows correcting the passage that received a validation error", async () => {
+    vi.mocked(preliminaryApi.save)
+      .mockRejectedValueOnce(new ApiRequestError(422, "REVIEW_TAG_INVALID", "Invalid tag"))
+      .mockResolvedValueOnce({ ...initial, revision: 2 });
+
+    await act(async () => {
+      expect(await current.act({
+        dm_id: "proc", op: "decide", passage_id: "passage",
+        destination: "personnel", target_tag: "partNumber",
+      })).toBe(false);
+    });
+    expect(current.validationPassageId).toBe("passage");
+
+    await act(async () => {
+      expect(await current.act({
+        dm_id: "proc", op: "decide", passage_id: "passage",
+        destination: "personnel", target_tag: "personCategory",
+      })).toBe(true);
+    });
+    expect(current.error).toBeNull();
+    expect(current.validationPassageId).toBeNull();
+    expect(preliminaryApi.save).toHaveBeenCalledTimes(2);
+  });
+
   it("debounces text-only corrections without overwriting a classification", async () => {
     act(() => {
       current.edit({ dm_id: "proc", op: "decide", passage_id: "p", text: "First" });
@@ -128,6 +188,25 @@ describe("server-persisted procedural review", () => {
     expect(preliminaryApi.save).toHaveBeenCalledWith("synthetic-document", 1, {
       dm_id: "proc", op: "decide", passage_id: "p", text: "Final",
     }, false);
+    expect(current.edits).toEqual({});
+    expect(current.dirty).toBe(false);
+  });
+
+  it("saves detector title and cell content together", async () => {
+    act(() => {
+      current.edit({
+        dm_id: "proc", op: "decide", passage_id: "p", detector_title: "REQUIRED PERSON(S)",
+      });
+      current.edit({ dm_id: "proc", op: "decide", passage_id: "p", text: "1 OPER" });
+    });
+    expect(current.detectorEdits.p).toBe("REQUIRED PERSON(S)");
+    expect(current.edits.p).toBe("1 OPER");
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(preliminaryApi.save).toHaveBeenCalledWith("synthetic-document", 1, {
+      dm_id: "proc", op: "decide", passage_id: "p",
+      detector_title: "REQUIRED PERSON(S)", text: "1 OPER",
+    }, false);
+    expect(current.detectorEdits).toEqual({});
     expect(current.edits).toEqual({});
     expect(current.dirty).toBe(false);
   });

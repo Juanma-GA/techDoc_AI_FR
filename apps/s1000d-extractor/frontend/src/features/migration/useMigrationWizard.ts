@@ -146,9 +146,14 @@ export function useMigrationWizard(inputs: MigrationInputs) {
     if (wiz?.step !== "preliminary") flush.current = null;
   }, [wiz?.step]);
   useEffect(() => {
-    const reset = () => {
+    const reset = (event: Event) => {
       stream.current?.abort();
-      useMigrationStore.getState().reset(inputs.mode);
+      const scope = (event as CustomEvent<{ scope?: "documents" | "all" }>).detail?.scope;
+      if (scope === "documents") {
+        useMigrationStore.getState().patch({ currentDocId: null, uploaded: null });
+      } else {
+        useMigrationStore.getState().reset(inputs.mode);
+      }
       setWiz(null);
       setPdfCut(null);
       setStarting(null);
@@ -224,6 +229,7 @@ export function useMigrationWizard(inputs: MigrationInputs) {
   const remove = async (id: string) => {
     if (!await beforeLeaving()) return;
     try {
+      await inputs.cacheLastFiles();
       await documentsApi.delete(id, crypto.randomUUID());
       const draft = useMigrationStore.getState();
       if (draft.uploaded?.document.id === id) draft.patch({ uploaded: null });

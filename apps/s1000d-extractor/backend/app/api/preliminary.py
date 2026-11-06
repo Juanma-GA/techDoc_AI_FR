@@ -56,11 +56,17 @@ def source_anchors(
             for passage in current["passages"]:
                 if passage["page"] != page_number:
                     continue
-                queries = passage["source_text"].split(" | ")
-                boxes = [box for query in queries if query.strip() for box in page.search_for(query.strip())]
+                boxes = passage.get("anchor_rects") or []
+                if not boxes:
+                    queries = passage.get("anchor_texts") or [passage["source_text"]]
+                    boxes = [
+                        [box.x0 / page.rect.width, box.y0 / page.rect.height,
+                         box.x1 / page.rect.width, box.y1 / page.rect.height]
+                        for query in queries if query.strip()
+                        for box in page.search_for(query.strip())
+                    ]
                 anchors[passage["id"]] = [
-                    [box.x0 / page.rect.width, box.y0 / page.rect.height,
-                     box.x1 / page.rect.width, box.y1 / page.rect.height]
+                    [float(value) for value in box]
                     for box in boxes
                 ]
             return {"width": page.rect.width, "height": page.rect.height, "anchors": anchors}

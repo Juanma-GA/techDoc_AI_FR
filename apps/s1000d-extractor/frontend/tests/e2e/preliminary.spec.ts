@@ -91,11 +91,14 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
       if (action.op === "decide") {
         const passage = review.passages.find((p) => p.id === action.passage_id)!;
         if ("destination" in action) passage.decision = action.destination ?? null;
+        if ("target_tag" in action) passage.target_tag = action.target_tag ?? null;
+        if ("detector_title" in action) passage.detector_title = action.detector_title ?? null;
         passage.text = action.text ?? passage.text;
+        review.partial = true;
       } else if (action.op === "complete") review.status = "reviewed";
       else if (action.op === "skip") {
         for (const skipped of Object.values(state.reviews)) {
-          skipped.status = "skipped";
+          skipped.status = skipped.partial ? "reviewed" : "skipped";
           skipped.saved_at = "2026-10-27T14:00:00Z";
         }
       }
@@ -412,6 +415,39 @@ test("skips every procedural review and starts generation directly", async ({ pa
   await expect.poll(() => server.advances()).toBe(1);
 });
 
+test("saves edits and skips only the remaining procedures before generating", async ({ page }) => {
+  const server = await mockApplication(page, "docx", true);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+
+  const cards = page.locator("article");
+  for (const index of [0, 1, 2]) {
+    await chooseOption(
+      cards.nth(index).getByRole("button", { name: "Décision de classement" }),
+      ["Conditions", "Personnel", "Sécurité"][index]!,
+    );
+  }
+  await expect(page.getByRole("button", { name: "Ignorer la procédure restante et générer", exact: true }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  await expect(page.getByRole("button", {
+    name: "Skip the remaining procedure and generate", exact: true,
+  })).toBeVisible();
+  await page.getByRole("button", { name: "FR", exact: true }).click();
+  const skip = page.getByRole("button", { name: "Ignorer la procédure restante et générer", exact: true });
+  await expect(skip).toBeEnabled();
+  await skip.click();
+  await page.getByRole("button", {
+    name: "Confirmer : ignorer la procédure restante et générer", exact: true,
+  }).click();
+
+  await expect.poll(() => server.read().reviews.proc!.status).toBe("reviewed");
+  expect(server.read().reviews.proc!.partial).toBe(true);
+  expect(server.read().reviews.proc!.passages.slice(0, 3).every((passage) => passage.decision !== null)).toBe(true);
+  expect(server.read().reviews.empty!.status).toBe("skipped");
+  await expect.poll(() => server.advances()).toBe(1);
+});
+
 test("editorial structure is not classified and closing conditions have their own destination", async ({ page }) => {
   const server = await mockApplication(page);
   const passages = server.read().reviews.proc!.passages;
@@ -447,4 +483,60 @@ test("editorial structure is not classified and closing conditions have their ow
   await expect(page.getByRole("button", { name: "Générer et valider le XML" })).toBeEnabled();
   expect(server.read().reviews.proc!.passages.find((passage) => passage.id === "p1")!.decision).toBe("closing");
   expect(server.read().reviews.proc!.passages.filter((passage) => passage.role).every((passage) => passage.decision === null)).toBe(true);
+});
+
+test("keeps a cell detector title separate from the content to classify", async ({ page }) => {
+  const server = await mockApplication(page);
+  const cell = server.read().reviews.proc!.passages[0]!;
+  Object.assign(cell, {
+    row: 1,
+    column: 0,
+    kind: "table",
+    source_text: "1 OPER",
+    text: "1 OPER",
+    detector_title: "REQUIRED PERSON",
+    marker_key: "required person",
+    source_cells: ["1 OPER"],
+    source_labels: ["REQUIRED PERSON"],
+    suggested: "personnel",
+    tag_options: { personnel: ["personnel", "personCategory", "personSkill"] },
+  });
+
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+  const card = page.locator("article").first();
+  const detector = card.getByRole("textbox", { name: "Intitulé détecteur" });
+  const content = card.getByRole("textbox", { name: "Contenu à classer" });
+  await expect(card.locator("[data-passage-details]")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Développer le passage" })).toHaveCount(0);
+  await expect(detector).toHaveValue("REQUIRED PERSON");
+  await expect(content).toHaveValue("1 OPER");
+  await expect(detector).toBeEditable();
+  await expect(card.getByText("Catégorie de destination")).toBeVisible();
+
+  await detector.fill("REQUIRED PERSON(S)");
+  await content.fill("1 OPER updated");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.detector_title)
+    .toBe("REQUIRED PERSON(S)");
+  await expect.poll(() => server.read().reviews.proc!.passages[0]!.text).toBe("1 OPER updated");
+  await expect.poll(() => server.writes.some((action) =>
+    action.detector_title === "REQUIRED PERSON(S)" && action.text === "1 OPER updated",
+  )).toBe(true);
+
+  const category = card.locator("label").filter({ hasText: "Catégorie de destination" }).getByRole("button");
+  await chooseOption(category, "Personnel");
+  await expect(card.getByRole("button", { name: "Balise S1000D" })).toContainText("personnel");
+  await card.screenshot({ path: "test-results/preliminary-cell-fields.png" });
+
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  const englishCard = page.locator("article").first();
+  await expect(englishCard.getByRole("textbox", { name: "Detector title" }))
+    .toHaveValue("REQUIRED PERSON(S)");
+  await expect(englishCard.getByRole("textbox", { name: "Content to classify" }))
+    .toHaveValue("1 OPER updated");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await englishCard.scrollIntoViewIfNeeded();
+  await englishCard.screenshot({ path: "test-results/preliminary-cell-fields-light.png" });
 });
