@@ -1,6 +1,7 @@
 {
   "label": "S1000D",
-  "bundle_version": "1.0.0",
+  "bundle_version": "1.2.0",
+  "mapping": "mapping.json",
   "catalogs": [
     {
       "code": "THALES-S1000D",
@@ -10,7 +11,8 @@
   "modules": {
     "rules": "rules.py",
     "operations": "operations.py",
-    "data_modules": "data_modules.py"
+    "data_modules": "data_modules.py",
+    "norm_detector": "norm_detector.py"
   },
-  "default_enabled": false
+  "default_enabled": true
 }

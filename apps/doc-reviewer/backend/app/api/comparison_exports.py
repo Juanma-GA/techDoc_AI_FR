@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import io
 import shutil
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Literal
 
@@ -27,36 +25,33 @@ def _commented_pdf(
     comparison_id: uuid.UUID,
     reference_index: int,
     report: dict,
-    document_index: int,
+    comparisons: list[dict],
     language: Literal["fr", "en"],
 ) -> tuple[bytes, str]:
-    if document_index == reference_index:
+    if not comparisons:
         raise AppError(
-            "COMPARISON_REFERENCE_EXPORT",
-            "Le PDF de référence ne peut pas être exporté comme version comparée.",
-            status_code=400,
+            "COMPARISON_DATA_INVALID",
+            "Aucune version comparée n'est disponible pour cet export.",
+            status_code=500,
         )
-    item = next(
-        (entry for entry in report["comparisons"] if entry["document_index"] == document_index),
-        None,
-    )
-    if item is None:
-        raise AppError("COMPARISON_FILE_NOT_FOUND", "PDF comparé introuvable.", status_code=404)
+    reference = report["documents"][reference_index]
     path = safe_storage_join(
         comparison_root(),
         comparison_id.hex,
-        f"document-{document_index}.pdf",
+        f"document-{reference_index}.pdf",
     )
     if not path.is_file():
-        raise AppError("COMPARISON_FILE_MISSING", "Le PDF enregistré est introuvable.", status_code=404)
-    reference_filename = report["documents"][reference_index]["filename"]
+        raise AppError("COMPARISON_FILE_MISSING", "Le PDF de référence est introuvable.", status_code=404)
     content = build_commented_pdf(
         path,
-        reference_filename=reference_filename,
-        comparison=item,
+        reference_filename=reference["filename"],
+        comparisons=comparisons,
         language=language,
     )
-    filename = safe_filename(f"{Path(item['filename']).stem}_diff.pdf")
+    filename_stem = Path(reference["filename"]).stem
+    if len(comparisons) == 1:
+        filename_stem += f"_vs_{Path(comparisons[0]['filename']).stem}"
+    filename = safe_filename(f"{filename_stem}_diff.pdf")
     return content, filename
 
 
@@ -76,25 +71,10 @@ def export_comparison(
 ) -> Response:
     row = get_comparison(comparison_id, db)
     report = ensure_current_report(row, db)
-    indices = [item["document_index"] for item in report["comparisons"]]
-    if len(indices) == 1:
-        content, filename = _commented_pdf(
-            row.id, row.reference_index, report, indices[0], language
-        )
-        return _pdf_response(content, filename)
-
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, mode="w", compression=zipfile.ZIP_DEFLATED) as zipped:
-        for document_index in indices:
-            content, filename = _commented_pdf(
-                row.id, row.reference_index, report, document_index, language
-            )
-            zipped.writestr(f"{document_index + 1:02d}_{filename}", content)
-    return Response(
-        content=archive.getvalue(),
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="comparisons_diff.zip"'},
+    content, filename = _commented_pdf(
+        row.id, row.reference_index, report, report["comparisons"], language
     )
+    return _pdf_response(content, filename)
 
 
 @router.get("/{comparison_id}/export/{document_index}")
@@ -106,8 +86,14 @@ def export_comparison_document(
 ) -> Response:
     row = get_comparison(comparison_id, db)
     report = ensure_current_report(row, db)
+    comparison = next(
+        (entry for entry in report["comparisons"] if entry["document_index"] == document_index),
+        None,
+    )
+    if comparison is None:
+        raise AppError("COMPARISON_FILE_NOT_FOUND", "PDF comparé introuvable.", status_code=404)
     content, filename = _commented_pdf(
-        row.id, row.reference_index, report, document_index, language
+        row.id, row.reference_index, report, [comparison], language
     )
     return _pdf_response(content, filename)
 

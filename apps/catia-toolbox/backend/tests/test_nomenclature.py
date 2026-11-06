@@ -5,7 +5,67 @@ Le listing d'un DE .zip est desormais unifie sous /imports/zip (cf. test_imports
 
 from __future__ import annotations
 
+import pytest
 from openpyxl import Workbook
+
+from app.core.nomenclature import _detect_header
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        (["SIN & Application", "SIN", "Designation"], 1),
+        (["SIN", "SIN & Application", "Designation"], 0),
+        (["SIN & APP", "  sin  ", "Designation"], 1),
+        (["SIN & Application", "Designation"], 0),
+    ],
+)
+def test_detect_header_prefers_exact_sin(headers, expected):
+    _, mapping = _detect_header([headers])
+    assert mapping["sin"] == expected
+
+
+def test_exact_sin_preview_parse_and_mono_matching(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Nomenclature"
+    ws.append(["SIN & Application", "SIN", "Designation"])
+    ws.append(["APP-A", "SIN-001", "Synthetic part"])
+    materials = wb.create_sheet("Materiaux")
+    materials.append(["SIN", "Slot 1", "Slot 2"])
+    materials.append(["SIN-001", "PROFILE-A", "PROFILE-A"])
+    path = tmp_path / "exact-sin.xlsx"
+    wb.save(path)
+    wb.close()
+
+    preview = client.post("/api/v1/identification/preview", json={"path": str(path)})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["columns_map"]["sin"] == 1
+
+    parsed = client.post("/api/v1/identification/nomenclature", json={"path": str(path)})
+    assert parsed.status_code == 200, parsed.text
+    run_id = parsed.json()["id"]
+    items = client.get(f"/api/v1/identification/{run_id}/items")
+    assert items.json()[0]["sin"] == "SIN-001"
+
+    mono = client.post("/api/v1/identification/mono-corps", json={
+        "path": str(path), "sheet": "Materiaux", "header_row": 1,
+        "identity_field": "sin", "identity_col": 0, "first_slot_col": 1,
+        "run_id": run_id,
+    })
+    assert mono.status_code == 200, mono.text
+    assert mono.json()["summary"]["matched"] == 1
+    assert mono.json()["summary"]["mono"] == 1
+    saved = client.get(f"/api/v1/identification/{run_id}")
+    assert saved.json()["summary"]["mono_body"] == 1
+
+    manual = client.post("/api/v1/identification/nomenclature", json={
+        "path": str(path), "mapping": {"header_row": 1, "sin": 0},
+    })
+    assert manual.status_code == 200, manual.text
+    manual_items = client.get(f"/api/v1/identification/{manual.json()['id']}/items")
+    assert manual_items.json()[0]["sin"] == "APP-A"
 
 
 def _set_input_root(client, root: str) -> None:

@@ -105,6 +105,8 @@ export type RejectionsSummary = {
   llm_used: boolean;
 };
 
+export type DocumentWorkspace = "control" | "preparation";
+
 export type Document = {
   id: string;
   original_filename: string;
@@ -113,6 +115,8 @@ export type Document = {
   target_unit_system: "metric" | "imperial" | "auto";
   standard_version_id: string | null;
   status: "uploaded" | "analyzing" | "analyzed" | "edited" | "analysis_failed";
+  /** Onglet d'import : chaque onglet ne liste que ses propres documents. */
+  workspace?: DocumentWorkspace;
   current_version: number;
   /** Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif). */
   source_format: "pdf" | "docx";

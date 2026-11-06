@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../lib/api";
-import type { Document } from "../types/domain";
+import type { Document, DocumentWorkspace } from "../types/domain";
 
 export type BatchUploadResult = {
   created: Document[];
@@ -12,12 +12,14 @@ export type BatchUploadResult = {
 type UploadDocumentVariables = {
   file: File;
   target: "metric" | "imperial" | "auto" | "none";
+  workspace?: DocumentWorkspace;
 };
 
-export function useDocuments() {
+export function useDocuments(workspace?: DocumentWorkspace) {
   return useQuery({
-    queryKey: ["documents"],
-    queryFn: () => api.get<Document[]>("/documents"),
+    queryKey: workspace ? ["documents", workspace] : ["documents"],
+    queryFn: () =>
+      api.get<Document[]>(workspace ? `/documents?workspace=${workspace}` : "/documents"),
   });
 }
 
@@ -61,8 +63,8 @@ export function useUploadDocument() {
     // (requete non annulee par un changement de route SPA), seul l'etat
     // local du composant se perdait sans ca.
     mutationKey: ["upload-document"],
-    mutationFn: ({ file, target }: UploadDocumentVariables) => {
-      const params = new URLSearchParams({ target });
+    mutationFn: ({ file, target, workspace = "control" }: UploadDocumentVariables) => {
+      const params = new URLSearchParams({ target, workspace });
       const fd = new FormData();
       // Les .zip passent par /documents/batch ; un fichier unique passe par
       // /documents, qui choisit automatiquement son format de travail.
@@ -133,6 +135,8 @@ export type DocumentMetadataSuggestions = {
   meta_revision_number: string | null;
   meta_revision_date: string | null;
   meta_first_issue_date: string | null;
+  /** Only suggested by norms that have one (S1000D: Migration / MCO). */
+  meta_update_type?: string | null;
 };
 
 export function useSuggestDocumentMetadata(id: string) {
@@ -146,10 +150,13 @@ export function useSuggestDocumentMetadata(id: string) {
 
 /** Mapping manuel par document (repris par les consignes de checklist qui
  * y font reference lors du scan IA). */
-export function usePatchDocumentMeta(id: string | undefined) {
+export function usePatchDocumentMeta(id: string | undefined, norm?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DocumentMetaPatch) => api.patch<Document>(`/documents/${id}`, body),
+    mutationFn: (body: DocumentMetaPatch) => {
+      const query = norm ? `?${new URLSearchParams({ norm }).toString()}` : "";
+      return api.patch<Document>(`/documents/${id}${query}`, body);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["document", id] });
       void qc.invalidateQueries({ queryKey: ["documents"] });

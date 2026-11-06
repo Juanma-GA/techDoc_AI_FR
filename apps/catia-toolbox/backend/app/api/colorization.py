@@ -37,18 +37,26 @@ def colorize_mono_body(
     if run is None:
         raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
 
-    root = onedrive.root_for_scope(db, payload.scope)
     if payload.scope == "input":
+        input_root = onedrive.get_onedrive_roots(db)["input"]
         pieces_root = resolve_piece_folder_path(
-            onedrive.get_onedrive_roots(db)["input"],
+            input_root,
             payload.pieces_root,
             settings.bind_host,
             invalid_path_code="PIECES_ROOT_PATH_INVALID",
             invalid_path_message="Sans racine Input, fournissez un chemin absolu pour les pièces.",
         )
+        profiles_root = resolve_piece_folder_path(
+            input_root,
+            payload.profiles_root,
+            settings.bind_host,
+            invalid_path_code="PROFILES_ROOT_PATH_INVALID",
+            invalid_path_message="Sans racine Input, fournissez un chemin absolu pour les profils.",
+        )
     else:
+        root = onedrive.root_for_scope(db, payload.scope)
         pieces_root = safe_under_root(root, payload.pieces_root)
-    profiles_root = safe_under_root(root, payload.profiles_root)
+        profiles_root = safe_under_root(root, payload.profiles_root)
     if not pieces_root.is_dir():
         raise AppError(
             "PIECES_ROOT_NOT_FOUND",

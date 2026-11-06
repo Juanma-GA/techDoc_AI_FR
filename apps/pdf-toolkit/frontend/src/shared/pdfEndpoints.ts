@@ -1,0 +1,16 @@
+export type PDFEndpoint =
+  | "merge"
+  | "images-to-pdf"
+  | "compress"
+  | "clean"
+  | "edit-metadata"
+  | "protect"
+  | "change-password"
+  | "extract"
+  | "delete"
+  | "insert"
+  | "reorder"
+  | "rotate"
+  | "crop"
+  | "comments"
+  | "signature";

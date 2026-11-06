@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle, DemoModeSelector, useDemoMode
 import { useTranslation } from "react-i18next";
 
 import { demoSettingsApi } from "../../lib/api";
+import { useChatStore } from "../../stores/useChatStore";
+import { useScopeStore } from "../../stores/useScopeStore";
 
 export function DemoModeSettings() {
   const { t } = useTranslation();
@@ -12,8 +14,11 @@ export function DemoModeSettings() {
     mutationFn: (enabled: boolean) => demoSettingsApi.write({ demo_enabled: enabled }),
     onSuccess: (settings) => {
       queryClient.setQueryData(["app-settings"], settings);
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      void queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      useScopeStore.getState().setManagerScope([]);
+      useScopeStore.getState().setRedacteurProjectId(null);
+      useChatStore.getState().reset();
+      useChatStore.getState().setScope([]);
+      void queryClient.resetQueries({ predicate: (query) => query.queryKey[0] !== "app-settings" });
     },
   });
 

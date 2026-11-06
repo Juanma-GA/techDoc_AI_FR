@@ -5,8 +5,7 @@ local** (pas de Graph / OAuth / cloud). On ne fait que detecter et persister des
 chemins de dossier ; le parcours et la lecture passent par `core/parser.py` et
 `api/browse.py` (metadonnees seules).
 
-Persistance dans la table `app_config` (key/value), meme mecanisme que la config
-Mistral (`core/mistral_client.py`). Preservee par convention lors d'un reset admin.
+Persistance dans la table `app_config` (key/value), preservee lors d'un reset admin.
 """
 
 from __future__ import annotations

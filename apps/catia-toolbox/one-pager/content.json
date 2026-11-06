@@ -1,21 +1,21 @@
 {
   "fr": {
     "main_title": "AUTOMATISATION CATIA COMPOSER",
-    "section_title": "Plans, conversion et contrôle",
+    "section_title": "Nomenclature, conversion et intégration",
     "application_name": "Catia Toolbox",
     "status": "PROTOTYPE",
     "challenge": "Passer d'une nomenclature CATIA à un assemblage Composer exige plusieurs opérations manuelles : identifier les pièces, comparer les versions, convertir, intégrer et contrôler.",
-    "solution": "Catia Toolbox guide ce processus en cinq étapes sur des données exportées. Il produit des plans relisables, pilote les conversions confirmées et préserve les sources.",
+    "solution": "Catia Toolbox organise ce processus en quatre étapes sur des données exportées. Il compare les nomenclatures, pilote les conversions confirmées et prépare les fichiers Composer.",
     "features": [
       "Identifier les CATPart depuis une nomenclature et un lot DE",
       "Comparer de 2 à 10 nomenclatures par SIN",
       "Préparer les conversions et mises à jour SMGXML",
-      "Créer des checklists QC et des exports relisables"
+      "Optimiser, coloriser et renommer les fichiers Composer"
     ],
     "callouts": [
-      "Workflow guidé en cinq étapes",
+      "Workflow en quatre étapes",
       "Configuration et planification Composer",
-      "Checklist QC interactive et exportable"
+      "Comparaison et exports Excel"
     ],
     "security": {
       "local": "Application locale\nLe POC fonctionne sur le poste. Les plans sont relus et les fichiers sources ne sont jamais modifiés automatiquement.",
@@ -25,21 +25,21 @@
   },
   "en": {
     "main_title": "CATIA & COMPOSER AUTOMATION",
-    "section_title": "Planning, conversion and quality",
+    "section_title": "Nomenclature, conversion and integration",
     "application_name": "Catia Toolbox",
     "status": "PROTOTYPE",
     "challenge": "Turning a CATIA bill of materials into a Composer assembly requires several manual operations: identify parts, compare versions, convert, integrate and check.",
-    "solution": "Catia Toolbox guides this five-step process on exported data. It produces reviewable plans, drives confirmed conversions and preserves source files.",
+    "solution": "Catia Toolbox organizes this process into four stages using exported data. It compares nomenclatures, drives confirmed conversions and prepares Composer files.",
     "features": [
       "Identify CATParts from a bill of materials and delivery package",
       "Compare 2 to 10 bills of materials by SIN",
       "Prepare conversions and SMGXML updates",
-      "Create QC checklists and reviewable exports"
+      "Optimize, colorize and rename Composer files"
     ],
     "callouts": [
-      "Guided five-step workflow",
+      "Four-stage workflow",
       "Composer configuration and planning",
-      "Interactive and exportable QC checklist"
+      "Comparison and Excel exports"
     ],
     "security": {
       "local": "Local application\nThe POC runs on the workstation. Plans remain under user review and source files are never modified automatically.",
@@ -49,6 +49,6 @@
   },
   "screenshots": {
     "top": "conversion.png",
-    "bottom": "quality-control.png"
+    "bottom": "identification.png"
   }
 }

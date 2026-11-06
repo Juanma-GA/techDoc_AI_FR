@@ -1,5 +1,5 @@
 import "./index.css";
-import "./styles/preview-skin.css";
+import "./styles/workspace.css";
 import "./i18n";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

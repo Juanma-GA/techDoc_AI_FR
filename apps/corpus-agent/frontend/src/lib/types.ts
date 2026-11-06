@@ -5,6 +5,17 @@
 
 export type LlmStatus = "ok" | "untested" | "not_configured" | "disabled";
 
+export type ConnectivityOut = {
+  checked_at: string;
+  sources: Record<"documents" | "folder" | "reference" | "basl", {
+    configured: number;
+    available: number;
+    unavailable: number;
+  }>;
+  ai_enabled: boolean;
+  ai_connection: "disabled" | "not_configured" | "connected" | "rejected" | "unreachable";
+};
+
 export type HealthResponse = {
   status: "ok" | "degraded";
   version: string;
@@ -59,7 +70,7 @@ export type UploadItemResult = {
   size?: number;
 };
 
-export type UploadResult = { uploaded: UploadItemResult[] };
+export type UploadResult = { uploaded: UploadItemResult[]; analysis_run_id: string | null };
 
 export type CorpusPathOut = { path: string | null };
 
@@ -89,6 +100,7 @@ export type ReferenceOut = {
   sheets: string[];
   columns: ReferenceColumnDef[];
   header_rows: Record<string, number>;
+  analysis_run_id: string | null;
 };
 
 export type SheetColumnOut = { letter: string; header: string };
@@ -143,6 +155,7 @@ export type AnomalyOut = {
   id: string;
   project_id: string;
   file_version_id: string | null;
+  run_id: string | null;
   type: string;
   // Categorie metier (Sujet de la regle checklist) — dimension de regroupement.
   category?: string;
@@ -150,6 +163,7 @@ export type AnomalyOut = {
   confidence: AnomalyConfidence | string;
   message: string;
   suggestion: string;
+  evidence: string;
   // Motif de rejet / commentaire du relecteur.
   feedback?: string;
   message_key: string | null;

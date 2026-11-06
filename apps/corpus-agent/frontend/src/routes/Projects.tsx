@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useDemoMode } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -19,6 +20,7 @@ type FormValues = z.infer<typeof schema>;
 
 export function Projects() {
   const { t, i18n } = useTranslation();
+  const { mode, isReady } = useDemoMode();
   const lang = (i18n.language || "fr").slice(0, 2);
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -49,23 +51,25 @@ export function Projects() {
         <p>{t("page.projects")}</p>
       </div>
 
-      <div className="card">
-        <h2 className="card-title">{t("projects.new")}</h2>
-        <form className="form" onSubmit={handleSubmit((v) => create.mutate(v))}>
-          <input className="input" placeholder={t("projects.namePh")} {...register("name")} />
-          <input className="input" placeholder={t("projects.descPh")} {...register("description")} />
-          <label className="checkbox">
-            <input type="checkbox" {...register("vision_enabled")} />
-            {t("projects.vision")}
-          </label>
-          <div className="row">
-            <button type="submit" className="btn primary" disabled={create.isPending || !formState.isValid}>
-              {t("projects.create")}
-            </button>
-            {error && <span className="error">{error}</span>}
-          </div>
-        </form>
-      </div>
+      {isReady && mode === "normal" && (
+        <div className="card">
+          <h2 className="card-title">{t("projects.new")}</h2>
+          <form className="form" onSubmit={handleSubmit((v) => create.mutate(v))}>
+            <input className="input" placeholder={t("projects.namePh")} {...register("name")} />
+            <input className="input" placeholder={t("projects.descPh")} {...register("description")} />
+            <label className="checkbox">
+              <input type="checkbox" {...register("vision_enabled")} />
+              {t("projects.vision")}
+            </label>
+            <div className="row">
+              <button type="submit" className="btn primary" disabled={create.isPending || !formState.isValid}>
+                {t("projects.create")}
+              </button>
+              {error && <span className="error">{error}</span>}
+            </div>
+          </form>
+        </div>
+      )}
 
       <div className="card">
         <h2 className="card-title">{t("projects.list")}</h2>

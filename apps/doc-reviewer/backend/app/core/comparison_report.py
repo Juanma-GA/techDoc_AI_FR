@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.comparison_page_alignment import align_pages, combine_page_slots
+from app.core.comparison_page_similarity import PAGE_SIMILARITY_THRESHOLD
 from app.core.document_comparison import PdfTextLine, extract_pdf_text
 from app.core.errors import AppError
 from app.core.security import safe_storage_join
@@ -24,6 +25,7 @@ def build_comparison_report(
     paths: list[Path],
     filenames: list[str],
     reference_index: int,
+    page_similarity_threshold: float = PAGE_SIMILARITY_THRESHOLD,
 ) -> dict[str, Any]:
     extracted = [extract_pdf_text(path) for path in paths]
     documents = [
@@ -36,7 +38,12 @@ def build_comparison_report(
     for index, candidate in enumerate(extracted):
         if index == reference_index:
             continue
-        page_alignment = align_pages(reference.pages, candidate.pages, index)
+        page_alignment = align_pages(
+            reference.pages,
+            candidate.pages,
+            index,
+            page_similarity_threshold,
+        )
         candidate_lines_by_page = _lines_by_page(candidate.lines)
         changes: list[dict[str, Any]] = []
         for pair_index, page_match in enumerate(page_alignment):

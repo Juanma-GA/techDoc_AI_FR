@@ -8,6 +8,7 @@ Aucun fichier utilisateur n'est lu.
 from __future__ import annotations
 
 import io
+import json
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import AnalysisRun, Anomaly, File, FileVersion, Project
+from app.core.demo_mode import DEMO_FOLDER_KEY, demo_folder_path, demo_project_filter
+from app.db.models import AnalysisRun, Anomaly, AppConfig, File, FileVersion, Project
 
 DEMO_PROJECT_NAME = "Projet démo - Fiches de maintenance"
 DEMO_PROJECT_DESCRIPTION = (
@@ -65,6 +67,7 @@ _SHEETS = (
             ("21-30-02.1", "Acces", "Ouvrir le panneau d'acces et securiser la zone.", 15, "B1", ""),
             ("21-30-02.2", "Inspection", "Inspecter visuellement le clapet et mesurer le jeu de fonctionnement.", 40, "B1", "TL-2001"),
             ("21-30-02.3", "Essai", "Realiser l'essai fonctionnel et noter les valeurs relevees.", 35, "B2", "TL-2002"),
+            ("21-30-02.4", "Verification croisee", "Verifier la disponibilite de l'outil TL-9999 dans les sources du projet.", 10, "B1", "TL-9999"),
         ],
         [
             ("PN-DEMO-2101", "Clapet de regulation", 1, "EA", "Selon inspection"),
@@ -132,6 +135,90 @@ def _build_workbook(spec: tuple) -> bytes:
     return buffer.getvalue()
 
 
+def _build_source_workbook(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
+    wb = Workbook()
+    wb.remove(wb.active)
+    for title, rows in sheets:
+        sheet = wb.create_sheet(title)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def _seed_demo_sources(project: Project) -> None:
+    source_dir = Path(settings.storage_dir) / f"project_{project.id}" / "reference"
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    reference_path = source_dir / "referentiel_demo.xlsx"
+    reference_path.write_bytes(
+        _build_source_workbook([
+            ("Catalogue", [
+                ["Référence pièce", "Référence outillage"],
+                ["PN-DEMO-3201", ""],
+                ["PN-DEMO-3202", ""],
+                ["PN-DEMO-3203", ""],
+                ["PN-DEMO-2101", ""],
+                ["PN-DEMO-2102", ""],
+                ["PN-DEMO-2401", ""],
+                ["PN-DEMO-2402", ""],
+                ["", "TL-1001"],
+                ["", "TL-1002"],
+                ["", "TL-2001"],
+                ["", "TL-2002"],
+                ["", "TL-3001"],
+                ["", "TL-3002"],
+            ]),
+        ])
+    )
+    basl_path = source_dir / "basl_demo.xlsx"
+    basl_path.write_bytes(
+        _build_source_workbook([
+            ("Rechanges", [
+                ["Référence", "Désignation"],
+                ["PN-DEMO-3201", "Vérin de train principal"],
+                ["PN-DEMO-3202", "Joint d'étanchéité"],
+                ["PN-DEMO-3203", "Axe de fixation"],
+                ["PN-DEMO-2101", "Clapet de régulation"],
+                ["PN-DEMO-2102", "Collier de serrage"],
+                ["PN-DEMO-2401", "Connecteur de bus"],
+                ["PN-DEMO-2402", "Graisse diélectrique"],
+            ]),
+            ("Outillage", [
+                ["Référence", "Désignation"],
+                ["TL-1001", "Manomètre hydraulique"],
+                ["TL-1002", "Clé dynamométrique"],
+                ["TL-2001", "Jauge d'épaisseur"],
+                ["TL-2002", "Banc d'essai pression"],
+                ["TL-3001", "Multimètre"],
+                ["TL-3002", "Tournevis dynamométrique"],
+            ]),
+        ])
+    )
+    project.reference_path = str(reference_path)
+    project.basl_path = str(basl_path)
+    project.reference_columns = json.dumps([
+        {"name": "reference_piece", "sheet": "Catalogue", "column": "A", "builtin": False},
+        {"name": "reference_tool", "sheet": "Catalogue", "column": "B", "builtin": False},
+    ])
+    project.basl_columns = json.dumps([
+        {"name": "rechange", "sheet": "Rechanges", "column": "A", "builtin": True},
+        {"name": "outillage", "sheet": "Outillage", "column": "A", "builtin": True},
+        {"name": "infrastructure", "sheet": "", "column": "", "builtin": True},
+    ])
+
+
+def ensure_demo_connected_folder(project: Project) -> Path:
+    folder = demo_folder_path(project.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    for spec in _SHEETS:
+        destination = folder / spec[0]
+        if not destination.exists():
+            destination.write_bytes(_build_workbook(spec))
+    return folder
+
+
 # Anciennete (jours) de chaque analyse : le nombre d'anomalies par analyse
 # diminue (8, 5, 3, 2) pour illustrer l'amelioration de la conformite du corpus.
 _RUN_AGES = (21, 14, 7, 1)
@@ -168,7 +255,6 @@ def _anomaly_specs() -> list[tuple]:
         (2, 2, "Pieces", "medium", "elevee", "open", "L'unite de la graisse dielectrique n'est pas harmonisee avec le catalogue.", "Utiliser l'unite du catalogue.", "Pieces / PN-DEMO-2402"),
         # Analyse 3 : corpus quasi conforme (2 anomalies)
         (1, 3, "Securite", "medium", "moyenne", "open", "La mise en garde avant essai est presente mais sans niveau de criticite.", "Preciser le niveau de criticite.", "Taches / 21-30-02.3"),
-        (2, 3, "Outillage", "low", "faible", "open", "La prochaine calibration de TL-3001 arrive a echeance proche.", "Verifier la date de calibration.", "Outillage / TL-3001"),
     ]
 
 
@@ -221,13 +307,32 @@ def _seed_analysis(db: Session, project: Project) -> None:
                 resolved_at=created + timedelta(days=2) if status == "fixed" else None,
             )
         )
+    version = versions[1]
+    if version is not None:
+        db.add(
+            Anomaly(
+                project_id=project.id,
+                file_version_id=version.id,
+                run_id=runs[-1].id,
+                type="reference_cross_check",
+                category="Référentiel / BASL",
+                severity="medium",
+                confidence="elevee",
+                message="La référence TL-9999 est absente des colonnes mappées du référentiel et de la BASL.",
+                suggestion="Vérifier la référence TL-9999 dans les sources de référence.",
+                evidence="TL-9999",
+                location="FTM-DEMO-21-30-02.xlsx | Taches / 21-30-02.4",
+                status="open",
+                created_at=now - timedelta(days=_RUN_AGES[-1]),
+            )
+        )
 
 
 def seed_demo_project(db: Session) -> Project:
     """Cree le projet demo s'il n'existe pas ; sinon le renvoie tel quel."""
     from app.api.files import _ingest_file
 
-    existing = db.scalar(select(Project).where(Project.name == DEMO_PROJECT_NAME))
+    existing = db.scalar(select(Project).where(demo_project_filter()))
     if existing is not None:
         run_count = db.scalar(select(func.count()).select_from(AnalysisRun).where(AnalysisRun.project_id == existing.id))
         rejected_without_motif = db.scalar(
@@ -244,16 +349,50 @@ def seed_demo_project(db: Session) -> Project:
             .join(File, FileVersion.file_id == File.id)
             .where(Anomaly.project_id == existing.id, File.project_id != existing.id)
         )
-        if run_count == len(_RUN_AGES) and not rejected_without_motif and not misattached:
+        source_files_exist = all(
+            path and Path(path).is_file()
+            for path in (existing.reference_path, existing.basl_path)
+        )
+        connected_folder = ensure_demo_connected_folder(existing)
+        if not existing.corpus_path:
+            saved_folder = db.get(AppConfig, DEMO_FOLDER_KEY)
+            restored_folder = (
+                saved_folder.value
+                if saved_folder and saved_folder.value and Path(saved_folder.value).is_dir()
+                else str(connected_folder)
+            )
+            existing.corpus_path = restored_folder
+            db.commit()
+        if (
+            run_count >= len(_RUN_AGES)
+            and not rejected_without_motif
+            and not misattached
+            and source_files_exist
+            and existing.reference_columns
+            and existing.basl_columns
+        ):
             return existing
         # Jeu de donnees demo obsolete : on le regenere
         remove_demo_project(db)
 
-    project = Project(name=DEMO_PROJECT_NAME, description=DEMO_PROJECT_DESCRIPTION)
+    saved_folder = db.get(AppConfig, DEMO_FOLDER_KEY)
+    restored_folder = (
+        saved_folder.value
+        if saved_folder and saved_folder.value and Path(saved_folder.value).is_dir()
+        else None
+    )
+    project = Project(
+        name=DEMO_PROJECT_NAME, description=DEMO_PROJECT_DESCRIPTION,
+        corpus_path=restored_folder,
+    )
     db.add(project)
     db.flush()
+    connected_folder = ensure_demo_connected_folder(project)
+    if not project.corpus_path:
+        project.corpus_path = str(connected_folder)
     for spec in _SHEETS:
         _ingest_file(db, project, _build_workbook(spec), spec[0], _XLSX_MIME)
+    _seed_demo_sources(project)
     db.flush()
     _seed_analysis(db, project)
     db.commit()
@@ -262,7 +401,7 @@ def seed_demo_project(db: Session) -> Project:
 
 
 def remove_demo_project(db: Session) -> None:
-    project = db.scalar(select(Project).where(Project.name == DEMO_PROJECT_NAME))
+    project = db.scalar(select(Project).where(demo_project_filter()))
     if project is None:
         return
     project_dir = Path(settings.storage_dir) / f"project_{project.id}"

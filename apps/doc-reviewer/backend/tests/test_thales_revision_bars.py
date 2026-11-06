@@ -150,7 +150,7 @@ def test_modified_revision_bar_excludes_edi_ni_pl_by_body_heading() -> None:
         assert result.status == "INCONCLUSIVE", title
 
 
-def test_modified_revision_bar_does_not_exempt_mentions_or_footer_page_labels() -> None:
+def test_modified_revision_bar_exempts_footer_page_labels_but_not_mentions() -> None:
     for text in (
         "Refer to the NUMERICAL INDEX for part numbers.",
         "See EQUIPMENT DESIGNATOR INDEX.",
@@ -170,10 +170,11 @@ def test_modified_revision_bar_does_not_exempt_mentions_or_footer_page_labels() 
 
         result = _execute("revision_bar_modified", context)
 
-        assert result.status == "FAIL", text
+        expected = "INCONCLUSIVE" if is_footer else "FAIL"
+        assert result.status == expected, text
 
 
-def test_edi_ni_pl_headings_do_not_exempt_other_revision_bar_controls() -> None:
+def test_edi_ni_pl_headings_exempt_all_revision_bar_controls() -> None:
     for title in ("EQUIPMENT DESIGNATOR INDEX", "NUMERICAL INDEX", "PARTS LIST"):
         spans = [Span(title, (100.0, 150.0, 400.0, 175.0), 1, "Arial", 12.0)]
         new_page = _execute("revision_bar_new", _context("N", [], spans=spans))
@@ -181,8 +182,8 @@ def test_edi_ni_pl_headings_do_not_exempt_other_revision_bar_controls() -> None:
             "revision_bar_margin", _context("R", [_bar(90.0, 180.0, 300.0)], spans=spans)
         )
 
-        assert new_page.status == "FAIL", title
-        assert misplaced_bar.status == "FAIL", title
+        assert new_page.status == "INCONCLUSIVE", title
+        assert misplaced_bar.status == "INCONCLUSIVE", title
 
 
 def test_revision_bar_offset_matches_margin_on_odd_and_even_pages() -> None:

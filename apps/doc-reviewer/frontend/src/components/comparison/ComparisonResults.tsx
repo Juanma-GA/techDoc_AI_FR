@@ -43,7 +43,7 @@ export function ComparisonResults({
       <div className="mt-5 space-y-6">
         <div className="space-y-3">
           <p className="label">{t("comparison.reference")}: {reference?.filename ?? comparison.title}</p>
-          {comparison.file_count > 2 ? <p className="hint">{t("comparison.exportZipHint")}</p> : null}
+          {comparison.file_count > 2 ? <p className="hint">{t("comparison.exportAllHint")}</p> : null}
           <a
             data-comparison-download
             className={buttonVariants({ variant: "secondary" })}

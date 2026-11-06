@@ -168,7 +168,6 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">{t("pages.privacy")}</p>
       </Card>
 
       <Card className="panel action-panel">

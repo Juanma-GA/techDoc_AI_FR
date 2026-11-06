@@ -1,3 +1,4 @@
+import { Spinner } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
@@ -19,26 +20,21 @@ export function Data() {
     ? [
         { key: "imports", label: t("data.imports"), value: String(stats.imports) },
         { key: "nodes", label: t("data.nodes"), value: String(stats.nodes) },
-        { key: "runs", label: t("data.runs"), value: String(stats.runs) },
-        { key: "suggestions", label: t("data.suggestions"), value: String(stats.suggestions) },
         { key: "diffs", label: t("data.diffs"), value: String(stats.diffs) },
-        { key: "checks", label: t("data.checks"), value: String(stats.checks) },
         { key: "conversions", label: t("data.conversions"), value: String(stats.conversions) },
-        { key: "replacements", label: t("data.replacements"), value: String(stats.replacements) },
         { key: "colorizations", label: t("data.colorizations"), value: String(stats.colorizations) },
         { key: "nomenclatures", label: t("data.nomenclatures"), value: String(stats.nomenclatures) },
         { key: "smgxmlRuns", label: t("data.smgxmlRuns"), value: String(stats.smgxml_runs) },
-        { key: "qcChecklists", label: t("data.qcChecklists"), value: String(stats.qc_checklists) },
         { key: "totalSize", label: t("data.totalSize"), value: formatSize(stats.total_size_bytes) },
       ]
     : [];
 
   return (
     <div className="form">
-      <article className="card">
-        <h2 className="card-title">{t("data.overviewTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("data.overviewTitle")}</h2>
         {statsQuery.isLoading ? (
-          <span className="spinner" />
+          <Spinner aria-label={t("common.loading")} />
         ) : stats ? (
           <div className="kpi-grid">
             {kpis.map((kpi) => (
@@ -50,10 +46,10 @@ export function Data() {
           </div>
         ) : (
           <div className="empty-state">
-            <h3 className="card-title">{t("data.statsUnavailable")}</h3>
+            <h3 className="section-title">{t("data.statsUnavailable")}</h3>
           </div>
         )}
-      </article>
+      </section>
 
       <DataResetCard title={t("data.resetTitle")} description={t("data.resetBanner")} />
     </div>

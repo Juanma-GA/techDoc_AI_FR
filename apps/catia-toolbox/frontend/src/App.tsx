@@ -2,30 +2,30 @@ import {
   AppShell,
   ErrorBoundary,
   LanguageSwitcher,
+  Select,
+  Spinner,
   SidebarNavContent,
   sidebarNavItemClass,
   type SidebarNavIconName,
+  useMediaQuery,
 } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
-import { LlmBadge } from "./components/LlmBadge";
 import i18n from "./i18n";
 import { healthApi, importsApi, identificationApi } from "./lib/api";
-import { Checks } from "./routes/Checks";
-import { Colorization } from "./routes/Colorization";
-import { Conversion } from "./routes/Conversion";
-import { Data } from "./routes/Data";
-import { Diff } from "./routes/Diff";
-import { Identification } from "./routes/Identification";
-import { Qc } from "./routes/Qc";
-import { Replacement } from "./routes/Replacement";
-import { Settings } from "./routes/Settings";
-import { SmgxmlRename } from "./routes/SmgxmlRename";
-import { TreeOptimization } from "./routes/TreeOptimization";
 import { useWorkspace } from "./stores/workspace";
+
+const Identification = lazy(() => import("./routes/Identification").then((module) => ({ default: module.Identification })));
+const Diff = lazy(() => import("./routes/Diff").then((module) => ({ default: module.Diff })));
+const Conversion = lazy(() => import("./routes/Conversion").then((module) => ({ default: module.Conversion })));
+const TreeOptimization = lazy(() => import("./routes/TreeOptimization").then((module) => ({ default: module.TreeOptimization })));
+const Colorization = lazy(() => import("./routes/Colorization").then((module) => ({ default: module.Colorization })));
+const SmgxmlRename = lazy(() => import("./routes/SmgxmlRename").then((module) => ({ default: module.SmgxmlRename })));
+const Data = lazy(() => import("./routes/Data").then((module) => ({ default: module.Data })));
+const Settings = lazy(() => import("./routes/Settings").then((module) => ({ default: module.Settings })));
 
 type NavLeaf = { to: string; labelKey: string; icon: SidebarNavIconName; end?: boolean };
 type NavGroup = { groupKey: string; items: NavLeaf[] };
@@ -33,7 +33,6 @@ type NavEntry = NavLeaf | NavGroup;
 
 const isGroup = (e: NavEntry): e is NavGroup => "groupKey" in e;
 
-/** Navigation groupee, ordre et libelles fideles au preview (lignes 176-206). */
 const NAV: NavEntry[] = [
   {
     groupKey: "nav.groups.identification",
@@ -57,19 +56,14 @@ const NAV: NavEntry[] = [
     groupKey: "nav.groups.integration",
     items: [
       { to: "/smgxml-rename", labelKey: "nav.smgxmlRename", icon: "rename" },
-      { to: "/replacement", labelKey: "nav.replacement", icon: "replacement" },
-    ],
-  },
-  {
-    groupKey: "nav.groups.controle",
-    items: [
-      { to: "/qc", labelKey: "nav.qc", icon: "quality" },
-      { to: "/checks", labelKey: "nav.checks", icon: "rules" },
     ],
   },
   {
     groupKey: "nav.groups.outils",
-    items: [{ to: "/settings", labelKey: "nav.settings", icon: "settings" }],
+    items: [
+      { to: "/data", labelKey: "nav.data", icon: "data" },
+      { to: "/settings", labelKey: "nav.settings", icon: "settings" },
+    ],
   },
 ];
 
@@ -81,10 +75,8 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
   "/colorization": { titleKey: "page.colorization.title", subKey: "page.colorization.sub" },
   "/tree": { titleKey: "page.optimizationTree.title", subKey: "page.optimizationTree.sub" },
   "/smgxml-rename": { titleKey: "page.smgxmlRename.title", subKey: "page.smgxmlRename.sub" },
-  "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
-  "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
-  "/checks": { titleKey: "page.checks.title", subKey: "page.checks.sub" },
   "/settings": { titleKey: "page.settings.title", subKey: "page.settings.sub" },
+  "/data": { titleKey: "nav.data", subKey: "" },
 };
 
 const navItemClass = ({ isActive }: { isActive: boolean }) =>
@@ -141,20 +133,35 @@ function WorkspaceBootstrap() {
 export function App() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const compactNavigation = useMediaQuery("(max-width: 760px)");
+  const navItems = NAV.flatMap((entry) => isGroup(entry) ? entry.items : [entry]);
   const meta = ROUTE_META[pathname] ?? ROUTE_META["/identification"]!;
   const lang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+
+  useEffect(() => {
+    document.title = t("app.title");
+  }, [t]);
 
   return (
     <AppShell
       className="ct"
+      mainClassName="workspace-main"
       title={t("app.title")}
       brandTitle={t("app.description")}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}
       collapseLabel={t("nav.collapse")}
       expandLabel={t("nav.expand")}
-      llmStatus={<LlmBadge />}
-      navigation={NAV.map((entry) =>
+      navigation={compactNavigation ? (
+        <Select
+          className="min-w-0"
+          aria-label={t("nav.ariaLabel")}
+          value={navItems.some((item) => item.to === pathname) ? pathname : "/identification"}
+          options={navItems.map((item) => ({ value: item.to, label: t(item.labelKey) }))}
+          onChange={(event) => navigate(event.target.value)}
+        />
+      ) : NAV.map((entry) =>
         isGroup(entry) ? (
           <div key={entry.groupKey} className="ui-nav-group">
             <div className="ui-nav-group-title">{t(entry.groupKey)}</div>
@@ -190,16 +197,22 @@ export function App() {
         <LanguageSwitcher
           languages={["fr", "en"]}
           currentLanguage={lang}
+          ariaLabel={t("nav.languageSwitcher")}
           onLanguageChange={(language) => void i18n.changeLanguage(language)}
         />
       }
     >
       <WorkspaceBootstrap />
-      <div className="page-header">
-        <h1>{t(meta.titleKey)}</h1>
+      <header className="page-header">
+        <h1 className="break-words">{t(meta.titleKey)}</h1>
         {meta.subKey ? <p>{t(meta.subKey)}</p> : null}
-      </div>
-      <ErrorBoundary>
+      </header>
+      <ErrorBoundary key={pathname}>
+        <Suspense fallback={
+          <div className="flex min-h-32 items-center justify-center" data-testid="route-loading">
+            <Spinner aria-label={t("common.loading")} />
+          </div>
+        }>
         <Routes>
           <Route path="/" element={<Navigate to="/identification" replace />} />
           <Route path="/identification" element={<Identification />} />
@@ -211,12 +224,11 @@ export function App() {
           <Route path="/suggestions" element={<Navigate to="/tree" replace />} />
           <Route path="/export" element={<Navigate to="/identification" replace />} />
           <Route path="/smgxml-rename" element={<SmgxmlRename />} />
-          <Route path="/replacement" element={<Replacement />} />
-          <Route path="/qc" element={<Qc />} />
-          <Route path="/checks" element={<Checks />} />
           <Route path="/data" element={<Data />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/identification" replace />} />
         </Routes>
+        </Suspense>
       </ErrorBoundary>
     </AppShell>
   );

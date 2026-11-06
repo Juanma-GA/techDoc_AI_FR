@@ -32,7 +32,6 @@
       "bottomRight": "inférieur droit"
     },
     "unsupportedText": "Le nom ou la date contient un caractère non pris en charge par le PDF.",
-    "privacy": "La signature, le nom et la date restent en mémoire pendant cette opération et ne sont pas conservés après fermeture.",
     "canvasLabel": "Cadre de dessin de la signature",
     "clear": "Effacer",
     "save": "Enregistrer le dessin",

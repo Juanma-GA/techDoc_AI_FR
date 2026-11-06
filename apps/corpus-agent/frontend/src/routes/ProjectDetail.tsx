@@ -1,19 +1,21 @@
+import { useDemoMode } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { AnalysisCard } from "../components/project/AnalysisCard";
 import { FilesCard } from "../components/project/FilesCard";
 import { ReferenceCard } from "../components/project/ReferenceCard";
 import { useDoubleClickConfirm } from "../hooks/useDoubleClickConfirm";
-import { projectsApi } from "../lib/api";
+import { ApiClientError, projectsApi } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { useScopeStore } from "../stores/useScopeStore";
 import type { ProjectOut } from "../lib/types";
 
 export function ProjectDetail() {
   const { t, i18n } = useTranslation();
+  const { mode, isReady } = useDemoMode();
   const lang = (i18n.language || "fr").slice(0, 2);
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -46,6 +48,10 @@ export function ProjectDetail() {
   });
   const del = useDoubleClickConfirm(() => remove.mutate(), 3000);
 
+  if (mode === "demo" && projectQuery.error instanceof ApiClientError && projectQuery.error.status === 404) {
+    return <Navigate to="/projects" replace />;
+  }
+
   if (projectQuery.isLoading || !p) {
     return (
       <>
@@ -73,12 +79,16 @@ export function ProjectDetail() {
             <button type="button" className="btn secondary small" onClick={() => { setManagerScope([id]); navigate("/"); }}>
               {t("projects.dashboard")}
             </button>
-            <button type="button" className="btn secondary small" onClick={() => setEditing((e) => !e)}>
-              {t("projects.edit")}
-            </button>
-            <button type="button" className="btn danger small" onClick={del.handleClick}>
-              {del.armed ? t("common.confirmDelete") : t("projects.delete")}
-            </button>
+            {isReady && mode === "normal" && (
+              <>
+                <button type="button" className="btn secondary small" onClick={() => setEditing((e) => !e)}>
+                  {t("projects.edit")}
+                </button>
+                <button type="button" className="btn danger small" onClick={del.handleClick}>
+                  {del.armed ? t("common.confirmDelete") : t("projects.delete")}
+                </button>
+              </>
+            )}
           </div>
         </div>
 

@@ -1,8 +1,10 @@
 package pdf
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -11,6 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+
+	"pdf-toolkit/services"
 )
 
 func TestPDFCPUOperations(t *testing.T) {
@@ -80,6 +87,185 @@ func TestPDFCPUOperations(t *testing.T) {
 	assertPageCount(t, processor, rotatedAll, 3)
 }
 
+func TestPDFCPUExtractImagesCreatesZIP(t *testing.T) {
+	tempDir := t.TempDir()
+	imagePath := filepath.Join(tempDir, "source.png")
+	input := filepath.Join(tempDir, "images.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	writeTestPNG(t, imagePath)
+	if err := NewPDFCPU().ImagesToPDF(context.Background(), []string{imagePath}, input); err != nil {
+		t.Fatalf("ImagesToPDF() error = %v", err)
+	}
+
+	if err := NewPDFCPU().ExtractImages(context.Background(), input, output); err != nil {
+		t.Fatalf("ExtractImages() error = %v", err)
+	}
+	archive, err := zip.OpenReader(output)
+	if err != nil {
+		t.Fatalf("open extracted images archive: %v", err)
+	}
+	defer archive.Close()
+	if len(archive.File) != 1 || archive.File[0].Name != "page-0001-image-0001.png" {
+		t.Fatalf("archive files = %+v, want one PNG from page 1", archive.File)
+	}
+	extracted, err := archive.File[0].Open()
+	if err != nil {
+		t.Fatalf("open extracted image: %v", err)
+	}
+	config, decodeErr := png.DecodeConfig(extracted)
+	closeErr := extracted.Close()
+	if decodeErr != nil || closeErr != nil {
+		t.Fatalf("decode extracted image: %v", errors.Join(decodeErr, closeErr))
+	}
+	if config.Width != 2 || config.Height != 2 {
+		t.Fatalf("extracted image size = %dx%d, want 2x2", config.Width, config.Height)
+	}
+}
+
+func TestPDFCPUExtractImagesGroupsRepeatedImagesInZIP(t *testing.T) {
+	tempDir := t.TempDir()
+	imagePaths := []string{
+		filepath.Join(tempDir, "first.png"),
+		filepath.Join(tempDir, "second.png"),
+		filepath.Join(tempDir, "third.png"),
+		filepath.Join(tempDir, "fourth.png"),
+	}
+	writeTestPNGWithPixelColor(t, imagePaths[0], color.White)
+	writeTestPNGWithPixelColor(t, imagePaths[1], color.RGBA{R: 255, A: 255})
+	writeTestPNGWithPixelColor(t, imagePaths[2], color.RGBA{G: 255, A: 255})
+	writeTestPNGWithPixelColor(t, imagePaths[3], color.RGBA{B: 255, A: 255})
+
+	inputImages := []string{
+		imagePaths[0], imagePaths[0], imagePaths[0],
+		imagePaths[1], imagePaths[1], imagePaths[1],
+		imagePaths[2], imagePaths[2],
+		imagePaths[3],
+	}
+	input := filepath.Join(tempDir, "images.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	if err := NewPDFCPU().ImagesToPDF(context.Background(), inputImages, input); err != nil {
+		t.Fatalf("ImagesToPDF() error = %v", err)
+	}
+	if err := NewPDFCPU().ExtractImages(context.Background(), input, output); err != nil {
+		t.Fatalf("ExtractImages() error = %v", err)
+	}
+
+	archive, err := zip.OpenReader(output)
+	if err != nil {
+		t.Fatalf("open extracted images archive: %v", err)
+	}
+	defer archive.Close()
+
+	wantNames := []string{
+		"images_recurrentes/groupe-001/page-0001-image-0001.png",
+		"images_recurrentes/groupe-001/page-0002-image-0002.png",
+		"images_recurrentes/groupe-001/page-0003-image-0003.png",
+		"images_recurrentes/groupe-002/page-0004-image-0004.png",
+		"images_recurrentes/groupe-002/page-0005-image-0005.png",
+		"images_recurrentes/groupe-002/page-0006-image-0006.png",
+		"page-0007-image-0007.png",
+		"page-0008-image-0008.png",
+		"page-0009-image-0009.png",
+	}
+	if len(archive.File) != len(wantNames) {
+		t.Fatalf("archive contains %d files, want %d", len(archive.File), len(wantNames))
+	}
+	gotNames := make(map[string]bool, len(archive.File))
+	for _, file := range archive.File {
+		gotNames[file.Name] = true
+	}
+	for _, wantName := range wantNames {
+		if !gotNames[wantName] {
+			t.Errorf("archive is missing %q", wantName)
+		}
+	}
+}
+
+func TestPDFCPUExtractImagesRejectsPDFWithoutImages(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "empty.pdf")
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	if err := os.WriteFile(input, testPDF(t, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := NewPDFCPU().ExtractImages(context.Background(), input, output)
+	if !errors.Is(err, services.ErrNoImages) {
+		t.Fatalf("ExtractImages() error = %v, want ErrNoImages", err)
+	}
+	if _, statErr := os.Stat(output); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("empty image archive remains after extraction: %v", statErr)
+	}
+}
+
+func TestPDFCPUCleanRemovesMetadataAndAnnotations(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "source.pdf")
+	output := filepath.Join(tempDir, "cleaned.pdf")
+	if err := os.WriteFile(input, testPDFWithSensitiveMetadataAndAnnotation(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	processor := NewPDFCPU()
+	if err := processor.Clean(context.Background(), input, output); err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+	assertPageCount(t, processor, output, 1)
+	cleanedBytes, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, privateText := range []string{"private title", "private author", "private annotation", "private xmp metadata"} {
+		if bytes.Contains(cleanedBytes, []byte(privateText)) {
+			t.Errorf("cleaned PDF still contains %q", privateText)
+		}
+	}
+
+	file, err := os.Open(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties, err := api.Properties(file, nil)
+	closeErr := file.Close()
+	if err != nil || closeErr != nil {
+		t.Fatalf("read cleaned PDF properties: %v", errors.Join(err, closeErr))
+	}
+	if len(properties) != 0 {
+		t.Fatalf("cleaned PDF properties = %v, want none", properties)
+	}
+
+	file, err = os.Open(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	annotations, err := api.Annotations(file, nil, nil)
+	closeErr = file.Close()
+	if err != nil || closeErr != nil {
+		t.Fatalf("read cleaned PDF annotations: %v", errors.Join(err, closeErr))
+	}
+	count, _, err := pdfcpu.ListAnnotations(annotations)
+	if err != nil {
+		t.Fatalf("list cleaned PDF annotations: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("cleaned PDF annotation count = %d, want 0", count)
+	}
+}
+
+func TestPDFCPUCleanAcceptsPDFWithoutMetadataOrAnnotations(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "source.pdf")
+	output := filepath.Join(tempDir, "cleaned.pdf")
+	if err := os.WriteFile(input, testPDF(t, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewPDFCPU().Clean(context.Background(), input, output); err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+	assertPageCount(t, NewPDFCPU(), output, 1)
+}
+
 func TestPDFCPUSplitDocumentReusesSourceContext(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "source.pdf")
@@ -109,13 +295,17 @@ func TestPDFCPUSplitDocumentReusesSourceContext(t *testing.T) {
 }
 
 func writeTestPNG(t *testing.T, filePath string) {
+	writeTestPNGWithPixelColor(t, filePath, color.White)
+}
+
+func writeTestPNGWithPixelColor(t *testing.T, filePath string, pixelColor color.Color) {
 	t.Helper()
 	file, err := os.Create(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pixel := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	pixel.Set(0, 0, color.White)
+	pixel.Set(0, 0, pixelColor)
 	if err := png.Encode(file, pixel); err != nil {
 		_ = file.Close()
 		t.Fatal(err)
@@ -138,6 +328,17 @@ func assertPageCount(t *testing.T, processor *PDFCPU, file string, want int) {
 
 func testPDF(t *testing.T, pageCount int) []byte {
 	t.Helper()
+	widths := make([]int, pageCount)
+	for index := range widths {
+		widths[index] = 612
+	}
+	return testPDFWithWidths(t, widths...)
+}
+
+// testPDFWithWidths builds one page per width so tests can identify pages after reordering.
+func testPDFWithWidths(t *testing.T, widths ...int) []byte {
+	t.Helper()
+	pageCount := len(widths)
 	var output bytes.Buffer
 	output.WriteString("%PDF-1.7\n")
 	offsets := []int{0}
@@ -155,7 +356,7 @@ func testPDF(t *testing.T, pageCount int) []byte {
 	}
 	writeObject(2, fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", strings.Join(kids, " "), pageCount))
 	for page := 1; page <= pageCount; page++ {
-		writeObject(page+2, fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>"))
+		writeObject(page+2, fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d 792] /Resources << >> >>", widths[page-1]))
 	}
 
 	xrefOffset := output.Len()
@@ -170,6 +371,53 @@ func testPDF(t *testing.T, pageCount int) []byte {
 	if _, err := fmt.Fprintf(
 		&output,
 		"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+		len(offsets),
+		xrefOffset,
+	); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
+}
+
+func testPDFWithSensitiveMetadataAndAnnotation(t *testing.T) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	output.WriteString("%PDF-1.7\n")
+	offsets := []int{0}
+	writeObject := func(number int, body string) {
+		offsets = append(offsets, output.Len())
+		if _, err := fmt.Fprintf(&output, "%d 0 obj\n%s\nendobj\n", number, body); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeObject(1, "<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R >>")
+	writeObject(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	writeObject(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [4 0 R] >>")
+	writeObject(4, "<< /Type /Annot /Subtype /Text /Rect [0 0 20 20] /Contents (private annotation) /P 3 0 R >>")
+	writeObject(5, "<< /Title (private title) /Author (private author) >>")
+	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="">private xmp metadata</rdf:Description></rdf:RDF></x:xmpmeta>`)
+	offsets = append(offsets, output.Len())
+	if _, err := fmt.Fprintf(&output, "6 0 obj\n<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n", len(xmp)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := output.Write(xmp); err != nil {
+		t.Fatal(err)
+	}
+	output.WriteString("\nendstream\nendobj\n")
+
+	xrefOffset := output.Len()
+	if _, err := fmt.Fprintf(&output, "xref\n0 %d\n0000000000 65535 f \n", len(offsets)); err != nil {
+		t.Fatal(err)
+	}
+	for _, offset := range offsets[1:] {
+		if _, err := fmt.Fprintf(&output, "%010d 00000 n \n", offset); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := fmt.Fprintf(
+		&output,
+		"trailer\n<< /Size %d /Root 1 0 R /Info 5 0 R >>\nstartxref\n%d\n%%%%EOF\n",
 		len(offsets),
 		xrefOffset,
 	); err != nil {

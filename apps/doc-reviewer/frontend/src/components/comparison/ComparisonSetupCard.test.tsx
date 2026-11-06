@@ -100,7 +100,7 @@ describe("ComparisonSetupCard demo loading", () => {
     expect(onCompare).not.toHaveBeenCalled();
     await act(async () => button("comparison.compareButton").click());
 
-    expect(onCompare).toHaveBeenCalledWith(demoFiles, 0);
+    expect(onCompare).toHaveBeenCalledWith(demoFiles, 0, 85);
   });
 
   it("replaces a previous selection and resets the reference without duplicates", async () => {
@@ -139,7 +139,7 @@ describe("ComparisonSetupCard demo loading", () => {
     expect(container.querySelectorAll(".item-row")).toHaveLength(2);
     expect(container.querySelector<HTMLSelectElement>("select")?.value).toBe("1");
     await act(async () => button("comparison.compareButton").click());
-    expect(onCompare).toHaveBeenCalledWith(demoFiles, 1);
+    expect(onCompare).toHaveBeenCalledWith(demoFiles, 1, 85);
   });
 
   it("disables competing actions while demo files are loading", async () => {
@@ -179,7 +179,37 @@ describe("ComparisonSetupCard demo loading", () => {
     await selectFiles(demoFiles);
     await act(async () => button("comparison.compareButton").click());
 
-    expect(onCompare).toHaveBeenCalledWith(demoFiles, 0);
+    expect(onCompare).toHaveBeenCalledWith(demoFiles, 0, 85);
     expect(mocks.loadDemoComparisonPdfs).not.toHaveBeenCalled();
+  });
+
+  it("uses an accessible advanced slider and submits its selected threshold", async () => {
+    await render("normal");
+    const advancedSettings = container.querySelector<HTMLDetailsElement>("details.collapsible");
+    const slider = container.querySelector<HTMLInputElement>(
+      "#comparison-page-similarity-threshold",
+    );
+    expect(advancedSettings?.open).toBe(false);
+    expect(slider?.min).toBe("50");
+    expect(slider?.max).toBe("99");
+    expect(slider?.step).toBe("1");
+    expect(slider?.value).toBe("85");
+
+    if (!slider) throw new Error("Missing page similarity threshold slider");
+    const setSliderValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    if (!setSliderValue) throw new Error("Missing range input value setter");
+    await act(async () => {
+      setSliderValue.call(slider, "92");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.querySelector("output")?.textContent).toBe("92%");
+
+    await selectFiles(demoFiles);
+    await act(async () => button("comparison.compareButton").click());
+
+    expect(onCompare).toHaveBeenCalledWith(demoFiles, 0, 92);
   });
 });

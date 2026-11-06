@@ -19,16 +19,24 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
+import { NormChoiceDialog, type NormChoice } from "../components/reviewer/NormChoiceDialog";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { DocxReviewer } from "./DocxReviewer";
-import { useAnalyze } from "../hooks/useAnalyze";
+import { useAnalyze, type AnalyzeOptions } from "../hooks/useAnalyze";
 import {
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
+import { useClientRules, usePatchClientRuleBundle } from "../hooks/useClientConfig";
 import { useDocument } from "../hooks/useDocuments";
+import {
+  activeRuleCounts,
+  normNeedsChoice,
+  useDocumentNorm,
+  type DocumentNorm,
+} from "../hooks/useDocumentNorm";
 import {
   useBulkStatus,
   usePatchSuggestion,
@@ -49,7 +57,20 @@ export function DocumentReviewer() {
   const ruleResults = useRuleResults(
     document.data?.working_format === "pdf" ? documentId : undefined,
   );
-  const analyze = useAnalyze(documentId, document.data);
+  const clientRules = useClientRules();
+  const patchRuleBundle = usePatchClientRuleBundle();
+  const documentNorm = useDocumentNorm(documentId, document.data?.working_format === "pdf");
+  const [selectedNorm, setSelectedNorm] = useState<string | undefined>();
+  const mappingNorm = selectedNorm
+    ?? documentNorm.data?.detected_norm
+    ?? documentNorm.data?.default_norm
+    ?? undefined;
+  const analyze = useAnalyze(documentId, document.data, undefined, mappingNorm);
+  const [normPrompt, setNormPrompt] = useState<{
+    range: AnalyzeOptions;
+    detection: DocumentNorm;
+  } | null>(null);
+  const [normNotice, setNormNotice] = useState<string | null>(null);
   const [pendingPageStatus, setPendingPageStatus] = useState<{
     page: number;
     isModified: boolean | null;
@@ -92,6 +113,7 @@ export function DocumentReviewer() {
   useEffect(() => {
     setActiveReviewPage(null);
     setPageReviewChoices({});
+    setSelectedNorm(undefined);
   }, [documentId]);
 
   // Image PNG rendue serveur pour la page courante (cf. PdfViewer). `v=`
@@ -146,6 +168,53 @@ export function DocumentReviewer() {
   // precedente ; cascade les patchs appliques par-dessus).
   const handleUndo = (id: string): void => {
     revert.mutate(id);
+  };
+
+  // Detection is advisory: when it fails the analysis starts as before.
+  const startAnalysis = async (range: AnalyzeOptions): Promise<void> => {
+    setNormNotice(null);
+    let detection: DocumentNorm | undefined;
+    try {
+      detection = (await documentNorm.refetch()).data;
+    } catch {
+      detection = undefined;
+    }
+    if (detection && normNeedsChoice(detection, clientRules.data)) {
+      setNormPrompt({ range, detection });
+      return;
+    }
+    const resolvedNorm = range.norm
+      ?? detection?.detected_norm
+      ?? detection?.default_norm
+      ?? undefined;
+    if (resolvedNorm) setSelectedNorm(resolvedNorm);
+    await analyze.start(range);
+  };
+
+  const confirmNorm = async ({ norm, persist }: NormChoice): Promise<void> => {
+    const prompt = normPrompt;
+    if (!prompt) return;
+    setNormPrompt(null);
+    setSelectedNorm(norm);
+    if (persist && clientRules.data) {
+      const verification = clientRules.data.filter((rule) => rule.scope === "verification");
+      const normCodes = prompt.detection.norms.map((item) => item.code);
+      try {
+        await patchRuleBundle.mutateAsync({
+          rules: verification.filter((rule) => rule.bundle_code === norm),
+          active: true,
+        });
+        await patchRuleBundle.mutateAsync({
+          rules: verification.filter(
+            (rule) => rule.bundle_code !== norm && normCodes.includes(rule.bundle_code),
+          ),
+          active: false,
+        });
+      } catch {
+        setNormNotice(t("reviewer.norm.persistFailed"));
+      }
+    }
+    await analyze.start({ ...prompt.range, norm });
   };
 
   const handlePageReviewChoice = (isModified: boolean): void => {
@@ -289,7 +358,8 @@ export function DocumentReviewer() {
               running={analyze.status === "running"}
               blocked={!analyze.contextReady}
               blockReason={t("reviewer.meta.required")}
-              onStart={(range) => void analyze.start(range)}
+              trackModifiedPages={documentNorm.data?.page_revision_tracking ?? true}
+              onStart={(range) => void startAnalysis(range)}
             />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
@@ -310,6 +380,7 @@ export function DocumentReviewer() {
                 {analyze.warnings[0]}
               </span>
             ) : null}
+            {normNotice ? <span className="badge warn">{normNotice}</span> : null}
             <ExportSelector documentId={documentId} />
           </div>
         </div>
@@ -369,7 +440,9 @@ export function DocumentReviewer() {
         />
 
         <main className="reviewer-canvas reviewer-canvas-stack">
-          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+          {document.data ? (
+            <DocumentMetaPanel document={document.data} norm={mappingNorm} />
+          ) : null}
           <PdfViewer
             pageImageUrl={pageImageUrl}
             pageNumber={currentPage}
@@ -460,6 +533,14 @@ export function DocumentReviewer() {
           </div>
         ) : null}
       </ConfirmDialog>
+      {normPrompt ? (
+        <NormChoiceDialog
+          detection={normPrompt.detection}
+          activeCounts={activeRuleCounts(clientRules.data ?? [], normPrompt.detection.norms)}
+          onCancel={() => setNormPrompt(null)}
+          onConfirm={(choice) => void confirmNorm(choice)}
+        />
+      ) : null}
     </div>
   );
 }

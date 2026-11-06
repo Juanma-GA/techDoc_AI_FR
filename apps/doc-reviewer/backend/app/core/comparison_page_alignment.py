@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.comparison_page_similarity import align_page_sequences
+from app.core.comparison_page_similarity import PAGE_SIMILARITY_THRESHOLD, align_page_sequences
 from app.core.document_comparison import PdfTextPage
 
 
@@ -10,6 +10,7 @@ def align_pages(
     reference_pages: tuple[PdfTextPage, ...],
     comparison_pages: tuple[PdfTextPage, ...],
     comparison_index: int,
+    page_similarity_threshold: float = PAGE_SIMILARITY_THRESHOLD,
 ) -> list[dict]:
     alignment: list[dict] = []
     reference_offset = 0
@@ -17,6 +18,7 @@ def align_pages(
     for reference_page, comparison_page in align_page_sequences(
         reference_pages,
         comparison_pages,
+        page_similarity_threshold,
     ):
         if reference_page is not None and comparison_page is not None:
             status = "aligned" if reference_page.text == comparison_page.text else "changed"
