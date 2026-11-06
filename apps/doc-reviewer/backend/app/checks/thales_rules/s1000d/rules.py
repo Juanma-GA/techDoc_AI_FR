@@ -23,6 +23,7 @@ _MIGRATION = Condition(field="meta_update_type", equals="Migration")
 _MCO = Condition(field="meta_update_type", equals="MCO")
 _AIRBUS = Condition(field="meta_manufacturer", equals="Airbus")
 _BOEING = Condition(field="meta_manufacturer", equals="Boeing")
+_CMM_NUMBER_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 
 rule = partial(build_rule, _STANDARD_CODE, _CATALOG_VERSION)
 
@@ -163,25 +164,129 @@ S1000D_MCO_DM_DATES = rule(  # 6
 
 S1000D_MIGRATION_REVISION_ISSUE = rule(  # 7
     code="S1000D_MIGRATION_REVISION_ISSUE",
-    name="Migration : numéro de révision et issue date modifiés",
+    name="Migration : numéro de révision conforme",
     description=(
-        "Pour une migration, le numéro de révision et l'issue date du bloc d'identification "
-        "du document (première page) doivent être ceux du mapping."
+        "Pour une migration, tout numéro de révision présent dans les premières pages doit "
+        "correspondre au mapping."
     ),
-    message="Le numéro de révision ou l'issue date ne correspond pas au mapping.",
+    message="Le numéro de révision ne correspond pas au mapping.",
     kind="field_consistency",
     severity="error",
     target=_TARGET,
     checks=[_front_matter("revision_identification")],
     only_if=_MIGRATION,
-    failure_message="numéro de révision ou issue date non mis à jour (migration).",
+    failure_message="numéro de révision non conforme (migration).",
     translations={
         "en": {
             "description": (
-                "For a migration, the revision number and issue date of the document "
-                "identification block (first page) must match the mapping."
+                "For a migration, any revision number printed in the front matter "
+                "must match the mapping."
             ),
-            "message": "The revision number or issue date does not match the mapping.",
+            "message": "The revision number does not match the mapping.",
+        }
+    },
+)
+
+S1000D_CMM_NUMBER_FOOTERS = rule(
+    code="S1000D_CMM_NUMBER_FOOTERS",
+    name="Numéro CMM conforme au mapping dans chaque pied de page",
+    description=(
+        "Chaque pied de page détecté doit contenir le numéro CMM configuré dans le mapping."
+    ),
+    message="Le numéro CMM d'un pied de page est absent ou diffère du mapping.",
+    kind="field_consistency",
+    severity="error",
+    target=RuleTarget(page="all", region="footer"),
+    checks=[_front_matter("cmm_number_footers")],
+    only_if=Condition(field="meta_cmm_number"),
+    failure_message="numéro CMM absent ou différent du mapping dans un pied de page.",
+    translations={
+        "en": {
+            "description": "Every detected footer must contain the CMM number from the mapping.",
+            "message": "A footer CMM number is missing or differs from the mapping.",
+        }
+    },
+)
+
+S1000D_CMM_NUMBER_TITLE_PAGE = rule(
+    code="S1000D_CMM_NUMBER_TITLE_PAGE",
+    name="Numéro CMM conforme au mapping sur la première page",
+    description=(
+        "La première page doit contenir le numéro CMM configuré dans le mapping, "
+        "y compris s'il est placé dans l'en-tête."
+    ),
+    message="Le numéro CMM de la première page est absent ou diffère du mapping.",
+    kind="field_consistency",
+    severity="error",
+    target=RuleTarget(page="1", region="full_page"),
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_CMM_NUMBER_PATTERN,
+            require_all=True,
+            expected_display="{{meta_cmm_number}}",
+        )
+    ],
+    only_if=Condition(field="meta_cmm_number"),
+    failure_message="numéro CMM absent ou différent du mapping sur la première page.",
+    translations={
+        "en": {
+            "description": (
+                "The first page must contain the CMM number from the mapping, "
+                "including when it is printed in the header."
+            ),
+            "message": "The first-page CMM number is missing or differs from the mapping.",
+        }
+    },
+)
+
+S1000D_ISSUE_NUMBER_TITLE_PAGE = rule(
+    code="S1000D_ISSUE_NUMBER_TITLE_PAGE",
+    name="Issue No de la première page conforme au mapping",
+    description=(
+        "La première page doit contenir « Issue No: NNN » avec le numéro d'issue "
+        "renseigné dans le mapping."
+    ),
+    message="Le numéro Issue No de la première page est absent ou diffère du mapping.",
+    kind="field_consistency",
+    severity="error",
+    target=RuleTarget(page="1", region="full_page"),
+    checks=[_front_matter("issue_number_first_page")],
+    only_if=Condition(field="meta_revision_number"),
+    failure_message="Issue No absent ou différent du mapping sur la première page.",
+    translations={
+        "en": {
+            "description": (
+                "The first page must contain 'Issue No: NNN' with the issue number "
+                "from the mapping."
+            ),
+            "message": "The first-page Issue No is missing or differs from the mapping.",
+        }
+    },
+)
+
+S1000D_REVISION_DATE_TITLE_PAGE = rule(
+    code="S1000D_REVISION_DATE_TITLE_PAGE",
+    name="Date de révision de la première page conforme au mapping",
+    description=(
+        "La date d'issue imprimée sur la première page doit correspondre au champ "
+        "Date de révision du mapping."
+    ),
+    message="La date d'issue de la première page est absente ou diffère du mapping.",
+    kind="field_consistency",
+    severity="error",
+    target=RuleTarget(page="1", region="full_page"),
+    checks=[_front_matter("revision_date_first_page")],
+    only_if=Condition(field="meta_revision_date"),
+    failure_message="date d'issue absente ou différente du mapping sur la première page.",
+    translations={
+        "en": {
+            "description": (
+                "The issue date printed on the first page must match the mapping's "
+                "Revision date field."
+            ),
+            "message": "The first-page issue date is missing or differs from the mapping.",
         }
     },
 )
@@ -938,6 +1043,10 @@ RULE_DEFINITIONS = (
     S1000D_MIGRATION_DM_DATES,
     S1000D_MCO_DM_DATES,
     S1000D_MIGRATION_REVISION_ISSUE,
+    S1000D_CMM_NUMBER_FOOTERS,
+    S1000D_CMM_NUMBER_TITLE_PAGE,
+    S1000D_ISSUE_NUMBER_TITLE_PAGE,
+    S1000D_REVISION_DATE_TITLE_PAGE,
     S1000D_MCO_REVISION_ROW,
     S1000D_CHANGED_DM_REVISION_BARS,
     S1000D_UNCHANGED_DM_NO_REVISION_BARS,

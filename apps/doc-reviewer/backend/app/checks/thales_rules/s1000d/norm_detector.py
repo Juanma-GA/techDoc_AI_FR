@@ -10,7 +10,6 @@ from app.parsers.pdf_parser import ParsedPdf
 
 from .data_modules import DMC_RE, complete_pages, is_s1000d_document, parse_issue_date
 
-_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 _ISSUE_BLOCK_RE = re.compile(
     r"(?im)^[ \t]*Issue[ \t]+No\.?[ \t]*:?[ \t]*(?P<number>\d{1,3})[ \t]*\n[ \t]*(?P<date>[^\n]{4,30})$"
 )
@@ -28,10 +27,9 @@ def matches_document(parsed: Any) -> bool:
 
 def _revision_date(text: str) -> str | None:
     found = parse_issue_date(text)
-    if found is None:
+    if found is None or found.day is None:
         return None
-    month = _MONTHS[found.month - 1]
-    return f"{month} {found.day:02d}/{found.year % 100:02d}" if found.day else f"{month} {found.year}"
+    return f"{found.year:04d}-{found.month:02d}-{found.day:02d}"
 
 
 def _prime_part_numbers(pages: Sequence[str]) -> list[str]:

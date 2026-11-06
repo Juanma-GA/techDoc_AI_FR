@@ -68,6 +68,10 @@ _ISSUE_DATE_LABEL_RE = re.compile(r"(?i)\bissue\s+date\s*:?\s*(?P<date>[^\n]{4,3
 _ISSUE_BLOCK_RE = re.compile(
     r"(?im)^[ \t]*Issue[ \t]+No\.?[ \t]*:?[ \t]*(?P<number>\d{1,3})[ \t]*\n[ \t]*(?P<date>[^\n]{4,30})$"
 )
+_ISSUE_NUMBER_LINE_RE = re.compile(
+    r"(?im)^[ \t]*Issue[ \t]+No\.?[ \t]*:?[ \t]*(?P<number>\d{1,3})[ \t]*$"
+)
+_CMM_NUMBER_RE = re.compile(r"(?<!\w)\d{2}-\d{2}-\d{2}[A-Za-z]?(?!\w)")
 _COPYRIGHT_YEARS_RE = re.compile(
     r"(?i)\u00a9\s*(?P<start>\d{4})\s*-\s*(?P<end>\d{4})(?=\s+THALES\s+AVS\s+FRANCE)"
 )
@@ -227,6 +231,7 @@ class _Document:
     pages: list[ParsedPage]
     meta: dict[str, str]
     target_pages: set[int]
+    target_texts: dict[int, str]
 
 
 @dataclass(frozen=True)
@@ -576,36 +581,13 @@ def _revision_number(value: str | None) -> int | None:
 
 
 def _revision_identification(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
-    expected = "Numéro de révision et issue date = valeurs du mapping"
+    expected = "Numéro de révision = valeur du mapping"
     number = _revision_number(doc.meta.get("meta_revision_number"))
-    revision, raw_date = _revision_date(doc)
-    if number is None or revision is None:
-        return _inconclusive(expected, "Numéro ou date de révision absent du mapping du document.")
-    outcome = _Outcome(expected=f"Révision {number:02d} — {raw_date}")
+    if number is None:
+        return _inconclusive(expected, "Numéro de révision absent du mapping du document.")
+    outcome = _Outcome(expected=f"Révision {number:02d}")
     seen = 0
     for page in _front_pages(doc):
-        for match in _ISSUE_BLOCK_RE.finditer(page.text):
-            seen += 1
-            if int(match.group("number")) != number:
-                outcome.findings.append(
-                    _fail(
-                        page.page,
-                        match.group(0).splitlines()[0].strip(),
-                        f"Numéro d'issue {match.group('number')} différent du mapping ({number:02d}).",
-                        proposed=f"{number:03d}",
-                    )
-                )
-            found = parse_issue_date(match.group("date"))
-            if found is not None and not same_issue_date(found, revision):
-                outcome.findings.append(
-                    _fail(
-                        page.page,
-                        match.group("date").strip(),
-                        f"Issue date {match.group('date').strip()} différente de la date de "
-                        f"révision du mapping ({raw_date}).",
-                        proposed=raw_date,
-                    )
-                )
         for match in _REVISION_NUMBER_RE.finditer(page.text):
             seen += 1
             if int(match.group("number")) != number:
@@ -617,24 +599,150 @@ def _revision_identification(doc: _Document, _parameters: Mapping[str, Any]) -> 
                         proposed=f"{number:02d}",
                     )
                 )
-        for match in _ISSUE_DATE_LABEL_RE.finditer(page.text):
-            found = parse_issue_date(match.group("date"))
-            if found is None:
-                continue
-            seen += 1
-            if not same_issue_date(found, revision):
-                outcome.findings.append(
-                    _fail(
-                        page.page,
-                        match.group(0).strip(),
-                        f"Issue date {match.group('date').strip()} différente de la date de "
-                        f"révision du mapping ({raw_date}).",
-                        proposed=raw_date,
-                    )
-                )
     if not seen:
-        return _inconclusive(expected, "Numéro de révision / issue date introuvables en première page.")
+        return _inconclusive(expected, "Numéro de révision introuvable dans les premières pages.")
     return outcome
+
+
+def _revision_date_first_page(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    expected = "Date d'issue de la première page = date de révision du mapping"
+    revision, raw_date = _revision_date(doc)
+    if revision is None or raw_date is None or revision.day is None:
+        return _inconclusive(
+            expected,
+            "Date de révision absente, illisible ou incomplète dans le mapping (format AAAA-MM-JJ).",
+        )
+    if not doc.pages:
+        return _inconclusive(expected, "Première page absente du PDF.")
+
+    page = doc.pages[0]
+    date_values = [
+        match.group("date").strip()
+        for match in _ISSUE_BLOCK_RE.finditer(page.text)
+    ]
+    date_values.extend(
+        match.group("date").strip()
+        for match in _ISSUE_DATE_LABEL_RE.finditer(page.text)
+    )
+    date_values = list(dict.fromkeys(date_values))
+    expected_label = raw_date
+    if not date_values:
+        return _Outcome(
+            expected=expected_label,
+            findings=[
+                _fail(
+                    page.page,
+                    "",
+                    f"Date d'issue absente de la première page (attendue : {expected_label}).",
+                    proposed=expected_label,
+                )
+            ],
+        )
+
+    outcome = _Outcome(expected=expected_label)
+    for raw_value in date_values:
+        found = parse_issue_date(raw_value)
+        if (
+            found is None
+            or found.year != revision.year
+            or found.month != revision.month
+            or found.day != revision.day
+        ):
+            outcome.findings.append(
+                _fail(
+                    page.page,
+                    raw_value,
+                    f"Date d'issue {raw_value} différente ou illisible par rapport au mapping "
+                    f"({expected_label}).",
+                    proposed=expected_label,
+                )
+            )
+    return outcome
+
+
+def _issue_number_first_page(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    number = _revision_number(doc.meta.get("meta_revision_number"))
+    expected = "Issue No de la première page = numéro du mapping"
+    if number is None:
+        return _inconclusive(expected, "Numéro d'issue absent du mapping du document.")
+    if not doc.pages:
+        return _inconclusive(expected, "Première page absente du PDF.")
+
+    page = doc.pages[0]
+    matches = list(_ISSUE_NUMBER_LINE_RE.finditer(page.text))
+    expected_label = f"Issue No: {number:03d}"
+    if not matches:
+        return _Outcome(
+            expected=expected_label,
+            findings=[
+                _fail(
+                    page.page,
+                    "",
+                    f"« Issue No » est absent de la première page (attendu : {expected_label}).",
+                )
+            ],
+        )
+
+    outcome = _Outcome(expected=expected_label)
+    for match in matches:
+        observed_number = int(match.group("number"))
+        if observed_number != number:
+            outcome.findings.append(
+                _fail(
+                    page.page,
+                    match.group(0).strip(),
+                    f"Numéro d'issue {observed_number:03d} différent du mapping "
+                    f"({number:03d}).",
+                    proposed=expected_label,
+                )
+            )
+    return outcome
+
+
+def _cmm_number_footers(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    expected = doc.meta.get("meta_cmm_number", "").strip()
+    if not expected:
+        return _inconclusive("Numéro CMM dans les pieds de page", "Numéro CMM absent du mapping.")
+
+    footer_texts = {
+        page_number: text
+        for page_number, text in doc.target_texts.items()
+        if page_number > 1
+    }
+    if not footer_texts:
+        return _inconclusive(
+            f"Numéro CMM {expected} dans chaque pied de page après la page de titre",
+            "Aucun pied de page détectable après la première page.",
+        )
+
+    suffix = "" if expected[-1].isalpha() else r"[A-Za-z]?"
+    expected_pattern = re.compile(
+        rf"(?<!\w){re.escape(expected)}{suffix}(?!\w)",
+        re.IGNORECASE,
+    )
+    mismatches: list[tuple[int, str]] = []
+    for page_number, text in sorted(footer_texts.items()):
+        if expected_pattern.search(text) is None:
+            observed = ", ".join(sorted(set(_CMM_NUMBER_RE.findall(text)))) or "absent"
+            mismatches.append((page_number, observed))
+
+    expected_label = f"Numéro CMM {expected} dans chaque pied de page après la page de titre"
+    if not mismatches:
+        return _Outcome(expected=expected_label)
+
+    first_page, first_observed = mismatches[0]
+    details = "; ".join(f"page {page}: {observed}" for page, observed in mismatches)
+    return _Outcome(
+        expected=expected_label,
+        findings=[
+            _fail(
+                first_page,
+                first_observed,
+                f"Numéro CMM absent ou différent du mapping dans les pieds de page : {details}.",
+                proposed=expected,
+            )
+        ],
+    )
 
 
 def _revision_record_row(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
@@ -1191,6 +1299,9 @@ _DM_STATUS_CONTROLS: dict[str, Control] = {
 }
 _FRONT_MATTER_CONTROLS: dict[str, Control] = {
     "revision_identification": _revision_identification,
+    "revision_date_first_page": _revision_date_first_page,
+    "issue_number_first_page": _issue_number_first_page,
+    "cmm_number_footers": _cmm_number_footers,
     "revision_record_row": _revision_record_row,
     "copyright_years": _copyright_years,
     "sb_record_template": _sb_record_template,
@@ -1228,6 +1339,12 @@ def _operation(name: str, controls: Mapping[str, Control]) -> ClientOperation[An
             pages=complete_pages(parsed),
             meta=document_metadata(getattr(runtime, "document", None)),
             target_pages={target.raw_page for target in targets},
+            target_texts={
+                target.raw_page: target.text
+                for target in targets
+                if isinstance(getattr(target, "raw_page", None), int)
+                and isinstance(getattr(target, "text", None), str)
+            },
         )
         outcome = handler(doc, parameters)
         if doc.target_pages:

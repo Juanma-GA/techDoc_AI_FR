@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from app.checks.client_registry import load_active_client_configuration
+from app.checks.thales_rules.s1000d.norm_detector import suggest_metadata
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLink, PdfVectorPrimitive, Span
 
@@ -19,7 +20,7 @@ _DEFINITIONS = {
 }
 
 _REVISION_META = {
-    "meta_revision_date": "OCT 30/26",
+    "meta_revision_date": "2026-10-30",
     "meta_revision_number": "05",
     "meta_first_issue_date": "2000",
     "meta_manufacturer": "Airbus",
@@ -89,8 +90,8 @@ def _bar_page(number: int, text: str, *, bar: bool) -> ParsedPage:
     )
 
 
-def test_catalog_contains_33_automatable_rules_with_translations() -> None:
-    assert len(_DEFINITIONS) == 33
+def test_catalog_contains_37_automatable_rules_with_translations() -> None:
+    assert len(_DEFINITIONS) == 37
     for definition in _DEFINITIONS.values():
         assert definition.code.startswith("S1000D_")
         assert definition.compiled_rule.origin_ref == f"THALES-S1000D:v1:{definition.code}"
@@ -224,7 +225,7 @@ def test_highlights_without_rfu_still_requires_readable_document_structure() -> 
 def test_text_rules_pass_on_reference_text_and_fail_on_deviation(
     code: str, good: str, bad: str
 ) -> None:
-    meta = {"meta_revision_date": "OCT 30/26", "meta_first_issue_date": "JUL 2000"}
+    meta = {"meta_revision_date": "2026-10-30", "meta_first_issue_date": "2000"}
     assert _run(code, _pdf(good), **meta)[0] == "PASS"
     status, suggestions = _run(code, _pdf(bad), **meta)
     assert status == "FAIL"
@@ -370,7 +371,7 @@ def test_revision_identification_on_the_title_page() -> None:
     assert _run("S1000D_MIGRATION_REVISION_ISSUE", good, **_REVISION_META)[0] == "PASS"
     status, suggestions = _run("S1000D_MIGRATION_REVISION_ISSUE", bad, **_REVISION_META)
     assert status == "FAIL"
-    assert len(suggestions) == 2
+    assert len(suggestions) == 1
     assert _run("S1000D_MIGRATION_REVISION_ISSUE", _pdf("TITLE"), **_REVISION_META)[0] == "INCONCLUSIVE"
 
 
@@ -750,24 +751,162 @@ def test_rfu_of_a_changed_dm_is_read_from_the_highlights_page() -> None:
 
 def test_published_title_block_is_checked_against_the_mapping() -> None:
     cover = "Manufacturer Code: F9111\nIssue No: 005\n2026-01-29\nPage TP-1"
-    meta = {"meta_revision_date": "JAN 29/26", "meta_revision_number": "005"}
-    assert _run("S1000D_MIGRATION_REVISION_ISSUE", _pdf(cover), **meta)[0] == "PASS"
+    meta = {"meta_revision_date": "2026-01-29", "meta_revision_number": "005"}
+    assert _run(
+        "S1000D_ISSUE_NUMBER_TITLE_PAGE",
+        _pdf(cover),
+        meta_revision_number=meta["meta_revision_number"],
+    )[0] == "PASS"
+    assert _run(
+        "S1000D_REVISION_DATE_TITLE_PAGE",
+        _pdf(cover),
+        meta_revision_date=meta["meta_revision_date"],
+    )[0] == "PASS"
     outdated = cover.replace("005", "004").replace("2026-01-29", "2026-01-14")
-    status, suggestions = _run("S1000D_MIGRATION_REVISION_ISSUE", _pdf(outdated), **meta)
-    assert status == "FAIL"
-    assert [item.original for item in suggestions] == ["Issue No: 004", "2026-01-14"]
+    assert _run(
+        "S1000D_ISSUE_NUMBER_TITLE_PAGE",
+        _pdf(outdated),
+        meta_revision_number=meta["meta_revision_number"],
+    )[0] == "FAIL"
+    assert _run(
+        "S1000D_REVISION_DATE_TITLE_PAGE",
+        _pdf(outdated),
+        meta_revision_date=meta["meta_revision_date"],
+    )[0] == "FAIL"
+
+
+def _identity_page(page_number: int, header: str, footer: str | None = None) -> ParsedPage:
+    header_spans = [
+        Span(
+            text=line,
+            bbox=(40.0, 40.0 + index * 20.0, 300.0, 55.0 + index * 20.0),
+            page=page_number,
+            font="Arial",
+            size=10.0,
+        )
+        for index, line in enumerate(header.splitlines())
+    ]
+    text_parts = [header]
+    spans = header_spans
+    if footer is not None:
+        text_parts.append(footer)
+        spans = [
+            *header_spans,
+            Span(
+                text=footer,
+                bbox=(40.0, 760.0, 300.0, 780.0),
+                page=page_number,
+                font="Arial",
+                size=8.0,
+            ),
+        ]
+    return ParsedPage(
+        page=page_number,
+        text="\n".join(text_parts),
+        spans=spans,
+        page_width=600.0,
+        page_height=800.0,
+    )
+
+
+def test_cmm_number_matches_the_first_page_even_when_printed_in_the_header() -> None:
+    expected = "22-15-10"
+    correct = _pdf(pages=[_identity_page(1, f"{expected}\nIssue No: 006")])
+    incorrect = _pdf(pages=[_identity_page(1, "22-15-11\nIssue No: 006")])
+
+    assert _run("S1000D_CMM_NUMBER_TITLE_PAGE", correct, meta_cmm_number=expected)[0] == "PASS"
+    assert _run("S1000D_CMM_NUMBER_TITLE_PAGE", incorrect, meta_cmm_number=expected)[0] == "FAIL"
+    assert _run(
+        "S1000D_CMM_NUMBER_TITLE_PAGE",
+        _pdf(pages=[_identity_page(1, "Issue No: 006")]),
+        meta_cmm_number=expected,
+    )[0] == "FAIL"
+
+
+def test_cmm_number_must_match_in_every_detected_footer() -> None:
+    expected = "22-15-10"
+    title = _identity_page(1, f"{expected}\nIssue No: 006\n2026-09-22", "2026-09-22")
+    matching = _pdf(
+        pages=[
+            title,
+            _identity_page(2, "Document content", expected),
+            _identity_page(3, "Document content", expected),
+        ]
+    )
+    mismatching = _pdf(
+        pages=[
+            title,
+            _identity_page(2, "Document content", expected),
+            _identity_page(3, "Document content", "22-15-11"),
+        ]
+    )
+
+    assert _run("S1000D_CMM_NUMBER_FOOTERS", matching, meta_cmm_number=expected)[0] == "PASS"
+    assert _run("S1000D_CMM_NUMBER_FOOTERS", mismatching, meta_cmm_number=expected)[0] == "FAIL"
+
+
+def test_s1000d_mapping_and_detection_use_iso_revision_dates() -> None:
+    field = _BUNDLE.mapping_for_norm("s1000d").fields["meta_revision_date"]
+    assert field.pattern == r"^\d{4}-\d{2}-\d{2}$"
+    assert field.max_length == 10
+    assert suggest_metadata(["Issue No: 006\n2026-09-22"])["meta_revision_date"] == "2026-09-22"
+
+
+def test_revision_date_must_match_the_issue_date_on_the_first_page() -> None:
+    expected = "2026-09-22"
+    correct = _pdf("Issue No: 006\n2026-09-22")
+    incorrect = _pdf("Issue No: 006\n2026-09-23")
+    incomplete = _pdf("Issue No: 006\n2026-09")
+    missing = _pdf("Issue No: 006")
+    only_on_second_page = _pdf("Issue No: 006", "Issue date: 2026-09-22")
+
+    assert _run("S1000D_REVISION_DATE_TITLE_PAGE", correct, meta_revision_date=expected)[0] == "PASS"
+    assert _run("S1000D_REVISION_DATE_TITLE_PAGE", incorrect, meta_revision_date=expected)[0] == "FAIL"
+    assert _run("S1000D_REVISION_DATE_TITLE_PAGE", incomplete, meta_revision_date=expected)[0] == "FAIL"
+    assert _run("S1000D_REVISION_DATE_TITLE_PAGE", missing, meta_revision_date=expected)[0] == "FAIL"
+    assert _run(
+        "S1000D_REVISION_DATE_TITLE_PAGE",
+        only_on_second_page,
+        meta_revision_date=expected,
+    )[0] == "FAIL"
+
+
+def test_issue_number_must_match_issue_no_on_the_first_page() -> None:
+    expected = "06"
+    correct = _pdf(pages=[_identity_page(1, "22-15-10\nIssue No: 006")])
+    incorrect = _pdf(
+        pages=[
+            _identity_page(1, "22-15-10\nIssue No: 005"),
+            _identity_page(2, "Issue No: 006"),
+        ]
+    )
+    missing = _pdf(pages=[_identity_page(1, "22-15-10"), _identity_page(2, "Issue No: 006")])
+
+    assert _run("S1000D_ISSUE_NUMBER_TITLE_PAGE", correct, meta_revision_number=expected)[0] == "PASS"
+    assert _run("S1000D_ISSUE_NUMBER_TITLE_PAGE", incorrect, meta_revision_number=expected)[0] == "FAIL"
+    assert _run("S1000D_ISSUE_NUMBER_TITLE_PAGE", missing, meta_revision_number=expected)[0] == "FAIL"
 
 
 def test_change_record_is_the_record_of_revisions_of_the_published_layout() -> None:
     change = "Change record\n1. List of revisions\nTable\nIssue Number\nIssue Date\n005\nDEC 15, 2026\n"
-    assert _run("S1000D_MCO_REVISION_ROW", _pdf("cover", change), meta_revision_date="DEC 15/26", meta_revision_number="005")[0] == "PASS"
-    assert _run("S1000D_MCO_REVISION_ROW", _pdf("cover", change), meta_revision_date="JAN 29/26", meta_revision_number="005")[0] == "FAIL"
+    assert _run(
+        "S1000D_MCO_REVISION_ROW",
+        _pdf("cover", change),
+        meta_revision_date="2026-12-15",
+        meta_revision_number="005",
+    )[0] == "PASS"
+    assert _run(
+        "S1000D_MCO_REVISION_ROW",
+        _pdf("cover", change),
+        meta_revision_date="2026-01-29",
+        meta_revision_number="005",
+    )[0] == "FAIL"
 
 
 def test_migration_date_rule_leaves_generic_dms_alone() -> None:
     pdf = _pdf(_REAL_LOEDM)
-    assert _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="JAN 29/26")[0] == "PASS"
-    status, suggestions = _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="SEP 22/26")
+    assert _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="2026-01-29")[0] == "PASS"
+    status, suggestions = _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="2026-09-22")
     assert status == "FAIL"
     assert [item.original for item in suggestions] == [
         _DMC_CONFIGURATION,
@@ -820,7 +959,7 @@ def test_copyright_footer_of_the_published_layout() -> None:
         "THALES AVS FRANCE SAS. They \ncannot be reproduced, disclosed or used without the company's "
         "prior written approval."
     )
-    meta = {"meta_revision_date": "JAN 29/26", "meta_first_issue_date": "JAN 2006"}
+    meta = {"meta_revision_date": "2026-01-29", "meta_first_issue_date": "2006"}
     assert _run("S1000D_DATA_RESTRICTION_COPYRIGHT", _pdf(footer), **meta)[0] == "PASS"
     assert _run("S1000D_DATA_RESTRICTION_COPYRIGHT", _pdf(footer.replace("2026", "2024", 1)), **meta)[0] == "FAIL"
 

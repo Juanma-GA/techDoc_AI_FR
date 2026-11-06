@@ -71,8 +71,10 @@ def test_repository_active_client_configuration_loads() -> None:
         "THALES-S1000D",
         "ASD-STE100",
     ]
-    assert len(configuration.bundle.rules) == 129
+    assert len(configuration.bundle.rules) == 133
     s1000d_mapping = configuration.bundle.mapping_for_norm("s1000d")
+    assert s1000d_mapping.fields["meta_revision_date"].pattern == r"^\d{4}-\d{2}-\d{2}$"
+    assert s1000d_mapping.fields["meta_revision_date"].max_length == 10
     assert s1000d_mapping.fields["meta_first_issue_date"].pattern == r"^\d{4}$"
     assert s1000d_mapping.fields["meta_first_issue_date"].max_length == 4
     assert "meta_revision_number" in s1000d_mapping.fields
@@ -81,7 +83,7 @@ def test_repository_active_client_configuration_loads() -> None:
     for rule in configuration.bundle.rules:
         rules_by_bundle.setdefault(rule.bundle_code, []).append(rule.code)
     assert list(rules_by_bundle) == ["ata100", "s1000d", "ste100_rules"]
-    assert [len(codes) for codes in rules_by_bundle.values()] == [89, 33, 7]
+    assert [len(codes) for codes in rules_by_bundle.values()] == [89, 37, 7]
     labels = {rule.bundle_code: rule.bundle_label for rule in configuration.bundle.rules}
     assert labels == {"ata100": "ATA100", "s1000d": "S1000D", "ste100_rules": "ASD-STE100"}
     ste_rule = next(

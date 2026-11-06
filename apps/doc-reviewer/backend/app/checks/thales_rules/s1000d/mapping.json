@@ -4,9 +4,9 @@
       "type": "string",
       "required": true,
       "labels": {"fr": "Date de revision", "en": "Revision date"},
-      "max_length": 60,
-      "pattern": "^(?:[jJ][aA][nN]|[fF][eE][bB]|[mM][aA][rR]|[aA][pP][rR]|[mM][aA][yY]|[jJ][uU][nN]|[jJ][uU][lL]|[aA][uU][gG]|[sS][eE][pP]|[oO][cC][tT]|[nN][oO][vV]|[dD][eE][cC])\\s+(?:(?:\\d{1,2}\\s*/\\s*)?(?:\\d{2}|\\d{4}))$",
-      "format_hint": {"fr": "Mois en 3 lettres et annee, avec jour optionnel : JUL 27/26 ou JUL 2026.", "en": "3-letter month and year, with an optional day: JUL 27/26 or JUL 2026."}
+      "max_length": 10,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "format_hint": {"fr": "Format AAAA-MM-JJ, par exemple 2026-09-22.", "en": "YYYY-MM-DD format, for example 2026-09-22."}
     },
     "meta_cmm_number": {
       "type": "string",
