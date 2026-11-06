@@ -16,6 +16,7 @@ export type ReviewPassage = {
   text: string;
   source_marker?: string | null;
   marker_key?: string | null;
+  detector_title?: string | null;
   source_cells?: string[] | null;
   source_labels?: string[] | null;
   anchor_texts?: string[];
@@ -31,6 +32,17 @@ export type ReviewPassage = {
   tag_options?: Partial<Record<ReviewDestination, string[]>>;
   template_source_dm_id?: string | null;
 };
+
+export function detectorTitleFor(passage: ReviewPassage): string {
+  if (passage.detector_title !== undefined && passage.detector_title !== null) {
+    return passage.detector_title;
+  }
+  if (passage.source_marker) return passage.source_marker;
+  if (passage.column !== undefined && passage.column !== null) {
+    return passage.source_labels?.[passage.column] ?? "";
+  }
+  return "";
+}
 
 export function isReviewable(passage: ReviewPassage): boolean {
   return passage.role === undefined || passage.role === "content";
@@ -68,12 +80,19 @@ export type ReviewAction = {
   passage_id?: string;
   destination?: ReviewDestination | null;
   target_tag?: string | null;
+  detector_title?: string | null;
   text?: string;
   split_at?: number;
   confirm_empty?: boolean;
   page?: number;
   scroll_top?: number;
   selected_id?: string | null;
+};
+
+export type ReviewEditAction = ReviewAction & {
+  passage_id: string;
+  text?: string;
+  detector_title?: string;
 };
 
 export type SourcePage = { page: number; width: number; height: number };

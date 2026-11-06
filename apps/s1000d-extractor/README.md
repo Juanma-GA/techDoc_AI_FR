@@ -157,9 +157,13 @@ generation. **Resume** restores the saved step without automatically advancing i
   conflicts with the S1000D XSD, the schema-valid spelling is used (`noSupportEquips`
   for the workbook's `noSuppEquips`).
   Other table rows are split into one review passage per non-empty cell, keeping
-  its row, column, title and PDF anchor separate. Cell titles are template keys,
-  never requirement text; matching titles reuse the first procedure's category
-  and S1000D tag while only the cell value is emitted. Resource rows are
+  its row, column, title and PDF anchor separate. The review card shows the
+  detector title separately from the cell content; only the content is
+  corrected and classified. The title is editable in the first procedure and
+  read-only in later ones. Completing the first procedure reuses its category
+  and S1000D tag for cells with matching normalized titles. In PDF table cells,
+  consecutive leading bold uppercase lines are grouped as the cell title when
+  followed by content, ahead of any table-wide header. Resource rows are
   recombined from those cell decisions for structured XML output. An explicit
   exclusion action moves a zone into the classic procedure body instead of
   dropping its content.

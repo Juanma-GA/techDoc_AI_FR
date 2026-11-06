@@ -91,6 +91,7 @@ class RawBlock:
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete du tableau si connue
     table_cell_bboxes: list[list[list[float] | None]] | None = None
+    table_cell_titles: list[list[str | None]] | None = None
     page_width: float | None = None
     # Geometrie (PDF uniquement) : coin haut/bas du bloc + hauteur de page, pour
     # detecter entetes/pieds. `None` cote DOCX/OCR (degradation gracieuse -> body).
@@ -143,6 +144,7 @@ class IRNode:
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete (-> thead CALS)
     table_cell_bboxes: list[list[list[float] | None]] | None = None
+    table_cell_titles: list[list[str | None]] | None = None
     reviewed_table_cell_tags: list[list[str | None]] | None = None
     page_width: float | None = None
     page_height: float | None = None
@@ -188,6 +190,7 @@ def from_dict(data: dict) -> IRNode:
         table_rows=data.get("table_rows"),
         table_header=data.get("table_header"),
         table_cell_bboxes=data.get("table_cell_bboxes"),
+        table_cell_titles=data.get("table_cell_titles"),
         reviewed_table_cell_tags=data.get("reviewed_table_cell_tags"),
         page_width=data.get("page_width"),
         page_height=data.get("page_height"),
@@ -243,6 +246,7 @@ def to_dict(node: IRNode) -> dict:
         "table_rows": node.table_rows,
         "table_header": node.table_header,
         "table_cell_bboxes": node.table_cell_bboxes,
+        "table_cell_titles": node.table_cell_titles,
         "reviewed_table_cell_tags": node.reviewed_table_cell_tags,
         "page_width": node.page_width,
         "page_height": node.page_height,

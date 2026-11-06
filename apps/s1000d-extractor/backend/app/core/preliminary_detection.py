@@ -147,6 +147,7 @@ def _table_anchor_passages(
                 "category_hint": category,
                 "source_marker": marker,
                 "marker_key": table_anchor_key(marker),
+                "detector_title": marker,
                 "source_cells": None,
                 "source_labels": None,
                 "anchor_texts": [marker] if marker == text else [marker, text],
@@ -175,6 +176,7 @@ def _table_anchor_passages(
             "phase": phase,
             "source_marker": None,
             "marker_key": None,
+            "detector_title": None,
             "source_cells": None,
             "source_labels": None,
             "anchor_texts": [],
@@ -238,6 +240,40 @@ def passages(
         for row, column, text in texts:
             if root or not text.strip():
                 continue
+            source_cells = rows[row] if row is not None else None
+            header = table_heading(node, headings=active.headings) if row is not None else []
+            cell_title = None
+            has_local_title = False
+            cell_titles = node.get("table_cell_titles") or []
+            if (
+                row is not None and column is not None
+                and row < len(cell_titles) and column < len(cell_titles[row])
+            ):
+                local_title = cell_titles[row][column]
+                lines = text.splitlines()
+                title_lines = [
+                    line.strip() for line in local_title.splitlines() if line.strip()
+                ] if local_title else []
+                line_index = 0
+                title_matches = bool(title_lines)
+                for title_line in title_lines:
+                    while line_index < len(lines) and not lines[line_index].strip():
+                        line_index += 1
+                    if line_index >= len(lines) or lines[line_index].strip() != title_line:
+                        title_matches = False
+                        break
+                    line_index += 1
+                if title_matches:
+                    content = "\n".join(lines[line_index:]).strip()
+                    if content:
+                        cell_title = " ".join(title_lines)
+                        has_local_title = True
+                        text = content
+            if cell_title is None:
+                cell_title = (
+                    header[column].strip()
+                    if header and column is not None and column < len(header) else None
+                )
             if source_format == "docx" and page_size and page_size + len(text) > 2400:
                 reading_page += 1
                 page_size = 0
@@ -248,18 +284,12 @@ def passages(
                 suggestion(text, inherited, phase, node.get("admonition"), rules=active)
                 if role == "content" else ("body", "structure")
             )
-            source_cells = rows[row] if row is not None else None
-            header = table_heading(node, headings=active.headings) if row is not None else []
-            cell_title = (
-                header[column].strip()
-                if header and column is not None and column < len(header) else None
-            )
             marker_key = table_anchor_key(cell_title) if cell_title else None
             anchor_rects = []
             anchor_texts = [text]
-            if marker_key:
+            if marker_key and cell_title is not None:
                 anchor_texts.insert(0, cell_title)
-                if rows and rows[0] == header and column is not None:
+                if not has_local_title and rows and rows[0] == header and column is not None:
                     title_box = _normalized_cell_box(node, 0, column)
                     if title_box is not None:
                         anchor_rects.append(title_box)
@@ -283,6 +313,7 @@ def passages(
                 "text": text,
                 "source_marker": None,
                 "marker_key": marker_key,
+                "detector_title": cell_title,
                 "source_cells": source_cells,
                 "source_labels": header if row is not None and len(header) == len(rows[row]) else None,
                 "anchor_texts": anchor_texts,

@@ -150,6 +150,7 @@ class ReviewPassageOut(OutputModel):
     text: str
     source_marker: str | None = None
     marker_key: str | None = None
+    detector_title: str | None = None
     source_cells: list[str] | None = None
     source_labels: list[str] | None = None
     anchor_texts: list[str] = Field(default_factory=list)

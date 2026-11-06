@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import type { WizardDm } from "../../lib/api";
 import {
-  isReviewable, procedureCategories, reviewDestinations, type PreliminaryState, type ReviewPassage,
+  detectorTitleFor, isReviewable, procedureCategories, reviewDestinations,
+  type PreliminaryState, type ReviewPassage,
 } from "../../lib/preliminaryTypes";
 import { usePreliminaryReview } from "../../lib/usePreliminaryReview";
 import { PreliminaryPassage } from "./PreliminaryPassage";
@@ -235,6 +236,8 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                   {filteredPassages.map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}
                         text={review.edits[passage.id] ?? passage.text}
+                        detectorTitle={review.detectorEdits[passage.id] ?? detectorTitleFor(passage)}
+                        isTemplate={index === 0}
                         disabled={busy || review.saving || Boolean(
                           review.error && review.validationPassageId !== passage.id,
                         )}

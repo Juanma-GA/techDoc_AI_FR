@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, object_session
 from app.core import preliminary_detection as detection
 from app.core.errors import AppError
 from app.core.preliminary_rules import RulesConfig, defaults, read_rules
+from app.core.procedure_semantics import table_anchor_key
 from app.core.procedure_tags import (
     default_tag_for,
     has_conflicting_tag_choices,
@@ -42,6 +43,7 @@ class ReviewAction(BaseModel):
     passage_id: str | None = None
     destination: Destination | None = None
     target_tag: str | None = None
+    detector_title: str | None = Field(default=None, max_length=500)
     text: str | None = Field(default=None, min_length=1, max_length=100000)
     split_at: int | None = Field(default=None, gt=0)
     confirm_empty: bool = False
@@ -236,6 +238,10 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
             if action.op == "decide":
                 if action.text is not None and not action.text.strip():
                     raise AppError("REVIEW_TEXT_INVALID", "Le passage ne peut pas etre vide.", 422)
+                if "detector_title" in action.model_fields_set:
+                    detector_title = (action.detector_title or "").strip()
+                    item["detector_title"] = detector_title
+                    item["marker_key"] = table_anchor_key(detector_title) if detector_title else None
                 destination = (
                     action.destination
                     if "destination" in action.model_fields_set else item.get("decision")

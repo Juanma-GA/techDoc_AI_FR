@@ -1555,6 +1555,8 @@ export interface components {
             destination?: ("conditions" | "personnel" | "support" | "supplies" | "spares" | "safety" | "common" | "closing" | "body" | "discard") | null;
             /** Target Tag */
             target_tag?: string | null;
+            /** Detector Title */
+            detector_title?: string | null;
             /** Text */
             text?: string | null;
             /** Split At */
@@ -1596,6 +1598,8 @@ export interface components {
             source_marker?: string | null;
             /** Marker Key */
             marker_key?: string | null;
+            /** Detector Title */
+            detector_title?: string | null;
             /** Source Cells */
             source_cells?: string[] | null;
             /** Source Labels */

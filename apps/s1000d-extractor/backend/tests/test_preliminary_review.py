@@ -158,6 +158,7 @@ def test_first_procedure_template_reuses_choices_from_cell_titles():
     assert all(item["role"] == "table-header" for item in source_headers)
     assert [item["source_text"] for item in source_values] == ["Safety lock", "2 OPER"]
     assert [item["marker_key"] for item in source_values] == ["description", "required person s"]
+    assert source_values[1]["detector_title"] == "REQUIRED PERSON(S)"
     source_values[0].update(decision="support", target_tag="name")
     source_values[1].update(decision="personnel", target_tag="personnel")
 
@@ -204,7 +205,14 @@ def test_completing_first_procedure_applies_its_tag_to_matching_procedures(tmp_p
         updated = review.apply(db, document, review.ReviewAction(
             revision=state["revision"], dm_id="first", op="decide",
             passage_id=source_passage["id"], destination="personnel", target_tag="personnel",
+            detector_title="REQUIRED PERSON(S)",
         ))
+        configured = next(
+            passage for passage in updated["reviews"]["first"]["passages"]
+            if passage["id"] == source_passage["id"]
+        )
+        assert configured["text"] == "1 OPER"
+        assert configured["detector_title"] == "REQUIRED PERSON(S)"
         completed = review.apply(db, document, review.ReviewAction(
             revision=updated["revision"], dm_id="first", op="complete", confirm_empty=True,
         ))
@@ -217,6 +225,7 @@ def test_completing_first_procedure_applies_its_tag_to_matching_procedures(tmp_p
     assert completed["reviews"]["second"]["status"] == "reviewed"
     assert inherited["decision"] == "personnel"
     assert inherited["target_tag"] == "personnel"
+    assert inherited["detector_title"] == "REQUIRED PERSON(S)"
     assert inherited["template_source_dm_id"] == "first"
 
 

@@ -7,7 +7,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { describe, expect, it, vi } from "vitest";
 
-import { isReviewable, type ReviewPassage } from "../../lib/preliminaryTypes";
+import {
+  detectorTitleFor, isReviewable, type ReviewPassage,
+} from "../../lib/preliminaryTypes";
 import en from "../../locales/en.json";
 import fr from "../../locales/fr.json";
 import { PreliminaryPassage } from "./PreliminaryPassage";
@@ -32,25 +34,28 @@ describe("source roles", () => {
   );
 });
 
-async function render(language: string, changes: Partial<ReviewPassage> = {}) {
+async function render(language: string, changes: Partial<ReviewPassage> = {}, isTemplate = true) {
   const instance = i18next.createInstance();
   await instance.use(initReactI18next).init({
     lng: language, resources: { fr: { translation: fr }, en: { translation: en } },
     interpolation: { escapeValue: false },
   });
   const onAction = vi.fn(async () => true);
+  const onEdit = vi.fn();
   const element = document.createElement("div");
   element.innerHTML = renderToStaticMarkup(createElement(
     I18nextProvider, { i18n: instance },
     createElement(PreliminaryPassage, {
       dmId: "procedure", passage: { ...passage, ...changes }, text: changes.text ?? passage.text,
+      detectorTitle: detectorTitleFor({ ...passage, ...changes }), isTemplate,
       disabled: false, editDisabled: false, selected: false,
-      onAction, onSelect: vi.fn(), onEdit: vi.fn(),
+      onAction, onSelect: vi.fn(), onEdit,
     }),
   ));
   return {
     element,
     onAction,
+    onEdit,
     select: element.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]'),
   };
 }
@@ -73,7 +78,8 @@ describe.each([
     expect(element.querySelector('button[aria-expanded="false"]')).not.toBeNull();
     expect(element.querySelector("article")?.className).toContain("cursor-pointer");
     expect(element.querySelector("article")?.className).toContain("hover:bg-bg-2");
-    expect(element.querySelector("#preliminary-passage-p > p")?.textContent).not.toContain("Synthetic text.");
+    expect(element.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(true);
+    expect(element.querySelector("details[data-passage-details]")).not.toBeNull();
     expect(onAction).not.toHaveBeenCalled();
   });
 
@@ -96,19 +102,30 @@ describe.each([
   });
 });
 
-it("shows a detected PDF marker separately from its associated value", async () => {
-  const { element } = await render("fr", {
+it.each([
+  {
+    language: "fr", detectorLabel: "Intitulé détecteur", contentLabel: "Contenu à classer",
+  },
+  {
+    language: "en", detectorLabel: "Detector title", contentLabel: "Content to classify",
+  },
+])("shows detector and cell content separately ($language)", async ({
+  language, detectorLabel, contentLabel,
+}) => {
+  const { element } = await render(language, {
     source_marker: "REQUIRED PERSON(S)",
+    detector_title: "REQUIRED PERSON(S)",
     source_text: "1 OPER",
     text: "1 OPER",
     marker_key: "required person s",
   });
 
-  expect(element.textContent).toContain("Repère PDF");
-  expect(element.textContent).toContain("REQUIRED PERSON(S)");
-  expect(element.textContent).toContain("Contenu associé");
-  expect(element.textContent).toContain("1 OPER");
-  expect(element.textContent).not.toContain("REQUIRED PERSON(S) | 1 OPER");
+  expect(element.querySelector<HTMLInputElement>("input")?.value).toBe("REQUIRED PERSON(S)");
+  expect(element.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("1 OPER");
+  expect(element.textContent).toContain(detectorLabel);
+  expect(element.textContent).toContain(contentLabel);
+  expect(element.querySelector("details[data-passage-details]")).toBeNull();
+  expect(element.querySelector('[aria-controls="preliminary-passage-p"]')).toBeNull();
 });
 
 it("shows and edits only the selected source-table cell", async () => {
@@ -122,10 +139,70 @@ it("shows and edits only the selected source-table cell", async () => {
     source_labels: ["Left heading", "Right heading"],
   });
 
-  expect(element.textContent).toContain("Right heading");
-  expect(element.textContent).toContain("Right cell");
+  expect(element.querySelector<HTMLInputElement>("input")?.value).toBe("Right heading");
+  expect(element.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("Right cell");
   expect(element.textContent).not.toContain("Left heading");
   expect(element.querySelector("textarea")?.disabled).toBe(false);
+  expect(element.querySelector("input")?.readOnly).toBe(false);
+});
+
+it("keeps a later procedure's detector visible but read-only", async () => {
+  const { element } = await render("fr", {
+    source_marker: "REQUIRED PERSON(S)",
+    detector_title: "REQUIRED PERSON(S)",
+    source_text: "1 OPER",
+    text: "1 OPER",
+  }, false);
+
+  expect(element.querySelector<HTMLInputElement>("input")?.value).toBe("REQUIRED PERSON(S)");
+  expect(element.querySelector<HTMLInputElement>("input")?.readOnly).toBe(true);
+  expect(element.querySelector<HTMLTextAreaElement>("textarea")?.readOnly).toBe(false);
+});
+
+it("emits a detector-title edit separately from the cell content", async () => {
+  const instance = i18next.createInstance();
+  await instance.use(initReactI18next).init({
+    lng: "fr", resources: { fr: { translation: fr } },
+    interpolation: { escapeValue: false },
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const onEdit = vi.fn();
+  const anchoredPassage: ReviewPassage = {
+    ...passage, source_marker: "REQUIRED PERSON(S)", detector_title: "REQUIRED PERSON(S)",
+    source_text: "1 OPER", text: "1 OPER",
+  };
+  try {
+    await act(async () => {
+      root.render(createElement(
+        I18nextProvider, { i18n: instance },
+        createElement(PreliminaryPassage, {
+          dmId: "procedure", passage: anchoredPassage, text: "1 OPER",
+          detectorTitle: "REQUIRED PERSON(S)", isTemplate: true, disabled: false,
+          editDisabled: false, selected: false, onAction: vi.fn(async () => true),
+          onSelect: vi.fn(), onEdit,
+        }),
+      ));
+    });
+
+    const detector = host.querySelector<HTMLInputElement>('input[aria-label="Intitulé détecteur"]');
+    const setValue = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set?.call(element, value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    await act(async () => {
+      if (detector) setValue(detector, "REQUIRED PERSONS");
+    });
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({
+      op: "decide", detector_title: "REQUIRED PERSONS",
+    }));
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });
 
 it("opens the whole passage and its edit details when clicking the passage box", async () => {
@@ -142,25 +219,25 @@ it("opens the whole passage and its edit details when clicking the passage box",
       root.render(createElement(
         I18nextProvider, { i18n: instance },
         createElement(PreliminaryPassage, {
-          dmId: "procedure", passage, text: passage.text, disabled: false,
+          dmId: "procedure", passage, text: passage.text, detectorTitle: "", isTemplate: true, disabled: false,
           editDisabled: false, selected: false, onAction: vi.fn(async () => true),
           onSelect: vi.fn(), onEdit: vi.fn(),
         }),
       ));
     });
 
-    const passageText = host.querySelector("article > div p");
+    const passageCard = host.querySelector("article");
     const details = host.querySelector("details");
     expect(details?.open).toBe(false);
-    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => passageCard?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(false);
     expect(details?.open).toBe(true);
 
-    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => passageCard?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(true);
     expect(details?.open).toBe(false);
 
-    await act(async () => passageText?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => passageCard?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(false);
     expect(details?.open).toBe(true);
 
@@ -190,6 +267,8 @@ it("saves the selected S1000D tag for the current category", async () => {
         I18nextProvider, { i18n: instance },
         createElement(PreliminaryPassage, {
           dmId: "procedure",
+          detectorTitle: "",
+          isTemplate: true,
           passage: {
             ...passage, decision: "support", target_tag: "name",
             tag_options: { support: ["name", "partNumber"] },
@@ -241,6 +320,8 @@ it.each([
         I18nextProvider, { i18n: instance },
         createElement(PreliminaryPassage, {
           dmId: "procedure",
+          detectorTitle: "",
+          isTemplate: true,
           passage: {
             ...passage, decision: "safety", target_tag: "warning",
             tag_options: { safety: ["warning"], body: ["proceduralStep"] },

@@ -54,6 +54,7 @@ def test_table_detected(pdf_bytes_table) -> None:
     tables = [b for b in blocks if b.is_table and b.table_rows]
     assert tables, "aucun tableau detecte par find_tables"
     rows = tables[0].table_rows
+    assert rows is not None
     assert any("M6" in c for r in rows for c in r)
 
 
@@ -91,6 +92,59 @@ def test_table_cells_keep_page_rectangles_for_procedure_zones(tmp_path) -> None:
     assert table.table_cell_bboxes is not None
     assert table.table_cell_bboxes[1][1] == [165.0, 75.0, 300.0, 120.0]
     assert table.table_cell_bboxes[2][1] == [165.0, 120.0, 300.0, 165.0]
+
+
+def test_bold_uppercase_cell_title_is_split_from_pdf_table_value(tmp_path) -> None:
+    import fitz
+
+    from app.core.ir import from_dict, to_dict
+    from app.core.preliminary_detection import passages
+    from app.core.structure_infer import build_ir
+    from app.parsers.pdf_parser import parse_pdf_pages
+
+    pdf_path = tmp_path / "cell-title.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=220)
+    xs, ys = [30, 210, 390, 570], [30, 90, 160]
+    for x in xs:
+        page.draw_line((x, ys[0]), (x, ys[-1]))
+    for y in ys:
+        page.draw_line((xs[0], y), (xs[-1], y))
+    page.insert_text((38, 55), "EQUIPMENT : SIMFADS", fontsize=8)
+    page.insert_text((218, 55), "OBJECT : PM001 - CLEAN CONSOLE", fontsize=8)
+    page.insert_text((398, 55), "STATE : TEST", fontsize=8)
+    page.insert_text((38, 112), "MAINTENANCE", fontsize=8, fontname="hebo")
+    page.insert_text((38, 124), "LEVEL(S)", fontsize=8, fontname="hebo")
+    page.insert_text((38, 142), "OL + IL/ON", fontsize=8)
+    page.insert_text((218, 112), "REQUIRED PERSON(S)", fontsize=8, fontname="hebo")
+    page.insert_text((218, 132), "1 OPER", fontsize=8)
+    page.insert_text((398, 112), "UNBOLDED", fontsize=8)
+    page.insert_text((398, 132), "UPPERCASE", fontsize=8)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    pages = parse_pdf_pages(pdf_path)
+    table = next(block for block in pages[0].blocks if block.is_table)
+    assert table.table_rows is not None
+    assert table.table_cell_titles is not None
+    assert table.table_rows[1][0] == "MAINTENANCE\nLEVEL(S)\nOL + IL/ON"
+    assert table.table_cell_titles[1][0] == "MAINTENANCE\nLEVEL(S)"
+    assert table.table_cell_titles[1][1] == "REQUIRED PERSON(S)"
+    assert table.table_cell_titles[1][2] is None
+
+    root = from_dict(to_dict(build_ir([block for page in pages for block in page.blocks])))
+    items = passages(to_dict(root), source_format="pdf", page_offset=0)
+    maintenance = next(item for item in items if item["row"] == 1 and item["column"] == 0)
+    person = next(item for item in items if item["row"] == 1 and item["column"] == 1)
+
+    assert maintenance["detector_title"] == "MAINTENANCE LEVEL(S)"
+    assert maintenance["source_text"] == maintenance["text"] == "OL + IL/ON"
+    assert maintenance["anchor_texts"] == ["MAINTENANCE LEVEL(S)", "OL + IL/ON"]
+    assert person["detector_title"] == "REQUIRED PERSON(S)"
+    assert person["source_text"] == person["text"] == "1 OPER"
+    assert person["marker_key"] == "required person s"
+    assert person["anchor_texts"] == ["REQUIRED PERSON(S)", "1 OPER"]
+    assert len(person["anchor_rects"]) == 1
 
 
 def test_large_red_crosses_over_images_do_not_pollute_figure_captions(tmp_path) -> None:

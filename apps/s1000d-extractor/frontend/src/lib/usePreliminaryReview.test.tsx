@@ -170,6 +170,25 @@ describe("server-persisted procedural review", () => {
     expect(current.dirty).toBe(false);
   });
 
+  it("saves detector title and cell content together", async () => {
+    act(() => {
+      current.edit({
+        dm_id: "proc", op: "decide", passage_id: "p", detector_title: "REQUIRED PERSON(S)",
+      });
+      current.edit({ dm_id: "proc", op: "decide", passage_id: "p", text: "1 OPER" });
+    });
+    expect(current.detectorEdits.p).toBe("REQUIRED PERSON(S)");
+    expect(current.edits.p).toBe("1 OPER");
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(preliminaryApi.save).toHaveBeenCalledWith("synthetic-document", 1, {
+      dm_id: "proc", op: "decide", passage_id: "p",
+      detector_title: "REQUIRED PERSON(S)", text: "1 OPER",
+    }, false);
+    expect(current.detectorEdits).toEqual({});
+    expect(current.edits).toEqual({});
+    expect(current.dirty).toBe(false);
+  });
+
   it("flushes pending reader position on unmount with keepalive", async () => {
     act(() => current.position("proc", { page: 3, scroll_top: 820, selected_id: null }));
     await act(async () => { root.unmount(); });

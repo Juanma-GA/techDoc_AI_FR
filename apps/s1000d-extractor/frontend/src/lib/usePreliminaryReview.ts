@@ -5,7 +5,9 @@ import { useTranslation } from "react-i18next";
 import { preliminaryApi } from "./preliminaryApi";
 import { ApiRequestError } from "./api";
 import { formatApiError } from "./migrationUtils";
-import type { PreliminaryState, ReaderPosition, ReviewAction } from "./preliminaryTypes";
+import type {
+  PreliminaryState, ReaderPosition, ReviewAction, ReviewEditAction,
+} from "./preliminaryTypes";
 import { preliminaryRulesApi, preliminaryRulesQueryKey } from "./preliminaryRules";
 
 export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
@@ -26,6 +28,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
   const cursor = useRef<ReviewAction | null>(null);
   const drafts = useRef(new Map<string, ReviewAction>());
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [detectorEdits, setDetectorEdits] = useState<Record<string, string>>({});
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const queue = useRef<Promise<boolean>>(Promise.resolve(true));
   const pending = useRef(0);
@@ -77,6 +80,11 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
           delete next[key];
           return next;
         });
+        setDetectorEdits((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
       }
     }
     const action = cursor.current;
@@ -102,10 +110,22 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
     setError(null);
   }, []);
 
-  const edit = useCallback((action: ReviewAction & { passage_id: string; text: string }) => {
+  const edit = useCallback((action: ReviewEditAction) => {
     clearInvalidFailure(action.passage_id);
-    drafts.current.set(action.passage_id, action);
-    setEdits((current) => ({ ...current, [action.passage_id]: action.text }));
+    drafts.current.set(action.passage_id, {
+      ...drafts.current.get(action.passage_id),
+      ...action,
+    });
+    const text = action.text;
+    if (text !== undefined) {
+      setEdits((current) => ({ ...current, [action.passage_id]: text }));
+    }
+    const detectorTitle = action.detector_title;
+    if (detectorTitle !== undefined) {
+      setDetectorEdits((current) => ({
+        ...current, [action.passage_id]: detectorTitle,
+      }));
+    }
     setDirty(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flush(); }, 500);
@@ -144,6 +164,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       cursor.current = null;
       drafts.current.clear();
       setEdits({});
+      setDetectorEdits({});
       setDirty(false);
       setError(null);
       invalid.current = false;
@@ -186,6 +207,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
     ])),
   } : state;
   return {
-    state: displayed, saving, dirty, error, validationPassageId, edits, edit, act, position, flush, retry, reload,
+    state: displayed, saving, dirty, error, validationPassageId, edits, detectorEdits,
+    edit, act, position, flush, retry, reload,
   };
 }
