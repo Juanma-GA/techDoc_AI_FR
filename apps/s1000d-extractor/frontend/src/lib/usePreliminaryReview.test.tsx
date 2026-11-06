@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "./api/client";
 import { preliminaryApi } from "./preliminaryApi";
 import type { PreliminaryState } from "./preliminaryTypes";
 import { preliminaryRulesQueryKey } from "./preliminaryRules";
@@ -128,6 +129,30 @@ describe("server-persisted procedural review", () => {
     await act(async () => { expect(await current.retry()).toBe(true); });
     expect(current.error).toBeNull();
     expect(current.state.revision).toBe(2);
+  });
+
+  it("allows correcting the passage that received a validation error", async () => {
+    vi.mocked(preliminaryApi.save)
+      .mockRejectedValueOnce(new ApiRequestError(422, "REVIEW_TAG_INVALID", "Invalid tag"))
+      .mockResolvedValueOnce({ ...initial, revision: 2 });
+
+    await act(async () => {
+      expect(await current.act({
+        dm_id: "proc", op: "decide", passage_id: "passage",
+        destination: "personnel", target_tag: "partNumber",
+      })).toBe(false);
+    });
+    expect(current.validationPassageId).toBe("passage");
+
+    await act(async () => {
+      expect(await current.act({
+        dm_id: "proc", op: "decide", passage_id: "passage",
+        destination: "personnel", target_tag: "personCategory",
+      })).toBe(true);
+    });
+    expect(current.error).toBeNull();
+    expect(current.validationPassageId).toBeNull();
+    expect(preliminaryApi.save).toHaveBeenCalledTimes(2);
   });
 
   it("debounces text-only corrections without overwriting a classification", async () => {

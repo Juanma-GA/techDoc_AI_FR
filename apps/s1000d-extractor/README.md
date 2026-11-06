@@ -147,28 +147,48 @@ generation. **Resume** restores the saved step without automatically advancing i
   Resource tables preserve recognized names, part numbers, manufacturer codes,
   quantities and units; additional columns remain remarks instead of disappearing.
   Missing required resource fields remain explicitly provisional, never inferred.
-  Corrected text autosaves after a short pause. Split an unedited passage at a
-  character boundary to classify its parts independently; its section context
-  is retained.
+  PDF table markers and their associated cell values are reviewed as separate
+  zones. For example, `REQUIRED PERSON(S)` is the source marker and the value
+  below it is the content; table titles, document metadata and visual `|`
+  separators are not emitted as requirements. Table-cell rectangles anchor
+  these zones to the PDF. Resource tables keep their recognized columns and
+  values structured. Each zone gets a category and a schema-valid S1000D tag,
+  from the `Proced` worksheet in `Balise_S1000D.xlsx`. If a workbook spelling
+  conflicts with the S1000D XSD, the schema-valid spelling is used (`noSupportEquips`
+  for the workbook's `noSuppEquips`).
+  Other table rows are split into one review passage per non-empty cell, keeping
+  its row, column, title and PDF anchor separate. Cell titles are template keys,
+  never requirement text; matching titles reuse the first procedure's category
+  and S1000D tag while only the cell value is emitted. Resource rows are
+  recombined from those cell decisions for structured XML output. An explicit
+  exclusion action moves a zone into the classic procedure body instead of
+  dropping its content.
+  The first procedure is the human template: only decisions for the same
+  normalized source marker are reused in later, already-generated procedures.
+  Unmatched, ambiguous or schema-incompatible zones remain for human review;
+  changing the first procedure clears inherited choices. Corrected zone values
+  autosave after a short pause.
 - The PDF reader scrolls continuously, lazily loading page images and anchors.
-  It uses original page numbers, including after PDF cutting. Exact text matches
-  are highlighted on the image when "Show source" is selected. The PDF reader
-  never duplicates page content as extracted text, even when a page image or
+  It uses original page numbers, including after PDF cutting. Table zones use
+  their extracted cell rectangles for highlighting; text search is only a
+  fallback for content without geometry. The PDF reader never duplicates page
+  content as extracted text, even when a page image or
   anchor fails to load. Unavailable image anchors and unknown source pages are
   explicitly flagged instead. Repeated matching text can highlight multiple
   locations and still needs human checking.
 - Word uses extracted structure with approximate reading pagination, **not**
   original Word page numbers. Tables, lists and warning blocks remain
   distinguishable.
-- A procedure is fully reviewed only after all content passages have decisions
-  **and** the reviewer confirms checking the whole DM, including empty categories.
+- A procedure is fully reviewed only after all detected content zones and
+  passages have decisions **and** the reviewer confirms checking the whole DM,
+  including empty categories.
   No detection is not equivalent to a verified absence. The separate explicit
   skip action preserves procedures with saved edits, applies those explicit
   decisions, and keeps untouched passages in the original procedure body. Only
   the remaining unmodified procedures are skipped; if nothing was edited, the
   original extracted structure is generated unchanged.
-- Decisions, corrections, split source ranges, current procedure, selected
-  passage, page and scroll position persist in SQLite, not browser storage.
+- Decisions, corrections, current procedure, selected zone, page and scroll
+  position persist in SQLite, not browser storage.
   Saving failures remain visible and block leaving via wizard controls.
   Unsaved work triggers the browser's unload protection; queued requests use
   keepalive on navigation, but a failed or interrupted save is never guaranteed.
@@ -178,7 +198,7 @@ generation. **Resume** restores the saved step without automatically advancing i
   review must be restarted explicitly, with double-click confirmation. Going
   back without changing the source preserves decisions.
   The procedural-rule version participates in the fingerprint: reviews made
-  before the source-role/context change become stale and require an explicit
+  before the source-zone change become stale and require an explicit
   restart, without silently migrating or discarding their saved decisions.
 - Human decisions, not heading heuristics, drive reviewed or partially edited
   procedural XML in both individual and ZIP exports. Skipped reviews preserve the

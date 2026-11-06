@@ -55,6 +55,9 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     filter === "all" || (filter === "pending"
       ? !passage.decision
       : passage.decision === filter || (!passage.decision && passage.suggested === filter));
+  const filteredPassages = passages
+    .filter((passage) => passage.decision !== "body")
+    .filter(matchesFilter);
   const complete = Object.values(review.state.reviews).every(
     (item) => item.status === "reviewed" || item.status === "skipped",
   );
@@ -126,13 +129,28 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
           <span role="status" aria-live="polite">{t(`preliminary.${savedLabel}`)}</span>
           {current.saved_at ? <time dateTime={current.saved_at}>{new Date(current.saved_at).toLocaleTimeString()}</time> : null}
         </div>
+        {index === 0 && procedures.length > 1 ? (
+          <p className="text-sm text-fg-dim">{t("preliminary.templateIntro")}</p>
+        ) : null}
+        {current.template_source_dm_id ? (
+          <p role="status" className="text-sm text-fg-dim">
+            {current.status === "reviewed"
+              ? t("preliminary.templateApplied")
+              : t("preliminary.templatePartial")}
+          </p>
+        ) : null}
         {review.error ? (
           <div role="alert" className="border border-danger rounded-sm p-3 space-y-3">
             <p>{t("preliminary.saveFailed")}: {review.error}</p>
+            {review.validationPassageId ? (
+              <p>{t("preliminary.correctInvalidDecision")}</p>
+            ) : null}
             <div className="flex gap-3 flex-wrap">
-              <Button variant="secondary" disabled={review.saving} onClick={() => void review.retry()}>
-                {t("preliminary.retry")}
-              </Button>
+              {!review.validationPassageId ? (
+                <Button variant="secondary" disabled={review.saving} onClick={() => void review.retry()}>
+                  {t("preliminary.retry")}
+                </Button>
+              ) : null}
               <Button variant="secondary" disabled={review.saving} onClick={() => {
                 if (!reloadArmed) {
                   setReloadArmed(true);
@@ -214,24 +232,34 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                   </label>
                 </div>
                 <div data-testid="passage-list" className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
-                  {passages.filter(matchesFilter)
-                    .map((passage) => (
+                  {filteredPassages.map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}
                         text={review.edits[passage.id] ?? passage.text}
-                        disabled={disabled} editDisabled={busy} selected={selectedId === passage.id}
+                        disabled={busy || review.saving || Boolean(
+                          review.error && review.validationPassageId !== passage.id,
+                        )}
+                        editDisabled={busy || review.saving || Boolean(
+                          review.error && review.validationPassageId !== passage.id,
+                        )}
+                        selected={selectedId === passage.id || review.validationPassageId === passage.id}
                         onSelect={() => { setSelectedId(passage.id); setJump((n) => n + 1); }}
                         onAction={async (action) => {
                           if (action.op === "decide" || action.op === "split") setPendingModified(true);
                           const saved = await review.act(action);
                           if (!saved && !review.state.reviews[active]?.partial) setPendingModified(false);
                           if (saved && action.op === "split") { setSelectedId(null); setJump(0); }
+                          if (saved && action.op === "decide" && action.destination === "body") {
+                            setSelectedId(null);
+                            setJump(0);
+                          }
                           return saved;
                         }} onEdit={(action) => {
                           setPendingModified(true);
                           review.edit(action);
                         }} />
                     ))}
-                  {!passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
+                  {!passages.length ? <p>{t("preliminary.noPassages")}</p>
+                    : !filteredPassages.length ? <p>{t("preliminary.noMatchingPassages")}</p> : null}
                 </div>
                 <div className="space-y-3 border-t border-md pt-3">
                   <label className="flex gap-3 items-start">

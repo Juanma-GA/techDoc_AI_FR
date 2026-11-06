@@ -20,6 +20,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationPassageId, setValidationPassageId] = useState<string | null>(null);
   const failed = useRef<ReviewAction | null>(null);
   const invalid = useRef(false);
   const cursor = useRef<ReviewAction | null>(null);
@@ -44,10 +45,13 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
         latest.current = next;
         setState(next);
         setError(null);
+        invalid.current = false;
+        setValidationPassageId(null);
         return true;
       } catch (reason) {
         failed.current = action;
         invalid.current = reason instanceof ApiRequestError && reason.status === 422;
+        setValidationPassageId(invalid.current ? action.passage_id ?? null : null);
         setError(formatApiError(translation.current, reason));
         return false;
       }
@@ -89,18 +93,23 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
     return saved && !failed.current;
   }, [enqueue]);
 
+  const clearInvalidFailure = useCallback((passageId: string) => {
+    if (!invalid.current || failed.current?.passage_id !== passageId) return;
+    failed.current = null;
+    invalid.current = false;
+    queue.current = Promise.resolve(true);
+    setValidationPassageId(null);
+    setError(null);
+  }, []);
+
   const edit = useCallback((action: ReviewAction & { passage_id: string; text: string }) => {
-    if (invalid.current && failed.current?.passage_id === action.passage_id) {
-      failed.current = null;
-      invalid.current = false;
-      setError(null);
-    }
+    clearInvalidFailure(action.passage_id);
     drafts.current.set(action.passage_id, action);
     setEdits((current) => ({ ...current, [action.passage_id]: action.text }));
     setDirty(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flush(); }, 500);
-  }, [flush]);
+  }, [clearInvalidFailure, flush]);
 
   const position = useCallback((dmId: string, value: ReaderPosition) => {
     cursor.current = { dm_id: dmId, op: "cursor", ...value };
@@ -109,13 +118,18 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
   }, [flush]);
 
   const act = useCallback(async (action: ReviewAction) => {
+    if (action.op === "decide" && action.passage_id) {
+      clearInvalidFailure(action.passage_id);
+    }
     if (!await flush()) return false;
     return enqueue(action);
-  }, [enqueue, flush]);
+  }, [clearInvalidFailure, enqueue, flush]);
 
   const retry = useCallback(async () => {
     const action = failed.current;
     failed.current = null;
+    invalid.current = false;
+    setValidationPassageId(null);
     if (action && !await enqueue(action)) return false;
     return flush();
   }, [enqueue, flush]);
@@ -132,6 +146,8 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       setEdits({});
       setDirty(false);
       setError(null);
+      invalid.current = false;
+      setValidationPassageId(null);
       return next;
     } catch (reason) {
       setError(formatApiError(translation.current, reason));
@@ -169,5 +185,7 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
       id, outdated(review) ? { ...review, status: "stale" as const } : review,
     ])),
   } : state;
-  return { state: displayed, saving, dirty, error, edits, edit, act, position, flush, retry, reload };
+  return {
+    state: displayed, saving, dirty, error, validationPassageId, edits, edit, act, position, flush, retry, reload,
+  };
 }

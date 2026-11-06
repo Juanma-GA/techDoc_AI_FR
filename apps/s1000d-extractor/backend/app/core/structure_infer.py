@@ -316,7 +316,8 @@ def build_ir(
             current().children.append(
                 IRNode(id=ids.next(), kind="table", form="table",
                        page=block.page, zone=block.zone, table_rows=rows,
-                       table_header=block.table_header, confidence=0.6)
+                       table_header=block.table_header, table_cell_bboxes=block.table_cell_bboxes,
+                       page_width=block.page_width, page_height=block.page_height, confidence=0.6)
             )
             continue
 

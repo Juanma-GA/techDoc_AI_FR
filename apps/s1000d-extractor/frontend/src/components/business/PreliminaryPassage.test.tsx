@@ -43,7 +43,7 @@ async function render(language: string, changes: Partial<ReviewPassage> = {}) {
   element.innerHTML = renderToStaticMarkup(createElement(
     I18nextProvider, { i18n: instance },
     createElement(PreliminaryPassage, {
-      dmId: "procedure", passage: { ...passage, ...changes }, text: passage.text,
+      dmId: "procedure", passage: { ...passage, ...changes }, text: changes.text ?? passage.text,
       disabled: false, editDisabled: false, selected: false,
       onAction, onSelect: vi.fn(), onEdit: vi.fn(),
     }),
@@ -58,13 +58,13 @@ async function render(language: string, changes: Partial<ReviewPassage> = {}) {
 describe.each([
   {
     language: "fr", proposed: "Sécurité",
-    bodyPending: "Reste dans la procédure",
-    ambiguous: "À trancher", body: "Reste dans la procédure", accept: "Accepter la proposition",
+    bodyPending: "Procédure classique (corps)",
+    ambiguous: "À trancher", accept: "Accepter la proposition",
   },
   {
     language: "en", proposed: "Safety",
-    bodyPending: "Keep in procedure",
-    ambiguous: "Decision needed", body: "Keep in procedure", accept: "Accept proposal",
+    bodyPending: "Classic procedure (body)",
+    ambiguous: "Decision needed", accept: "Accept proposal",
   },
 ])("explicit classification proposals ($language)", (labels) => {
   it("shows a clear category without recording a human decision", async () => {
@@ -89,11 +89,43 @@ describe.each([
     expect([...element.querySelectorAll("button")].some((button) => button.textContent === labels.accept)).toBe(false);
   });
 
-  it("keeps a confirmed category distinct from the pending proposal", async () => {
-    const { select, onAction } = await render(labels.language, { decision: "body" });
-    expect(select?.textContent?.trim()).toBe(labels.body);
+  it("hides an already excluded passage", async () => {
+    const { element, onAction } = await render(labels.language, { decision: "body" });
+    expect(element.querySelector("article")).toBeNull();
     expect(onAction).not.toHaveBeenCalled();
   });
+});
+
+it("shows a detected PDF marker separately from its associated value", async () => {
+  const { element } = await render("fr", {
+    source_marker: "REQUIRED PERSON(S)",
+    source_text: "1 OPER",
+    text: "1 OPER",
+    marker_key: "required person s",
+  });
+
+  expect(element.textContent).toContain("Repère PDF");
+  expect(element.textContent).toContain("REQUIRED PERSON(S)");
+  expect(element.textContent).toContain("Contenu associé");
+  expect(element.textContent).toContain("1 OPER");
+  expect(element.textContent).not.toContain("REQUIRED PERSON(S) | 1 OPER");
+});
+
+it("shows and edits only the selected source-table cell", async () => {
+  const { element } = await render("fr", {
+    row: 1,
+    column: 1,
+    kind: "table",
+    source_text: "Right cell",
+    text: "Right cell",
+    source_cells: ["Left cell", "Right cell"],
+    source_labels: ["Left heading", "Right heading"],
+  });
+
+  expect(element.textContent).toContain("Right heading");
+  expect(element.textContent).toContain("Right cell");
+  expect(element.textContent).not.toContain("Left heading");
+  expect(element.querySelector("textarea")?.disabled).toBe(false);
 });
 
 it("opens the whole passage and its edit details when clicking the passage box", async () => {
@@ -136,6 +168,99 @@ it("opens the whole passage and its edit details when clicking the passage box",
     await act(async () => collapse?.click());
     expect(host.querySelector("#preliminary-passage-p")?.hasAttribute("hidden")).toBe(true);
     expect(details?.open).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it("saves the selected S1000D tag for the current category", async () => {
+  const instance = i18next.createInstance();
+  await instance.use(initReactI18next).init({
+    lng: "fr", resources: { fr: { translation: fr } },
+    interpolation: { escapeValue: false },
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const onAction = vi.fn(async () => true);
+  try {
+    await act(async () => {
+      root.render(createElement(
+        I18nextProvider, { i18n: instance },
+        createElement(PreliminaryPassage, {
+          dmId: "procedure",
+          passage: {
+            ...passage, decision: "support", target_tag: "name",
+            tag_options: { support: ["name", "partNumber"] },
+          },
+          text: passage.text, disabled: false, editDisabled: false, selected: false,
+          onAction, onSelect: vi.fn(), onEdit: vi.fn(),
+        }),
+      ));
+    });
+
+    const tagSelector = host.querySelector<HTMLButtonElement>('button[aria-label="Balise S1000D"]');
+    await act(async () => { tagSelector?.click(); });
+    const partNumber = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.startsWith("partNumber"));
+    await act(async () => { partNumber?.click(); });
+
+    expect(onAction).toHaveBeenCalledWith({
+      dm_id: "procedure", passage_id: "p", op: "decide",
+      destination: "support", target_tag: "partNumber",
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it.each([
+  {
+    language: "fr",
+    label: "Exclure des préliminaires/sécurité et garder dans la procédure classique",
+  },
+  {
+    language: "en",
+    label: "Exclude from preliminaries/safety and keep in the classic procedure",
+  },
+])("moves an excluded zone to the procedure body ($language)", async ({ language, label }) => {
+  const instance = i18next.createInstance();
+  await instance.use(initReactI18next).init({
+    lng: language, resources: { fr: { translation: fr }, en: { translation: en } },
+    interpolation: { escapeValue: false },
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const onAction = vi.fn(async () => true);
+  try {
+    await act(async () => {
+      root.render(createElement(
+        I18nextProvider, { i18n: instance },
+        createElement(PreliminaryPassage, {
+          dmId: "procedure",
+          passage: {
+            ...passage, decision: "safety", target_tag: "warning",
+            tag_options: { safety: ["warning"], body: ["proceduralStep"] },
+          },
+          text: passage.text, disabled: false, editDisabled: false, selected: false,
+          onAction, onSelect: vi.fn(), onEdit: vi.fn(),
+        }),
+      ));
+    });
+
+    const excludeButton = host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    expect(excludeButton?.textContent?.trim()).toBe("");
+    expect(excludeButton?.querySelector("svg")).toBeTruthy();
+    await act(async () => { excludeButton?.click(); });
+
+    expect(onAction).toHaveBeenCalledWith({
+      dm_id: "procedure", passage_id: "p", op: "decide",
+      destination: "body", target_tag: "proceduralStep",
+    });
+    expect(host.querySelector("article")).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();

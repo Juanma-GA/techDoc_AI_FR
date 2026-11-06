@@ -57,6 +57,42 @@ def test_table_detected(pdf_bytes_table) -> None:
     assert any("M6" in c for r in rows for c in r)
 
 
+def test_table_cells_keep_page_rectangles_for_procedure_zones(tmp_path) -> None:
+    import fitz
+
+    from app.parsers.pdf_parser import parse_pdf_pages
+
+    pdf_path = tmp_path / "table-cell-geometry.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=300)
+    xs = [30, 165, 300, 400, 530]
+    ys = [30, 75, 120, 165]
+    for x in xs:
+        page.draw_line((x, ys[0]), (x, ys[-1]))
+    for y in ys:
+        page.draw_line((xs[0], y), (xs[-1], y))
+    rows = [
+        ["EQUIPMENT : SIMFADS", "", "OBJECT: CM001", ""],
+        ["MAINTENANCE LEVEL(S)", "REQUIRED PERSON(S)", "TOTAL TIME", "PERIODICITY"],
+        ["LEVEL 2", "1 OPER", "0.23", "UNSCHEDULED"],
+    ]
+    for row_index, row in enumerate(rows):
+        for column, text in enumerate(row):
+            if text:
+                page.insert_text((xs[column] + 4, ys[row_index] + 20), text, fontsize=8)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    pages = parse_pdf_pages(pdf_path)
+    table = next(block for block in pages[0].blocks if block.is_table)
+
+    assert table.page_width == 600
+    assert table.page_height == 300
+    assert table.table_cell_bboxes is not None
+    assert table.table_cell_bboxes[1][1] == [165.0, 75.0, 300.0, 120.0]
+    assert table.table_cell_bboxes[2][1] == [165.0, 120.0, 300.0, 165.0]
+
+
 def test_large_red_crosses_over_images_do_not_pollute_figure_captions(tmp_path) -> None:
     import fitz
 

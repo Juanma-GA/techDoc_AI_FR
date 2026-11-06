@@ -1445,6 +1445,8 @@ export interface components {
             revision: number;
             /** Active Dm Id */
             active_dm_id: string | null;
+            /** Template Dm Id */
+            template_dm_id?: string | null;
             /** Source Format */
             source_format: string;
             /** Source Changed */
@@ -1493,6 +1495,8 @@ export interface components {
             position: components["schemas"]["ReaderPositionOut"];
             /** Saved At */
             saved_at: string | null;
+            /** Template Source Dm Id */
+            template_source_dm_id?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -1549,6 +1553,8 @@ export interface components {
             passage_id?: string | null;
             /** Destination */
             destination?: ("conditions" | "personnel" | "support" | "supplies" | "spares" | "safety" | "common" | "closing" | "body" | "discard") | null;
+            /** Target Tag */
+            target_tag?: string | null;
             /** Text */
             text?: string | null;
             /** Split At */
@@ -1576,6 +1582,8 @@ export interface components {
             node_id: string;
             /** Row */
             row: number | null;
+            /** Column */
+            column?: number | null;
             /** Start */
             start: number;
             /** End */
@@ -1584,6 +1592,18 @@ export interface components {
             source_text: string;
             /** Text */
             text: string;
+            /** Source Marker */
+            source_marker?: string | null;
+            /** Marker Key */
+            marker_key?: string | null;
+            /** Source Cells */
+            source_cells?: string[] | null;
+            /** Source Labels */
+            source_labels?: string[] | null;
+            /** Anchor Texts */
+            anchor_texts?: string[];
+            /** Anchor Rects */
+            anchor_rects?: number[][];
             /** Page */
             page: number | null;
             /** Kind */
@@ -1604,6 +1624,14 @@ export interface components {
             rule: string;
             /** Decision */
             decision: string | null;
+            /** Target Tag */
+            target_tag?: string | null;
+            /** Tag Options */
+            tag_options?: {
+                [key: string]: string[];
+            };
+            /** Template Source Dm Id */
+            template_source_dm_id?: string | null;
         } & {
             [key: string]: unknown;
         };

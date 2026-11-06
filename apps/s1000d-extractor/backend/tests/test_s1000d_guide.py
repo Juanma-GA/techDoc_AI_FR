@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.procedure_tags import tag_options_for
 from app.core.s1000d_guide import load_guide
-
 
 GUIDE_PATH = Path(__file__).resolve().parents[2] / "Balise_S1000D.xlsx"
 
@@ -55,3 +55,23 @@ def test_guide_can_be_exported_as_json_data() -> None:
     assert isinstance(data["rules"], list)
     assert isinstance(data["issues"], list)
     assert isinstance(data["rules"][0]["components"], list)
+
+
+def test_procedure_tag_options_use_workbook_tags_and_schema_spelling() -> None:
+    guide = load_guide(GUIDE_PATH)
+    workbook_tags = {
+        component
+        for rule in guide.rules_for("procedural")
+        for component in rule.components
+    }
+    options = tag_options_for({
+        "kind": "table",
+        "text": "No support equipment is required.",
+    })
+
+    assert set(tag for tags in options.values() for tag in tags) <= (
+        workbook_tags | {"noSupportEquips"}
+    )
+    assert "noSuppEquips" in workbook_tags
+    assert "noSupportEquips" in options["support"]
+    assert "noSuppEquips" not in options["support"]

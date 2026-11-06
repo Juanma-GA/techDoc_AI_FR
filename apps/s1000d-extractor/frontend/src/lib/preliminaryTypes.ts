@@ -9,17 +9,27 @@ export type ReviewPassage = {
   id: string;
   node_id: string;
   row: number | null;
+  column?: number | null;
   start: number;
   end: number;
   source_text: string;
   text: string;
+  source_marker?: string | null;
+  marker_key?: string | null;
+  source_cells?: string[] | null;
+  source_labels?: string[] | null;
+  anchor_texts?: string[];
+  anchor_rects?: Array<[number, number, number, number]>;
   page: number | null;
   kind: string;
   role?: "content" | "heading" | "table-header" | "marker" | "layout" | "caption";
   phase?: "unknown" | "preliminary" | "main" | "common" | "closing";
   suggested: ReviewDestination | "review";
-  rule: "keywords" | "heading" | "multiple" | "unmatched" | "main" | "closing" | "common" | "action" | "structure" | "admonition";
+  rule: "keywords" | "heading" | "multiple" | "unmatched" | "main" | "closing" | "common" | "action" | "structure" | "admonition" | "anchor";
   decision: ReviewDestination | null;
+  target_tag?: string | null;
+  tag_options?: Partial<Record<ReviewDestination, string[]>>;
+  template_source_dm_id?: string | null;
 };
 
 export function isReviewable(passage: ReviewPassage): boolean {
@@ -40,11 +50,13 @@ export type ProcedureReview = {
   passages: ReviewPassage[];
   position: ReaderPosition;
   saved_at: string | null;
+  template_source_dm_id?: string | null;
 };
 
 export type PreliminaryState = {
   revision: number;
   active_dm_id: string | null;
+  template_dm_id?: string | null;
   source_format: string;
   source_changed: boolean;
   reviews: Record<string, ProcedureReview>;
@@ -55,6 +67,7 @@ export type ReviewAction = {
   op: "decide" | "split" | "complete" | "restart" | "cursor" | "skip";
   passage_id?: string;
   destination?: ReviewDestination | null;
+  target_tag?: string | null;
   text?: string;
   split_at?: number;
   confirm_empty?: boolean;

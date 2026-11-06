@@ -38,7 +38,7 @@ const preliminarySchema: z.ZodType<PreliminaryState, z.ZodTypeDef, unknown> = z.
       phase: z.enum(["unknown", "preliminary", "main", "common", "closing"]).optional(),
       suggested: z.enum([...reviewDestinations, "review"]),
       rule: z.enum(["keywords", "heading", "multiple", "unmatched", "main", "closing", "common",
-        "action", "structure", "admonition"]),
+        "action", "structure", "admonition", "anchor"]),
       decision: z.enum(reviewDestinations).nullable(),
     }).passthrough()),
   }).passthrough()),
