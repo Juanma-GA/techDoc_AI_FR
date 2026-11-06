@@ -5,10 +5,16 @@ This page is the canonical map of repository documentation. A linked document is
 ## Authority Order
 
 1. Live AACF content is the external framework authority.
-2. `STANDARD_POC.md` and its linked normative supplements define the technical standard for this repository.
-3. `CLAUDE.md` defines local safety, method, and validation instructions.
-4. Accepted ADRs record architectural decisions within their stated scope.
-5. Procedures, templates, guides, and historical reports are non-normative supporting material.
+2. The pinned framework's [`STANDARD_POC.md`](../framework/STANDARD_POC.md) and
+   linked normative supplements define the reusable technical baseline.
+3. This repository's [`STANDARD_POC.md`](../STANDARD_POC.md) is the effective
+   TECHDOC_AI standard: it adapts that baseline to the consumer's paths,
+   registry, ports, and integrations. Framework updates do not alter it
+   automatically; reconcile it when the submodule pointer changes.
+4. `CLAUDE.md` defines local safety, method, and validation instructions.
+5. Accepted ADRs record architectural decisions within their stated scope.
+6. Procedures, templates, guides, and historical reports are non-normative
+   supporting material unless the effective standard explicitly makes them normative.
 
 When live AACF content cannot be fetched, report `AACF NON VERIFIABLE`. Local documents and checks are not AACF evidence.
 
@@ -17,13 +23,15 @@ When live AACF content cannot be fetched, report `AACF NON VERIFIABLE`. Local do
 - [Repository overview](../README.md)
 - [Quick start for all apps](../QUICK_START.md)
 - [Local working instructions](../CLAUDE.md)
-- [Repository technical standard](../STANDARD_POC.md)
+- [Effective TECHDOC_AI standard](../STANDARD_POC.md)
 - [Contribution and pull request workflow](../CONTRIBUTING.md)
 - [Application inventory](apps/README.md)
 
 ## Standards And Procedures
 
-- [Local audit report protocol](../PROMPT_AUDIT_STANDARD.md)
+- [Pinned framework technical baseline](../framework/STANDARD_POC.md)
+- [Framework consumption and document ownership](../framework/docs/standards/consuming-framework.md)
+- [Shared audit protocol entrypoint](../PROMPT_AUDIT_STANDARD.md)
 - [Profiles and app registry](standards/profiles-and-registry.md)
 - [Application README template](standards/app-readme-template.md)
 - [Demo mode and shared identity integration](standards/demo-mode-integration.md)
@@ -47,3 +55,16 @@ Historical reports preserve context but do not describe the current repository u
 - [Compatibility instructions](../AGENTS.md)
 
 Skills are the workflow source of truth. Agent files are compatibility wrappers and must not duplicate the full workflow.
+
+## Ownership Boundaries
+
+The root `README.md`, `QUICK_START.md`, `CONTRIBUTING.md`, `CLAUDE.md`,
+package manifests, lockfile, workspace configuration, TypeScript base
+configuration, app registry, port assignments, and app inventory belong to
+TECHDOC_AI. Same-named framework documents describe the framework repository,
+not this consumer.
+
+Consumer guides with a framework counterpart are explicitly labeled as local
+adaptations and link to the pinned source. Identical guides use a root pointer
+instead of a second checklist. `framework/docs/standards/consuming-framework.md`
+defines how to reconcile those adaptations when updating the submodule.

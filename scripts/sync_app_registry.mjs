@@ -1,22 +1,13 @@
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  checkAppArtifacts,
-  readAppRegistry,
-  syncAppArtifacts,
-} from "./lib/app-registry.mjs";
-
 const repo = fileURLToPath(new URL("../", import.meta.url));
-const registry = readAppRegistry(repo);
-
-if (process.argv.includes("--check")) {
-  const mismatches = checkAppArtifacts(repo, registry);
-  if (mismatches.length) {
-    throw new Error(`App registry artifacts are out of date:\n${mismatches.join("\n")}`);
-  }
-  process.stdout.write("App registry artifacts are synchronized.\n");
-} else {
-  syncAppArtifacts(path.resolve(repo), registry);
-  process.stdout.write("Synchronized package scripts and app inventory docs from scripts/apps.json.\n");
-}
+const result = spawnSync(
+  process.execPath,
+  [path.join(repo, "framework", "scripts", "sync_app_registry.mjs"), "--repo-root", repo,
+    ...process.argv.slice(2)],
+  { cwd: repo, stdio: "inherit" },
+);
+if (result.error) throw result.error;
+if (result.status !== 0) process.exitCode = result.status ?? 1;

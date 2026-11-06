@@ -26,7 +26,9 @@ export function frontendSources(repo, frontend) {
   return [
     ...["src", "public", "index.html", "package.json", "tsconfig.json", "vite.config.ts",
       "tailwind.config.ts", "postcss.config.js"].map((name) => path.join(frontend, name)),
-    path.join(repo, "packages", "ui", "src"), path.join(repo, "design-tokens"),
+    path.join(repo, "framework", "packages", "ui", "src"),
+    path.join(repo, "framework", "design-tokens"),
+    path.join(repo, "packages", "techdoc-brand", "src"),
     path.join(repo, "pnpm-lock.yaml"), path.join(repo, "pnpm-workspace.yaml"),
     path.join(repo, "tsconfig.base.json"),
   ].flatMap(sourceFiles);

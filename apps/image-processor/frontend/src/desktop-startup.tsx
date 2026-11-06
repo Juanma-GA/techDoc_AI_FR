@@ -2,12 +2,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import {
-  Ai4TechDocLogo,
   Card,
   CardContent,
   CardHeader,
   LoadingOverlay,
 } from "@internal/ui";
+import { Ai4TechDocLogo } from "@internal/techdoc-brand";
 
 import "./i18n";
 import "./index.css";

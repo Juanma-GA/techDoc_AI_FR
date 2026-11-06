@@ -1,5 +1,6 @@
+import { AppShell } from "@internal/techdoc-brand";
+
 import {
-  AppShell,
   Button,
   DemoModeBadge,
   DemoModeProvider,

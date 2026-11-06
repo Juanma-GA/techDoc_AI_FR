@@ -1,11 +1,16 @@
 # ADR 0002 — Monorepo pnpm + package `@internal/ui`
 
-- **Status** — Accepted (2026-04-27)
-- **Scope** — Organisation du dépôt et partage de code entre apps.
+- **Status** — Partially superseded (2026-11-04); pnpm workspace decisions remain accepted.
+- **Scope** — Original in-repo sharing model; shared framework sources now live in the pinned `framework/` submodule.
 - **Reference** — [`STANDARD_POC.md`](../../STANDARD_POC.md) §2 (mutualisé
   vs propre au POC) et §5.3 (composants `@internal/ui` canoniques).
 
 ---
+
+> This ADR records the original monorepo layout. Its root-level `packages/ui/`
+> and `design-tokens/` paths, and its claims of immediate propagation across
+> repositories, are historical. Consumers now update the pinned framework
+> commit explicitly; see the [framework consumption guide](../../framework/docs/standards/consuming-framework.md).
 
 ## Contexte
 

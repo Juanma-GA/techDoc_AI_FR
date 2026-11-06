@@ -1,6 +1,6 @@
 ---
 name: aacf-compliance
-description: "Use when: auditing an ATEXIS project against the current external AACF hard rules, language rules, AI safety, design system, governance, or tier controls. Do not use for: local STANDARD_POC compliance, automatic fixes, or claims based only on repository documents."
+description: "Use when: auditing a project against the current external AACF hard rules, language rules, AI safety, design system, governance, or tier controls. Do not use for: local framework-standard compliance, automatic fixes, or claims based only on repository documents."
 ---
 
 # AACF Compliance

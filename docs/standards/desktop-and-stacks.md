@@ -1,9 +1,14 @@
 # Backend stacks and optional desktop applications
 
+TECHDOC_AI adaptation of the [framework guide](../../framework/docs/standards/desktop-and-stacks.md).
+The framework document defines reusable guidance; this file records the
+consumer's existing backend stacks and integration paths.
+
 ## Shared contract, backend-specific tooling
 
-The monorepo shares React/Vite, strict TypeScript, `@internal/ui`, design tokens,
-FR/EN, themes, local-only binding and data-safety rules. FastAPI remains the
+The monorepo consumes React/Vite, strict TypeScript, `@internal/ui` and design
+tokens from the pinned `framework/` submodule, plus FR/EN, themes, local-only
+binding and data-safety rules. FastAPI remains the
 default scaffold, not a requirement to rewrite an existing backend.
 
 An app documents its runtime, framework, API differences and persistence in its
@@ -28,18 +33,17 @@ instead of quietly shipping a stale bundle.
 From the repository root:
 
 ```powershell
-node scripts\new_poc.mjs my-app 8010 --dry-run
-node scripts\new_poc.mjs my-app 8010
-node scripts\new_poc.mjs my-desktop-app 8011 --desktop
+node framework\scripts\new_poc.mjs --repo-root . my-app 8010 --dry-run
+node framework\scripts\new_poc.mjs --repo-root . my-app 8010
+node framework\scripts\new_poc.mjs --repo-root . my-desktop-app 8011 --desktop
 ```
 
 The Bash wrapper `bash scripts/new_poc.sh <slug> [port] [--desktop]` remains
-available. Generation itself uses Node, not Python. Existing positional arguments
-remain compatible. Install workspace dependencies afterwards, complete the README,
-then run the local standard and app-specific checks; generation is not validation.
-The Bash wrapper also runs the local checker automatically after creation.
+available. Generation itself uses the framework's Node script, not Python.
+Install workspace dependencies afterwards, complete the README, then run the
+local standard and app-specific checks; generation is not validation.
 
-The canonical optional desktop assets live in `apps/_template/desktop/`. The
+The canonical optional desktop assets live in `framework/apps/_template/desktop/`. The
 generator copies them into the new frontend only with `--desktop`, substitutes
 the app identity and adds Tauri CLI/scripts. Web-only apps do not gain Rust,
 Tauri dependencies, runtime resources or desktop prerequisites.
@@ -105,9 +109,9 @@ then navigate to the app's normal React entry point. Keep the screen in the
 desktop scaffold as `frontend/src/desktop-startup.html` plus
 `frontend/src/desktop-startup.tsx`, included as a second Vite entry only when
 present. Its TSX page must use existing `@internal/ui` components (for example
-`Card`, `Ai4TechDocLogo`, and `LoadingOverlay`), the shared theme CSS, and the
-app's existing i18n resources. Use the HTML title or app configuration for
-app-specific branding rather than hardcoding a POC name in the shared scaffold.
+`Card` and `LoadingOverlay`), the shared theme CSS, and the app's existing i18n
+resources. Branding is app-owned or provided by an optional consumer integration;
+the shared scaffold must not require a company logo.
 
 The loader is indeterminate; do not show a fabricated percentage. Its `role=status`
 and `aria-busy` state should remain accessible. On startup failure, stop the
@@ -201,7 +205,7 @@ recognized usually means workspace dependencies were not installed or the lockfi
 is stale; check it with
 `pnpm --filter @apps/<slug>-frontend exec tauri --version`. Do not install a
 global Tauri CLI or run `pnpm create tauri-app` inside an existing app. For a new
-desktop POC, use `node scripts/new_poc.mjs <slug> <port> --desktop`.
+desktop POC, use `node framework/scripts/new_poc.mjs --repo-root . <slug> <port> --desktop`.
 
 Do not put `pnpm install` unconditionally on a launcher/build critical path:
 install workspace dependencies explicitly as above. A wrapper may install only

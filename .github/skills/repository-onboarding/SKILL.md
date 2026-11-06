@@ -1,6 +1,6 @@
 ---
 name: repository-onboarding
-description: "Use when: discovering or onboarding to the ATEXIS POC monorepo, its applications, authority hierarchy, documentation map, risks, or recommended reading order. Do not use for: compliance verdicts, code changes, deployment, or application creation."
+description: "Use when: discovering or onboarding to a POC monorepo based on this framework, its applications, authority hierarchy, documentation map, risks, or recommended reading order. Do not use for: compliance verdicts, code changes, deployment, or application creation."
 ---
 
 # Repository Onboarding
@@ -33,8 +33,8 @@ Treat application README files, procedures, ADRs, and historical reports accordi
 
 1. Identify the repository root without assuming a specific editor, shell, or hosting service.
 2. Read the authority documents and note any inaccessible source.
-3. Inventory directories directly under `apps/`; distinguish `_template` from instantiated applications.
-4. Read `docs/apps/README.md` and compare its entries with visible application directories.
+3. Inventory directories directly under `apps/`; distinguish `_template` from instantiated applications. In a consumer monorepo with a `framework/` submodule, identify `framework/apps/_template` as the canonical template and do not expect a mirrored `apps/_template`.
+4. Read `docs/apps/README.md` and compare instantiated app entries with visible application directories; check the template entry against the canonical template's actual location.
 5. For each application, inspect its README, manifests, launchers, test configuration, and only the source tree names needed to identify ownership boundaries. Do not inspect implementation bodies merely to assess quality or compliance; that belongs to `audit-standard`.
 6. Identify shared packages, design tokens, scripts, ADRs, skills, and harness adapters.
 7. Compare documented default ports with visible launcher configuration; report differences without choosing a hidden winner.

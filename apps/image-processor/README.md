@@ -244,4 +244,4 @@ No real-model orientation benchmark was run for the typography change.
 - [Repository technical standard](../../STANDARD_POC.md)
 - [Application README template](../../docs/standards/app-readme-template.md)
 - [Application inventory](../../docs/apps/README.md)
-- [Canonical template](../_template/)
+- [Canonical template](../../framework/apps/_template/README.md)

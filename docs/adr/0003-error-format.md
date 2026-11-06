@@ -52,11 +52,11 @@ Implémentation :
   `AppError` (erreurs métier), `HTTPException` (erreurs FastAPI
   natives, ex. dépendance qui lève), `RequestValidationError`
   (Pydantic), `Exception` (fallback `INTERNAL_ERROR`). Voir
-  [`apps/ftm-v2/backend/app/core/errors.py`](../../apps/ftm-v2/backend/app/core/errors.py).
+  l'implémentation actuelle dans [`apps/corpus-agent/backend/app/core/errors.py`](../../apps/corpus-agent/backend/app/core/errors.py).
 - **Côté frontend** : `ApiClientError` mirror le payload — `status`,
   `code`, `message`, `detail`, `requestId`. L'UI matche sur `code`,
   affiche `message` à l'utilisateur, journalise `requestId`. Voir
-  [`apps/ftm-v2/frontend/src/lib/api.ts`](../../apps/ftm-v2/frontend/src/lib/api.ts).
+  l'implémentation actuelle dans [`apps/corpus-agent/frontend/src/lib/api.ts`](../../apps/corpus-agent/frontend/src/lib/api.ts).
 - **Tests** : un test minimum vérifie que la réponse 404 d'un endpoint
   porte les 4 clés (`pytest`).
 

@@ -1,8 +1,8 @@
 # Internal POC Monorepo
 
 Monorepo interne hébergeant plusieurs POC full-stack (FastAPI ou Go + React),
-développés dans un **tronc commun partagé** (`packages/ui`, `design-tokens/`,
-scripts, standard) et conformes à [`STANDARD_POC.md`](STANDARD_POC.md).
+développés avec le **framework partagé** épinglé dans le submodule `framework/`
+et conformes à [`STANDARD_POC.md`](STANDARD_POC.md).
 Chaque app est indépendante côté runtime mais s'aligne sur les mêmes
 règles, les mêmes composants UI et les mêmes tokens.
 
@@ -17,13 +17,17 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/catia-toolbox/`](apps/catia-toolbox/) | Outils de traitement documentaire CATIA | 8004 |
 | [`apps/ocr-vision/`](apps/ocr-vision/) | OCR et extraction visuelle sur documents techniques | 8005 |
 | [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
-| [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
-| [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
 | [`apps/ecm-automation/`](apps/ecm-automation/) | Préparation de dossiers ECM/ECN et mise à jour de tracker | 8009 |
 | [`apps/flowchart-generator/`](apps/flowchart-generator/) | Génération de logigrammes industriels | 8010 |
-| [`apps/image-processor/`](apps/image-processor/) | Détection OCR locale et remplacement de texte dans les images (PaddleOCR + LaMa) | 8010 |
 | [`apps/pdf-toolkit/`](apps/pdf-toolkit/) | Outils PDF Go, web et bureau Tauri optionnel | 8085 |
-| [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
+| [`framework/apps/_template/`](framework/apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
+
+[`apps/image-processor/`](apps/image-processor/README.md) reste disponible comme
+exception hors registre : son lanceur de développement démarre l'API, le service
+LaMa et Vite ensemble. Il est donc exclu de `scripts/apps.json` et des inventaires
+générés. Son API utilise `8010` par défaut (également cible de Flowchart
+Generator) et ses lanceurs choisissent un port libre si nécessaire ; LaMa utilise
+`8011` par défaut.
 
 Les ports cibles et profils canoniques sont définis dans
 [`scripts/apps.json`](scripts/apps.json); le launcher utilise le premier port
@@ -68,7 +72,7 @@ Double-clic sur :  apps\<poc>\package.bat
 ```
 
 Il produit `apps/<poc>/dist/<poc>-vX.Y.Z-YYYYMMDD.zip` : un ZIP
-autonome (sources de l'app + design-tokens + Python 3.11 embarqué) que
+autonome (sources de l'app + tokens du framework + Python 3.11 embarqué) que
 le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 Pour PDF Toolkit, le ZIP contient plutôt Go Windows x64 embarqué, les sources,
 les dépendances vendoriées et l'UI buildée : compilation locale hors ligne au
@@ -81,23 +85,27 @@ le packaging Tauri optionnel.
 ```
 .
 ├── apps/                       # 1 dossier = 1 POC autonome
-│   ├── _template/              # squelette canonique — copie pour chaque nouveau POC
 │   └── <poc>/                  # voir docs/apps/README.md pour la liste complète
 │       ├── start.bat + _run.bat        # lancement local (wrapper + logique)
 │       ├── package.bat + _package.bat  # génération du ZIP partageable
 │       ├── start.sh                    # lanceur Unix
 │       ├── backend/                    # FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic
 │       └── frontend/                   # React 18 + Vite + TS strict
+├── framework/                  # submodule privé, commit du framework épinglé
+│   ├── apps/_template/         # template canonique, sans miroir dans ce repo
+│   ├── packages/ui/            # @internal/ui — composants partagés
+│   ├── design-tokens/          # source des tokens et du thème
+│   ├── scripts/                # scaffolding et registre génériques
+│   └── .github/skills/         # skills génériques synchronisés à la racine
 ├── packages/
-│   └── ui/                     # @internal/ui — composants partagés (Radix + shadcn)
-├── design-tokens/              # tokens.json (dual-theme dark/light) + preset Tailwind
+│   └── techdoc-brand/          # logo et intégration de marque propres à TECHDOC_AI
 ├── docs/
 │   ├── index.md                # index et hiérarchie documentaire
 │   ├── apps/                   # inventaire et onboarding des apps
 │   ├── standards/              # modèles et contrats partagés
 │   ├── history/                # rapports datés non normatifs
 │   └── adr/                    # Architecture Decision Records
-├── scripts/                    # apps.json, scaffold, checker, packagers
+├── scripts/                    # registre consommateur, checker et packagers d'apps
 ├── .github/                    # skills et adaptateurs d'agents
 ├── tools/                      # binaires optionnels (ex. installeur Python silencieux)
 ├── STANDARD_POC.md             # référence technique du standard
@@ -106,17 +114,18 @@ le packaging Tauri optionnel.
 ├── CONTRIBUTING.md             # workflow Git, commits et pull requests
 ├── PROMPT_AUDIT_STANDARD.md    # prompt d'audit d'un POC contre le standard
 ├── package.json                # workspace pnpm racine — scripts dev:<poc>
-├── pnpm-workspace.yaml
+├── pnpm-workspace.yaml         # apps, marque consommateur et packages du submodule
 └── tsconfig.base.json
 ```
 
 > **Chaque POC est indépendant** : aucune dépendance runtime entre
 > `apps/<poc-a>/` et `apps/<poc-b>/`. Le partage se fait uniquement via
-> `packages/ui/` et `design-tokens/`.
+> `framework/packages/ui/` et `framework/design-tokens/`.
 
 ## Développement frontend (optionnel, nécessite Node 20 + pnpm)
 
 ```bash
+git submodule update --init --recursive
 pnpm install
 pnpm dev:<poc>          # backend uvicorn + frontend Vite (HMR) en parallèle
 ```
@@ -146,22 +155,21 @@ Avant chaque commit :
 bash scripts/check_standard.sh
 ```
 
-Vérifie 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de
-configuration LLM et 1 de robustesse du launcher. Il ne constitue pas une
+Effectue 22 contrôles structurels et de design-system. Il ne constitue pas une
 preuve de conformité AACF.
 Les contrôles rattrapent notamment les copier-coller incomplets depuis
-`apps/_template/` (nom `pyproject.toml`, README réécrit, DB renommée,
+`framework/apps/_template/` (nom `pyproject.toml`, README réécrit, DB renommée,
 section `## Auth`, scripts racine wirés, bind `127.0.0.1`). Voir
 [`STANDARD_POC.md`](STANDARD_POC.md#8-tests) pour le détail de chaque règle.
 
 ## Créer un nouveau POC
 
 ```bash
-bash scripts/new_poc.sh <slug> [<port>]
-node scripts/new_poc.mjs <slug> [<port>] --desktop
+node framework/scripts/new_poc.mjs --repo-root . <slug> [<port>]
+node framework/scripts/new_poc.mjs --repo-root . <slug> [<port>] --desktop
 ```
 
-Le script copie `apps/_template/` → `apps/<slug>/`, substitue les ~15
+Le script du framework copie `framework/apps/_template/` → `apps/<slug>`, substitue les ~15
 marqueurs `TEMPLATE` / `8000` dans tous les fichiers, génère
 `scripts/package_<slug>.py`, wire les scripts `dev:<slug>` /
 `test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json`, et

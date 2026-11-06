@@ -68,7 +68,7 @@ validable independamment :
   (`\\serveur\...`) ou un dossier local — il suffit de configurer la racine.
 
 Conforme a [`STANDARD_POC.md`](../../../STANDARD_POC.md). Bootstrap depuis
-[`apps/_template`](../../../apps/_template/).
+[`framework/apps/_template`](../../../framework/apps/_template/).
 
 ## Auth
 
@@ -206,7 +206,7 @@ pnpm dev:catia-toolbox
    doc-writer), le React reutilise un CSS sur-mesure
    `frontend/src/styles/preview-skin.css` (classes `.card/.btn/.kpi/.badge/`
    `.nav-item/.tree/.pill/...`) plutot que les composants `@internal/ui`. Les
-   variables CSS reprennent les valeurs de `design-tokens/tokens.json` (`:root`
+   variables CSS reprennent les valeurs de `framework/design-tokens/tokens.json` (`:root`
    clair, `.dark` sombre) — pas de hex « magique ». Les primitives riches
    (`FileDropzone`) viennent quand meme de `@internal/ui`. *Retour au standard* :
    migrer les classes skin vers `@internal/ui` si l'app est perennisee.

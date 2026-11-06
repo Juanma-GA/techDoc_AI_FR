@@ -10,11 +10,11 @@ This profile specifies local repository mechanics. It does not override AACF Har
 
 ## Repository Organization
 
-The monorepo owns one canonical scaffold and independent applications:
+The consumer monorepo uses the pinned framework submodule for its canonical
+scaffold and shared frontend packages; it owns only its independent applications:
 
 ```text
 apps/
-  _template/
   <slug>/                 # one independent POC
     backend/              # FastAPI app, migrations, tests, local data
     frontend/             # React/Vite app and frontend tests
@@ -24,12 +24,16 @@ apps/
     start.sh
     package.bat
     _package.bat
-packages/ui/              # shared UI implementation
-design-tokens/            # shared token implementation
-scripts/                  # app creation, checks, and package scripts
+framework/
+  apps/_template/         # canonical scaffold
+  packages/ui/            # shared UI implementation
+  design-tokens/          # shared token implementation
+  scripts/                # generic scaffold and registry tools
+packages/techdoc-brand/   # consumer-owned brand integration
+scripts/                  # registry, checks, and package scripts
 ```
 
-- Instantiate a new app from `apps/_template/`, preferably with `scripts/new_poc.sh`; do not clone another POC.
+- Instantiate a new app from `framework/apps/_template/`, preferably with `node framework/scripts/new_poc.mjs <slug> [port] --repo-root .`; do not clone another POC.
 - Keep business logic and app-specific UI in `apps/<slug>/`. Do not create runtime dependencies between POCs. Promote genuinely shared UI primitives to the shared UI package.
 - Assign a unique default port and register the app's root development/test commands. Document the app's purpose, declared tier/profile, prerequisites, bind address, run commands, and deviations in its README.
 - The scaffold is not complete merely because files exist: wire and test every screen and route required by the declared app profile.
@@ -37,7 +41,7 @@ scripts/                  # app creation, checks, and package scripts
 ## UI and UX Boundary
 
 - The exact local UX and visual proposal (token values, typography, dimensions, components, app shell, screens, and states) is in [DESIGN.md](DESIGN.md). It is a proposed project profile, not an AACF-approved global design system.
-- AACF remains the design authority. The workspace `design-tokens/` and `@internal/ui` may be used as adapters only after maintainers approve their mapping. Do not add per-app palettes, duplicate primitives, or competing design rules.
+- AACF remains the design authority. `framework/design-tokens/` and `@internal/ui` may be used as adapters only after maintainers approve their mapping. Do not add per-app palettes, duplicate primitives, or competing design rules.
 - Inherit AACF accessibility, localization, humanization, responsive behavior, and mutation requirements. Do not weaken HR1/HR15/HR20/HR21; resolve the open design decisions in `DESIGN.md` before adopting this profile.
 - Serve the built React/Vite app at `/`; keep API routes ahead of the SPA fallback. Do not substitute an unbuilt preview UI. Report a visible build/start failure instead of implying that a stale bundle is current.
 

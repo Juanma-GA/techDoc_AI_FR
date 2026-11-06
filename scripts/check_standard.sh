@@ -6,8 +6,8 @@
 # Run from any directory:
 #     bash scripts/check_standard.sh
 #
-# Excluded from every check: legacy/, node_modules, .venv, __pycache__,
-# build/dist artefacts, Playwright reports, and the .git folder. The hex
+# Excluded from every check: legacy/, node_modules, .venv, data/storage/uploads,
+# __pycache__, build/dist artefacts, Playwright reports, and the .git folder. The hex
 # check additionally tolerates tokens.json (the canonical palette),
 # tailwind-preset.ts (consumes tokens), theme.css + preview-skin.css (CSS
 # variables for dark/light), and any *.test.* / tests/ file.
@@ -20,7 +20,7 @@ cd "$ROOT"
 
 violations=0
 
-EXCLUDE_DIRS=(node_modules .venv __pycache__ dist build generated target gen .git playwright-report test-results coverage legacy)
+EXCLUDE_DIRS=(node_modules .venv data storage uploads __pycache__ dist build generated target gen .git playwright-report test-results coverage legacy)
 exclude_args=()
 for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
@@ -36,6 +36,8 @@ fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); print
 step 1 "Backend API prefix /api/v1"
 missing=""
 for backend in apps/*/backend; do
+  # The canonical template lives in framework/apps/_template, not in this app glob.
+  [[ "$backend" == "apps/_template/backend" ]] && continue
   [[ -d "$backend" ]] || continue
   if [[ -f "$backend/go.mod" ]]; then
     grep -rq --include='*.go' 'Group("/api/v1")' "$backend/cmd" ||
@@ -76,7 +78,7 @@ step 4 "No hardcoded hex colors"
 hits=$(grep -rEn "${exclude_args[@]}" \
   --include='*.ts' --include='*.tsx' --include='*.css' --include='*.py' --include='*.html' \
   '#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?\b' \
-  apps/ packages/ design-tokens/ 2>/dev/null \
+  apps/ packages/ framework/apps/ framework/packages/ framework/design-tokens/ 2>/dev/null \
   | grep -v '/tokens.json:' \
   | grep -v '/tailwind-preset.ts:' \
   | grep -v '/theme.css:' \
@@ -130,13 +132,12 @@ fi
 
 # ------------------------------------------------------------------
 # 8. Aucun pyproject.toml d'app ne porte encore le nom TEMPLATE-backend
-#    (instanciation oubliee depuis apps/_template/).
+#    The canonical template lives in framework/apps/_template/.
 # ------------------------------------------------------------------
 step 8 "pyproject.toml renomme"
 hits=""
 for f in apps/*/backend/pyproject.toml; do
   [[ -f "$f" ]] || continue
-  [[ "$f" == "apps/_template/backend/pyproject.toml" ]] && continue
   if grep -q '^name = "TEMPLATE-backend"' "$f"; then
     hits+="$f\n"
   fi
@@ -153,7 +154,6 @@ step 9 "README d'app reecrit"
 hits=""
 for f in apps/*/README.md; do
   [[ -f "$f" ]] || continue
-  [[ "$f" == "apps/_template/README.md" ]] && continue
   if grep -q 'Squelette canonique' "$f"; then
     hits+="$f\n"
   fi
@@ -169,9 +169,6 @@ step 10 "DB renommee (pas TEMPLATE.db)"
 hits=""
 for f in apps/*/backend/app/config.py apps/*/backend/alembic.ini; do
   [[ -f "$f" ]] || continue
-  case "$f" in
-    apps/_template/*) continue ;;
-  esac
   if grep -q 'TEMPLATE\.db' "$f"; then
     hits+="$f\n"
   fi
@@ -287,7 +284,7 @@ if [[ -z "$NODE_BIN" ]]; then
   fail "Node.js 20+ doit etre sur le PATH du shell courant pour valider le registre et les surfaces synchronisees."
 elif ! "$NODE_BIN" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' >/dev/null 2>&1; then
   fail "Node.js 20+ est requis pour valider le registre et les surfaces synchronisees."
-elif "$NODE_BIN" scripts/sync_app_registry.mjs --check > /dev/null; then pass; else
+elif "$NODE_BIN" framework/scripts/sync_app_registry.mjs --check --repo-root . > /dev/null; then pass; else
   fail "Le registre, les README, les ports, les commandes racine et le shell @internal/ui doivent rester synchronises."
 fi
 
@@ -317,17 +314,17 @@ fi
 # ------------------------------------------------------------------
 step 18 "theme.css genere depuis tokens.json"
 if [[ -z "$NODE_BIN" ]]; then
-  fail "Node.js est requis pour verifier design-tokens/theme.css."
-elif "$NODE_BIN" design-tokens/scripts/build-theme.mjs --check > /dev/null 2>&1; then pass; else
-  fail "design-tokens/theme.css est perime ou edite a la main : lancer 'pnpm tokens:build' (docs/standards/design-system.md §1)."
+  fail "Node.js est requis pour verifier framework/design-tokens/theme.css."
+elif "$NODE_BIN" framework/design-tokens/scripts/build-theme.mjs --check > /dev/null 2>&1; then pass; else
+  fail "framework/design-tokens/theme.css est perime ou edite a la main : lancer 'pnpm tokens:build' (docs/standards/design-system.md §1)."
 fi
 
 # ------------------------------------------------------------------
-# 19. No font CDN (local-first): fonts come from design-tokens/base.css.
+# 19. No font CDN (local-first): fonts come from framework/design-tokens/base.css.
 # ------------------------------------------------------------------
 step 19 "Pas de CDN de polices"
 hits=$(grep -rnE "${exclude_args[@]}" --include='*.html' --include='*.css' --include='*.ts' --include='*.tsx' \
-  'fonts\.(googleapis|gstatic)\.com' apps/*/frontend packages design-tokens 2>/dev/null || true)
+  'fonts\.(googleapis|gstatic)\.com' apps/*/frontend packages framework/packages framework/design-tokens 2>/dev/null || true)
 if [[ -z "$hits" ]]; then pass; else
   fail "Polices self-hosted uniquement via @internal/design-tokens/base.css (jamais Google Fonts) :\n$hits"
 fi
@@ -339,8 +336,8 @@ step 20 "Polices via var(--font-*) uniquement"
 hits=$( {
   grep -rnE "${exclude_args[@]}" --include='*.css' --include='*.ts' --include='*.tsx' \
     '@fontsource|font-family:[[:space:]]*["'"'"']?(Inter|Orbitron|JetBrains Mono)|fontFamily[=:][[:space:]]*["'"'"'][^"'"'"']*(Inter|Orbitron|JetBrains)' \
-    apps/*/frontend/src packages/ui/src 2>/dev/null
-  grep -nH '"@fontsource/' apps/*/frontend/package.json packages/ui/package.json 2>/dev/null
+    apps/*/frontend/src packages/techdoc-brand/src framework/packages/ui/src 2>/dev/null
+  grep -nH '"@fontsource/' apps/*/frontend/package.json packages/techdoc-brand/package.json framework/packages/ui/package.json 2>/dev/null
 } || true)
 if [[ -z "$hits" ]]; then pass; else
   fail "Utiliser var(--font-sans|mono|display) ; les polices et @fontsource vivent dans @internal/design-tokens :\n$hits"

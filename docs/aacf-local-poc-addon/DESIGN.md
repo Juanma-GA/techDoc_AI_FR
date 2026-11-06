@@ -7,11 +7,11 @@
 
 AACF remains the authority for global branding, accessibility, localization, and component governance. This document records the exact local POC design proposal so AACF owners can approve, map, or reject it as an optional profile. It does not authorize a parallel global design system.
 
-The workspace calls its current token set **Midnight Executive**. The values below document the repository implementation; they are not permission to hardcode colors into app code or replace AACF tokens. The source is [tokens.json](../../design-tokens/tokens.json).
+The workspace calls its current token set **Midnight Executive**. The values below document the repository implementation; they are not permission to hardcode colors into app code or replace AACF tokens. The source is [tokens.json](../../framework/design-tokens/tokens.json).
 
 ## 2. Color Token Catalog
 
-The source is `design-tokens/tokens.json`: `color.*` contains the dark values and `themes.light.color.*` the light overrides. Values are listed here for design review only.
+The source is `framework/design-tokens/tokens.json`: `color.*` contains the dark values and `themes.light.color.*` the light overrides. Values are listed here for design review only.
 
 | Token | Dark | Light (v2) |
 |---|---|---|
@@ -47,14 +47,14 @@ The source is `design-tokens/tokens.json`: `color.*` contains the dark values an
 | `nav.active-fg` | `#ffffff` | `#1d4ed8` |
 | `overlay` | `rgba(0,0,0,0.6)` | `rgba(15,23,42,0.4)` |
 
-Contrast targets are enforced by `design-tokens/tests/contrast.test.mjs`; see [design-system.md](../standards/design-system.md).
+Contrast targets are enforced by `framework/design-tokens/tests/contrast.test.mjs`; see [design-system.md](../standards/design-system.md).
 
 ## 3. Token Consumption
 
-- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/base.css` (theme variables + self-hosted fonts + document defaults) at the top of their `index.css` and extend the shared Tailwind preset.
+- [tokens.json](../../framework/design-tokens/tokens.json) is the repository value source; [theme.css](../../framework/design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../framework/design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/base.css` (theme variables + self-hosted fonts + document defaults) at the top of their `index.css` and extend the shared Tailwind preset.
 - Use semantic utilities such as `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-fg`, `text-fg-dim`, `text-fg-muted`, `text-brand-blue-light`, `text-success`, `text-warning`, `text-danger`, `text-info`, `border`, `border-md`, and `border-bright`.
 - Use `font-sans`, `font-mono`, `font-display`, `rounded-sm`, `rounded-lg`, `shadow-card`, `w-sidebar-w`, `h-topbar-h`, `text-base`, and `text-label` for their corresponding shared tokens.
-- Charts needing theme-aware colors use the shared `colorByTheme(theme, tokenPath)` helper from [design-tokens/index.ts](../../design-tokens/index.ts). Never add app-local hex values or duplicate tokens.
+- Charts needing theme-aware colors use the shared `colorByTheme(theme, tokenPath)` helper from [design-tokens/index.ts](../../framework/design-tokens/index.ts). Never add app-local hex values or duplicate tokens.
 - Before AACF adoption, map this JSON/Tailwind implementation to AACF's canonical token format and registry. Do not maintain two competing sources of truth.
 
 ## 4. Typography and Geometry
@@ -90,7 +90,7 @@ UI primitives belong in `@internal/ui`; an app must not create a competing local
 | Overlays | `Dialog`, `Toast` |
 | Shell and utilities | `ThemeToggle`, `ErrorBoundary`, `useMediaQuery`, `cn` |
 
-Use Lucide React icons, not Unicode symbols. Use `Dialog`/`Toast` rather than browser `alert()` or `confirm()`. If a reusable primitive is missing, propose it for the shared package; do not silently recreate it inside an app. The current inventory is exported from [packages/ui/src/index.ts](../../packages/ui/src/index.ts). AACF's component registry remains the authority until maintainers approve a mapping from these exports.
+Use Lucide React icons, not Unicode symbols. Use `Dialog`/`Toast` rather than browser `alert()` or `confirm()`. If a reusable primitive is missing, propose it for the shared package; do not silently recreate it inside an app. The current inventory is exported from [packages/ui/src/index.ts](../../framework/packages/ui/src/index.ts). AACF's component registry remains the authority until maintainers approve a mapping from these exports.
 
 ## 6. App Shell and Navigation
 
@@ -136,7 +136,7 @@ Invalidate/refetch health after saving settings, toggling the capability, or tes
 
 ## 8. Theme, Localization, and Accessibility
 
-- The CSS currently sets light values on `:root` and dark overrides on `.dark`. The [template startup script](../../apps/_template/frontend/index.html) honors a saved `theme` preference; if absent, it applies dark mode only when the OS requests dark mode. [ThemeToggle](../../packages/ui/src/components/ThemeToggle.tsx) adds/removes `.dark` and currently persists to `localStorage["theme"]`.
+- The CSS currently sets light values on `:root` and dark overrides on `.dark`. The [template startup script](../../framework/apps/_template/frontend/index.html) honors a saved `theme` preference; if absent, it applies dark mode only when the OS requests dark mode. [ThemeToggle](../../framework/packages/ui/src/components/ThemeToggle.tsx) adds/removes `.dark` and currently persists to `localStorage["theme"]`.
 - Persistence of theme/language preferences conflicts with AACF HR1 as currently worded. Until maintainers clarify HR1 or approve an exception, do not persist browser preferences in this profile. A per-session theme control can remain available.
 - Localize every visible label, tooltip, empty/error/success message, and icon-only button's accessible name in FR and EN using semantic i18next keys. Never show raw enum/API values. Pass a localized `aria-label` to `ThemeToggle`; its component fallback is currently English.
 - Inherit AACF's accessibility bar: WCAG 2.2 AA, keyboard operation, visible focus, real labels, meaningful alt text, sufficient contrast, and reduced-motion support. Do not rely on color alone for statuses.
@@ -150,11 +150,11 @@ Invalidate/refetch health after saving settings, toggling the capability, or tes
 | Token format | Local raw-hex JSON + Tailwind preset; AACF specifies DTCG/OKLCH + Style Dictionary. | Define one canonical source and a conversion/registry path. |
 | Tailwind version | Local apps use Tailwind 3.4; AACF's web-app template specifies Tailwind 4. | Confirm a supported adapter/version and compatibility with the AACF registry. |
 | Components | Local `@internal/ui` uses Radix-based components; AACF specifies a private shadcn registry. | Approve the mapping or migrate; do not run competing libraries. |
-| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. All three are self-hosted through `design-tokens/base.css`. | Approve or remove Orbitron. |
+| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. All three are self-hosted through `framework/design-tokens/base.css`. | Approve or remove Orbitron. |
 | Browser preferences | `ThemeToggle` writes to localStorage. | Resolve HR1 before persisting preferences. |
-| Theme defaults | Resolved locally: [theme.css](../../design-tokens/theme.css) is generated from [tokens.json](../../design-tokens/tokens.json) (light `:root`, dark `.dark`) and every template/app starts dark unless `light` was explicitly saved. | Confirm the dark default against AACF. |
-| Shell and routes | [App.tsx](../../apps/_template/frontend/src/App.tsx) has a header and Home route only. [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) is not routed; Data is absent. | Complete and test the target shell before claiming the scaffold implements it. |
-| Localization and mutation UX | [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) has hard-coded copy; [ThemeToggle](../../packages/ui/src/components/ThemeToggle.tsx) fallback label is English; the LLM switch is not optimistic. | Localize all strings/aria names and meet HR20 before claiming AACF alignment. |
+| Theme defaults | Resolved locally: [theme.css](../../framework/design-tokens/theme.css) is generated from [tokens.json](../../framework/design-tokens/tokens.json) (light `:root`, dark `.dark`) and every template/app starts dark unless `light` was explicitly saved. | Confirm the dark default against AACF. |
+| Shell and routes | [App.tsx](../../framework/apps/_template/frontend/src/App.tsx) has a header and Home route only. [Settings.tsx](../../framework/apps/_template/frontend/src/routes/Settings.tsx) is not routed; Data is absent. | Complete and test the target shell before claiming the scaffold implements it. |
+| Localization and mutation UX | [Settings.tsx](../../framework/apps/_template/frontend/src/routes/Settings.tsx) has hard-coded copy; [ThemeToggle](../../framework/packages/ui/src/components/ThemeToggle.tsx) fallback label is English; the LLM switch is not optimistic. | Localize all strings/aria names and meet HR20 before claiming AACF alignment. |
 | Destructive confirmation | Local double-click pattern is not inherently logged. | Use an approved dialog/audit flow or obtain an explicit HR9 decision. |
 
 This section is intentional: it separates the exact local design proposal from the decisions needed to make it an AACF-approved profile.

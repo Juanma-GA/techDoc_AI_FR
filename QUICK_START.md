@@ -21,6 +21,14 @@ affiché par le launcher.
 | [PDF Toolkit](apps/pdf-toolkit/README.md) | 8085 | `apps\pdf-toolkit\start.bat` | `bash apps/pdf-toolkit/start.sh` |
 <!-- APP_REGISTRY_END -->
 
+### Exception hors registre : Image Processor
+
+[`Image Processor`](apps/image-processor/README.md) conserve un lanceur de
+développement personnalisé (`pnpm dev:image-processor`) qui démarre l'API, LaMa
+et Vite. Il est intentionnellement exclu de `scripts/apps.json` et de la table
+générée ci-dessus. Pour le lancement local, utilise
+`apps\image-processor\start.bat`.
+
 ## Lancer une app
 
 ### Windows

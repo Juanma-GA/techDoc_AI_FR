@@ -1,5 +1,9 @@
 # Profils et registre des apps
 
+Adaptation TECHDOC_AI du [guide du framework](../../framework/docs/standards/profiles-and-registry.md).
+Le framework définit le contrat réutilisable; ce fichier décrit le registre et
+les affectations de ports propres au consommateur.
+
 Ce document complète le [STANDARD_POC.md](../../STANDARD_POC.md) pour les
 profils, le registre machine-readable et les validations locales. Il ne remplace
 pas l'AACF live et n'autorise ni déploiement ni publication.
@@ -43,7 +47,7 @@ Après une modification volontaire du registre, synchroniser les surfaces avec :
 pnpm sync:apps
 ```
 
-Le mode `node scripts/sync_app_registry.mjs --check`, exécuté par
+Le mode `node framework/scripts/sync_app_registry.mjs --check --repo-root .`, exécuté par
 `scripts/check_standard.sh`, vérifie qu'elles sont synchronisées. Node.js 20+
 doit être présent sur le `PATH` du shell qui lance le checker.
 
@@ -51,12 +55,12 @@ doit être présent sur le `PATH` du shell qui lance le checker.
 
 Chaque frontend déclare `@internal/ui` comme dépendance directe et utilise le
 `AppShell` et `SidebarNavContent` partagés. Les icônes des onglets et le menu
-repliable appartiennent à `packages/ui`; les applications ne recopient ni le
+repliable appartiennent à `framework/packages/ui`; les applications ne recopient ni le
 shell, ni le thème, ni le switch de langue. Le contenu métier spécifique peut
 être fourni au slot `sidebarContent`.
 
 Les primitives communes, notamment `ThemeToggle`, `LanguageSwitcher`,
-`LlmStatus` et `ErrorBoundary`, sont modifiées dans `packages/ui`, puis
+`LlmStatus` et `ErrorBoundary`, sont modifiées dans `framework/packages/ui`, puis
 consommées par toutes les apps. Les composants métier propres à une app restent
 dans cette app. Le contrôle du registre refuse les copies locales des contrôles
 de shell.

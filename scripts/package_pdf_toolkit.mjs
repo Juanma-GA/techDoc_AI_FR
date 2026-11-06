@@ -31,7 +31,10 @@ try {
   const goVersion = prepareEmbeddedGo(app, root, packagedApp);
   mkdirSync(path.join(root, "design-tokens"));
   for (const file of ["tokens.json", "theme.css"]) {
-    cpSync(path.join(repo, "design-tokens", file), path.join(root, "design-tokens", file));
+    cpSync(
+      path.join(repo, "framework", "design-tokens", file),
+      path.join(root, "design-tokens", file),
+    );
   }
   writeFileSync(path.join(root, "start.bat"),
     '@echo off\r\ncall "%~dp0apps\\pdf-toolkit\\start.bat"\r\n', "ascii");

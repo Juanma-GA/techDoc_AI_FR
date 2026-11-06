@@ -189,13 +189,20 @@ def _walk_sources(repo: Path, source_paths: list[str]) -> list[tuple[Path, Path]
     out: list[tuple[Path, Path]] = []
     for src_rel in source_paths:
         src_root = repo / src_rel
+        archive_root = Path(src_rel)
+        if src_rel == "design-tokens":
+            src_root = repo / "framework" / src_rel
+            if not src_root.is_dir():
+                raise FileNotFoundError(
+                    "Framework design tokens are missing; initialize the framework submodule."
+                )
         if not src_root.is_dir():
             print(f"[warn] missing source: {src_rel}", file=sys.stderr)
             continue
         for path in sorted(src_root.rglob("*")):
             if not path.is_file():
                 continue
-            rel = path.relative_to(repo)
+            rel = archive_root / path.relative_to(src_root)
             if _should_skip(rel):
                 continue
             out.append((path, rel))

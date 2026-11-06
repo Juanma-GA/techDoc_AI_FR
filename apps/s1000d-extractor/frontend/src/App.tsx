@@ -1,6 +1,7 @@
+import { AppShell } from "@internal/techdoc-brand";
+
 import { useQuery } from "@tanstack/react-query";
 import {
-  AppShell,
   DemoModeBadge,
   DemoModeProvider,
   LanguageSwitcher,
