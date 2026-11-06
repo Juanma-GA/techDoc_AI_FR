@@ -40,6 +40,15 @@ DOCUMENT_MANUFACTURERS = ("Airbus", "Boeing")
 DEFAULT_DOCUMENT_MANUFACTURER = "Airbus"
 
 
+def _defaults_key(demo_enabled: bool, norm: str | None) -> str:
+    key = (
+        _DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY
+        if demo_enabled
+        else _DOCUMENT_CONTEXT_DEFAULTS_KEY
+    )
+    return f"{key}.{norm}" if norm else key
+
+
 def missing_document_context(
     document: Any,
     mapping: ClientMapping | None = None,
@@ -73,6 +82,8 @@ def missing_document_context(
 def get_document_context_defaults(
     db: Session,
     mapping: ClientMapping | None = None,
+    *,
+    norm: str | None = None,
 ) -> dict[str, Any]:
     """Return the context copied onto newly imported documents."""
     if mapping is None:
@@ -95,19 +106,18 @@ def get_document_context_defaults(
 
     demo_enabled = get_demo_enabled(db)
     if demo_enabled:
+        demo_defaults = dict(DEMO_DOCUMENT_CONTEXT_DEFAULTS)
+        if norm == "s1000d":
+            demo_defaults["meta_first_issue_date"] = "1995"
         defaults.update(
             {
                 field: value
-                for field, value in DEMO_DOCUMENT_CONTEXT_DEFAULTS.items()
+                for field, value in demo_defaults.items()
                 if field in allowed_fields
             }
         )
 
-    defaults_key = (
-        _DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY
-        if demo_enabled
-        else _DOCUMENT_CONTEXT_DEFAULTS_KEY
-    )
+    defaults_key = _defaults_key(demo_enabled, norm)
     row = db.get(AppConfig, defaults_key)
     if row is None or not row.value:
         return defaults
@@ -145,9 +155,11 @@ def save_document_context_defaults(
     db: Session,
     values: dict[str, object],
     mapping: ClientMapping | None = None,
+    *,
+    norm: str | None = None,
 ) -> None:
     """Remember the explicitly patched values for the next document import."""
-    current = get_document_context_defaults(db, mapping)
+    current = get_document_context_defaults(db, mapping, norm=norm)
     fields = set(mapping.fields) if mapping is not None else set(DOCUMENT_CONTEXT_FIELDS)
     for field in fields:
         if field not in values:
@@ -173,11 +185,7 @@ def save_document_context_defaults(
         else:
             current[field] = value
     serialized = json.dumps(current, ensure_ascii=False, sort_keys=True)
-    defaults_key = (
-        _DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY
-        if get_demo_enabled(db)
-        else _DOCUMENT_CONTEXT_DEFAULTS_KEY
-    )
+    defaults_key = _defaults_key(get_demo_enabled(db), norm)
     row = db.get(AppConfig, defaults_key)
     if row is None:
         db.add(AppConfig(key=defaults_key, value=serialized))

@@ -20,6 +20,12 @@ export type ClientMappingField = {
   format_hint?: Record<string, string> | null;
 };
 
+export type ClientMapping = {
+  fields: Record<string, ClientMappingField>;
+  entities: Record<string, string>;
+  tokens: Record<string, string>;
+};
+
 export type ClientConfig = {
   client_code: string;
   label: string;
@@ -30,11 +36,8 @@ export type ClientConfig = {
   mapping_hash: string;
   bundle_hash: string;
   catalogs: ClientCatalog[];
-  mapping: {
-    fields: Record<string, ClientMappingField>;
-    entities: Record<string, string>;
-    tokens: Record<string, string>;
-  };
+  mapping: ClientMapping;
+  norm_mappings: Record<string, ClientMapping>;
   ui_options: Record<string, unknown>;
 };
 

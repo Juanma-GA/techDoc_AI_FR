@@ -7,6 +7,7 @@ const SUGGESTED_FIELDS = [
   "meta_revision_number",
   "meta_revision_date",
   "meta_first_issue_date",
+  "meta_update_type",
 ] as const;
 
 const RESET_FIELD_DEFAULTS = {
@@ -42,7 +43,8 @@ export function resetMappingWithSuggestions(
   for (const name of SUGGESTED_FIELDS) {
     const definition = fields[name];
     const value = suggestions[name];
-    if (!definition || value === null || value === "") continue;
+    if (!definition || value === null || value === undefined || value === "") continue;
+    if (definition.type === "enum" && !definition.allowed_values?.includes(String(value))) continue;
 
     if (Array.isArray(value)) {
       if (value.length === 0) continue;

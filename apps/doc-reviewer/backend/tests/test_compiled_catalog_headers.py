@@ -135,6 +135,20 @@ def test_highlights_pnr_header_accepts_all_values_or_only_the_first_mapping_valu
         ("33140 - 03", "33140-02 and 33140-03")
     ]
 
+    abbreviated_mapping = SimpleNamespace(
+        meta_pnr_number=["65806-002-1", "S231T120-1"]
+    )
+    abbreviated, abbreviated_suggestions = execute_pdf_rules(
+        build_page("65806-002"), [rule], document=abbreviated_mapping
+    )
+    partial_segment, _partial_segment_suggestions = execute_pdf_rules(
+        build_page("65806-00"), [rule], document=abbreviated_mapping
+    )
+
+    assert abbreviated[0].status == "PASS"
+    assert abbreviated_suggestions == []
+    assert partial_segment[0].status == "FAIL"
+
 
 def test_highlights_pnr_header_accepts_unseparated_first_mapping_value() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")

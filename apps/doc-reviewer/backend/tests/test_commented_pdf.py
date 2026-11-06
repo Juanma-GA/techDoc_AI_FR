@@ -2,8 +2,25 @@
 
 from __future__ import annotations
 
+import json
+import uuid
+
+import fitz
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from app.core.pdf_annotate import (
+    MissingPageRepair,
+    PreparationRepairRule,
+    build_commented_pdf,
+)
+from app.core.preparation_classification import (
+    preparation_rules,
+    required_page_type_groups,
+)
+from app.db.preparation_models import DocumentPreparation
+from app.db.session import SessionLocal
 
 
 def _upload(client: TestClient, sample_pdf_bytes: bytes) -> str:
@@ -44,6 +61,105 @@ def test_commented_pdf_after_analyze(client: TestClient, sample_pdf_bytes: bytes
     resp = client.get(f"/api/v1/documents/{doc_id}/commented.pdf")
     assert resp.status_code == 200
     assert resp.content[:5] == b"%PDF-"
+
+
+def test_commented_pdf_appends_preparation_repair_details(tmp_path) -> None:
+    source = fitz.open()
+    source.new_page()
+    pdf_path = tmp_path / "source.pdf"
+    pdf_path.write_bytes(source.tobytes())
+    source.close()
+
+    content = build_commented_pdf(
+        pdf_path,
+        [],
+        preparation_repairs=(
+            MissingPageRepair(
+                page_types=("TP1",),
+                rules=(
+                    PreparationRepairRule(
+                        title="Vérifier la page de titre",
+                        instructions=("Ajouter le numéro et le titre du document.",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    pdf = fitz.open(stream=content, filetype="pdf")
+    try:
+        assert pdf.page_count == 3
+        appendix = pdf[-1].get_text()
+        assert "Annexe de préparation" in appendix
+        assert "TP1" in appendix
+        assert "Vérifier la page de titre" in appendix
+        assert "Ajouter le numéro et le titre du document." in appendix
+    finally:
+        pdf.close()
+
+
+def test_commented_pdf_paginates_long_preparation_repairs(tmp_path) -> None:
+    source = fitz.open()
+    source.new_page()
+    pdf_path = tmp_path / "source.pdf"
+    pdf_path.write_bytes(source.tobytes())
+    source.close()
+    rules = tuple(
+        PreparationRepairRule(
+            title=f"Règle {index}",
+            instructions=(f"Consigne de réparation numéro {index}.",),
+        )
+        for index in range(40)
+    )
+
+    content = build_commented_pdf(
+        pdf_path,
+        [],
+        preparation_repairs=(
+            MissingPageRepair(page_types=("TP1",), rules=rules),
+        ),
+    )
+    pdf = fitz.open(stream=content, filetype="pdf")
+    try:
+        assert pdf.page_count > 3
+        assert "Consigne de réparation numéro 39." in "\n".join(
+            page.get_text() for page in pdf
+        )
+    finally:
+        pdf.close()
+
+
+def test_commented_pdf_includes_declared_absent_preparation_pages(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    doc_id = _upload(client, sample_pdf_bytes)
+    preparation = client.get(f"/api/v1/documents/{doc_id}/preparation")
+    assert preparation.status_code == 200, preparation.text
+
+    with SessionLocal() as db:
+        configuration = client.app.state.client_configuration
+        rules = preparation_rules(db, configuration.bundle)
+        group = required_page_type_groups(rules)[0]
+        record = db.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == uuid.UUID(doc_id),
+            )
+        )
+        assert record is not None
+        record.page_decisions_json = json.dumps([{"page": 1, "page_type": None}])
+        record.absent_page_types_json = json.dumps(group)
+        db.commit()
+
+    response = client.get(f"/api/v1/documents/{doc_id}/commented.pdf")
+    assert response.status_code == 200, response.text
+    pdf = fitz.open(stream=response.content, filetype="pdf")
+    try:
+        text = "\n".join(page.get_text() for page in pdf)
+        assert "Annexe de préparation" in text
+        assert all(page_type in text for page_type in group)
+        assert any(rule.topic in text for rule in rules)
+    finally:
+        pdf.close()
 
 
 def test_pdf_exports_contract(

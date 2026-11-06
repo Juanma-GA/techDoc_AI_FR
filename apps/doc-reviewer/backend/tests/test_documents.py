@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fitz
 from fastapi.testclient import TestClient
 
 
@@ -12,6 +13,14 @@ def _upload(client: TestClient, sample_pdf_bytes: bytes, target: str = "imperial
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def _pdf_with_text(text: str) -> bytes:
+    pdf = fitz.open()
+    pdf.new_page().insert_text((50, 50), text)
+    data = pdf.tobytes()
+    pdf.close()
+    return data
 
 
 def test_upload_pdf_persists_v0(client: TestClient, sample_pdf_bytes: bytes) -> None:
@@ -53,6 +62,30 @@ def test_list_and_get(client: TestClient, sample_pdf_bytes: bytes) -> None:
     get_resp = client.get(f"/api/v1/documents/{doc['id']}")
     assert get_resp.status_code == 200
     assert get_resp.json()["id"] == doc["id"]
+
+
+def test_list_filters_documents_by_workspace(
+    client: TestClient, sample_pdf_bytes: bytes
+) -> None:
+    control = _upload(client, sample_pdf_bytes)
+    response = client.post(
+        "/api/v1/documents?target=none&workspace=preparation",
+        files={"file": ("prep.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert response.status_code == 201, response.text
+    preparation = response.json()
+    assert control["workspace"] == "control"
+    assert preparation["workspace"] == "preparation"
+
+    control_ids = [d["id"] for d in client.get("/api/v1/documents?workspace=control").json()]
+    prep_ids = [d["id"] for d in client.get("/api/v1/documents?workspace=preparation").json()]
+    all_ids = [d["id"] for d in client.get("/api/v1/documents").json()]
+    assert control["id"] in control_ids and preparation["id"] not in control_ids
+    assert preparation["id"] in prep_ids and control["id"] not in prep_ids
+    assert {control["id"], preparation["id"]} <= set(all_ids)
+
+    invalid = client.get("/api/v1/documents?workspace=other")
+    assert invalid.status_code == 422
 
 
 def test_patch_document_context_validates_language(client: TestClient, sample_pdf_bytes: bytes) -> None:
@@ -153,6 +186,41 @@ def test_client_metadata_patch_validates_manifest_fields(
     )
     assert invalid_format.status_code == 422
     assert invalid_format.json()["code"] == "CLIENT_METADATA_INVALID"
+
+
+def test_s1000d_first_issue_year_validation_and_defaults_are_norm_scoped(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    document = _upload(client, sample_pdf_bytes)
+    valid = client.patch(
+        f"/api/v1/documents/{document['id']}?norm=s1000d",
+        json={"client_metadata": {"meta_first_issue_date": "2024"}},
+    )
+    assert valid.status_code == 200, valid.text
+    assert valid.json()["client_metadata"]["meta_first_issue_date"] == "2024"
+
+    invalid = client.patch(
+        f"/api/v1/documents/{document['id']}?norm=s1000d",
+        json={"client_metadata": {"meta_first_issue_date": "JUL 25/95"}},
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["code"] == "CLIENT_METADATA_INVALID"
+
+    ata_document = _upload(client, sample_pdf_bytes)
+    assert ata_document["client_metadata"].get("meta_first_issue_date") is None
+
+    s1000d_pdf = _pdf_with_text(
+        "LIST OF EFFECTIVE DATA MODULES\n"
+        "F9111CMON-A-20-02-00-00A-800A-A\n"
+        "001-00\n2026-10-30\nStorage - General procedure\nC"
+    )
+    s1000d_upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("s1000d.pdf", s1000d_pdf, "application/pdf")},
+    )
+    assert s1000d_upload.status_code == 201, s1000d_upload.text
+    assert s1000d_upload.json()["client_metadata"].get("meta_first_issue_date") == "2024"
 
 
 def test_clearing_manufacturer_keeps_legacy_column_valid_and_clears_future_mapping(

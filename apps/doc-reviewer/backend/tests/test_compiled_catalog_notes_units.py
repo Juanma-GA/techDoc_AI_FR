@@ -187,6 +187,43 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     assert storage_text_variants[0].status == "PASS"
 
 
+def test_note_rules_accept_the_optional_hyphen_in_the_reference_code() -> None:
+    repair_intro = (
+        "NOTE: During repair operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    storage_intro = (
+        "NOTE: During storage operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    humidity_reference = (
+        "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMONA-20-02-00-00A-800A-A - Storage - General procedure."
+    )
+    temperature_reference = (
+        "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-812A-A \u2013 Storage and Transportation of Assemblies."
+    )
+    repair_results, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"REPAIR\n{repair_intro}\n- Pressure: 1 bar\n- {humidity_reference}",
+            REPAIR_PAGE_TYPE,
+        ),
+        [_rule("CUSTOM_REPAIR_NOTE")],
+    )
+    storage_results, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"STORAGE\n{storage_intro}\n- Pressure: 1 bar\n"
+            f"- {humidity_reference}\n{temperature_reference}",
+            STORAGE_PAGE_TYPE,
+        ),
+        [_rule("CUSTOM_STORAGE_NOTE")],
+    )
+
+    assert repair_results[0].status == "PASS"
+    assert storage_results[0].status == "PASS"
+
+
 def test_note_suggestions_ignore_list_markers_and_anchor_missing_storage_paragraph() -> None:
     repair_rh = (
         "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "

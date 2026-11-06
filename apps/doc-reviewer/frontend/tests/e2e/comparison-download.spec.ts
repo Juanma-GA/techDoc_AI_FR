@@ -93,6 +93,16 @@ for (const fileCount of [2, 3]) {
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.getByRole("button", { name: state.language, exact: true }).click();
       const isFrench = state.language === "FR";
+      await expect(downloads.first()).toContainText(
+        fileCount > 2
+          ? (isFrench ? "Télécharger la référence avec toutes les différences" : "Download reference with all differences")
+          : (isFrench ? "Télécharger le PDF de référence commenté" : "Download commented reference PDF"),
+      );
+      if (fileCount > 2) {
+        await expect(downloads.nth(1)).toContainText(
+          isFrench ? "Télécharger la référence pour cette version" : "Download reference for this version",
+        );
+      }
       const isDark = await page.locator("html").evaluate((root) => root.classList.contains("dark"));
       if (isDark !== state.dark) {
         await page.getByRole("button", { name: isFrench ? "Changer de thème" : "Switch theme" }).click();

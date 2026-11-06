@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.checks.client_bundle import ClientMapping
+from app.checks.client_bundle import ClientBundle, ClientMapping
 from app.checks.client_registry import (
     LoadedClientConfiguration,
     active_standard_versions,
@@ -29,7 +29,9 @@ from app.core.document_context import (
     save_document_context_defaults,
 )
 from app.core.errors import AppError
+from app.core.norm_detection import detect_document_norm, read_page_texts
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.preparation_export import build_preparation_export
 from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
@@ -44,6 +46,8 @@ router = APIRouter(tags=["documents"])
 
 
 _MAX_BATCH_SIZE = 20
+
+DocumentWorkspace = Literal["control", "preparation"]
 
 
 def _legacy_metadata_value(value: Any) -> str | None:
@@ -121,7 +125,9 @@ def _persist_pdf(
     source_format: str = "pdf",
     original_data: Optional[bytes] = None,
     client_mapping: ClientMapping | None = None,
+    client_bundle: ClientBundle[Any] | None = None,
     is_demo: bool = False,
+    workspace: str = "control",
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -143,6 +149,7 @@ def _persist_pdf(
         opened = fitz.open(stream=pdf_bytes, filetype="pdf")
     except Exception as exc:  # noqa: BLE001
         raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+    detected_norm = client_bundle.default_norm if client_bundle is not None else None
     try:
         if _has_signature(opened):
             raise AppError(
@@ -151,6 +158,12 @@ def _persist_pdf(
                 status_code=400,
             )
         page_count = opened.page_count
+        if client_bundle is not None and client_bundle.norm_mappings:
+            page_texts = [
+                opened.load_page(index).get_text("text") or ""
+                for index in range(page_count)
+            ]
+            detected_norm = detect_document_norm(client_bundle, page_texts)
         # Portail qualite : mesure la couverture texte AVANT fermeture. Un doc
         # sans couche texte (scan) est marque "unusable" -> l'analyse le signale
         # au lieu de rendre zero anomalie silencieusement.
@@ -159,7 +172,15 @@ def _persist_pdf(
         opened.close()
 
     import json as _json
-    context_defaults = get_document_context_defaults(db, client_mapping)
+    mapping_scope = None
+    if client_bundle is not None:
+        client_mapping = client_bundle.mapping_for_norm(detected_norm)
+        mapping_scope = client_bundle.mapping_scope_for_norm(detected_norm)
+    context_defaults = get_document_context_defaults(
+        db,
+        client_mapping,
+        norm=mapping_scope,
+    )
 
     document = Document(
         id=doc_id,
@@ -181,6 +202,7 @@ def _persist_pdf(
         quality=report.state,
         client_metadata=dict(context_defaults),
         is_demo=is_demo,
+        workspace=workspace,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -240,6 +262,7 @@ def _persist_docx(
     engine_override: Optional[str] = None,
     client_mapping: ClientMapping | None = None,
     is_demo: bool = False,
+    workspace: str = "control",
 ) -> Document:
     """Persist a DOCX working document while retaining the detected source.
 
@@ -320,6 +343,7 @@ def _persist_docx(
         quality="analyzable",
         client_metadata=dict(context_defaults),
         is_demo=is_demo,
+        workspace=workspace,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -348,6 +372,7 @@ def upload_document(
         default=None,
         description="Comma-separated UUIDs of standard versions to apply at analyse",
     ),
+    workspace: DocumentWorkspace = Query(default="control"),
     db: Session = Depends(get_db),
 ) -> Document:
     client_configuration = get_request_client_configuration(request, db)
@@ -377,6 +402,7 @@ def upload_document(
             engine_override=prepared.convert_engine,
             client_mapping=client_configuration.mapping,
             is_demo=demo_mode,
+            workspace=workspace,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -386,7 +412,9 @@ def upload_document(
         source_format=prepared.source_format,
         original_data=prepared.original_bytes,
         client_mapping=client_configuration.mapping,
+        client_bundle=client_configuration.bundle,
         is_demo=demo_mode,
+        workspace=workspace,
     )
 
 
@@ -397,6 +425,7 @@ def upload_documents_batch(
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
     standard_version_ids: Optional[str] = Query(default=None),
+    workspace: DocumentWorkspace = Query(default="control"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Upload many files at once — `.pdf/.doc/.docx` and `.zip` archives. Zips are
@@ -458,6 +487,7 @@ def upload_documents_batch(
                         engine_override=prepared.convert_engine,
                         client_mapping=client_configuration.mapping,
                         is_demo=demo_mode,
+                        workspace=workspace,
                     )
                 else:
                     doc = _persist_pdf(
@@ -468,7 +498,9 @@ def upload_documents_batch(
                         source_format=prepared.source_format,
                         original_data=prepared.original_bytes,
                         client_mapping=client_configuration.mapping,
+                        client_bundle=client_configuration.bundle,
                         is_demo=demo_mode,
+                        workspace=workspace,
                     )
                 created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
             except AppError as exc:
@@ -506,12 +538,14 @@ def _has_signature(doc: fitz.Document) -> bool:
 
 
 @router.get("/documents", response_model=list[DocumentOut])
-def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(
-        db.scalars(
-            documents_in_current_mode(db).order_by(Document.created_at.desc())
-        )
-    )
+def list_documents(
+    workspace: Optional[DocumentWorkspace] = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[Document]:
+    query = documents_in_current_mode(db)
+    if workspace is not None:
+        query = query.where(Document.workspace == workspace)
+    return list(db.scalars(query.order_by(Document.created_at.desc())))
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)
@@ -527,6 +561,7 @@ def patch_document_meta(
     document_id: uuid.UUID,
     request: Request,
     body: DocumentMetaPatchIn,
+    norm: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> Document:
     """Enregistre le mapping manuel et la langue du document."""
@@ -535,7 +570,34 @@ def patch_document_meta(
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     patch = body.model_dump(exclude_unset=True)
     client_metadata_patch = patch.pop("client_metadata", {})
-    client_mapping = get_request_client_configuration(request, db).mapping
+    bundle = get_request_client_configuration(request, db).bundle
+    requested_norm = (norm or "").strip().lower()
+    selected_norm: str | None = None
+    if requested_norm and requested_norm != "auto":
+        if requested_norm not in bundle.norm_codes:
+            raise AppError(
+                "NORM_INVALID",
+                "La norme demandee n'existe pas dans le bundle actif.",
+                detail={"norm": requested_norm, "allowed": list(bundle.norm_codes)},
+                status_code=422,
+            )
+        selected_norm = requested_norm
+    else:
+        selected_norm = bundle.default_norm
+        if (
+            doc.working_format == "pdf"
+            and bundle.norm_mappings
+            and bundle.norm_selector is not None
+        ):
+            pdf_path = current_path(doc.storage_dir, doc.current_version)
+            if not pdf_path.is_file():
+                raise AppError("PDF_VERSION_MISSING", "Snapshot absent", status_code=404)
+            try:
+                selected_norm = detect_document_norm(bundle, read_page_texts(pdf_path))
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+    client_mapping = bundle.mapping_for_norm(selected_norm)
+    mapping_scope = bundle.mapping_scope_for_norm(selected_norm)
     validate_client_metadata_patch(
         client_metadata_patch,
         client_mapping.fields,
@@ -572,7 +634,12 @@ def patch_document_meta(
         if key in DOCUMENT_CONTEXT_FIELDS
     }
     if context_updates:
-        save_document_context_defaults(db, context_updates, client_mapping)
+        save_document_context_defaults(
+            db,
+            context_updates,
+            client_mapping,
+            norm=mapping_scope,
+        )
     db.refresh(doc)
     return doc
 
@@ -681,10 +748,11 @@ def render_page_png(
     )
 
 
-def _commented_pdf_response(doc: Document, db: Session) -> Response:
+def _commented_pdf_response(doc: Document, db: Session, request: Request) -> Response:
     from app.core.pdf_annotate import build_commented_pdf
     from app.db.models import Suggestion as SuggestionModel
 
+    preparation = build_preparation_export(doc, db, get_request_client_configuration(request, db))
     suggestions = list(db.scalars(
         select(SuggestionModel)
         .where(SuggestionModel.document_id == doc.id, SuggestionModel.status != "rejected")
@@ -692,7 +760,12 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
     ))
     if doc.working_format == "pdf":
         pdf_path = current_path(doc.storage_dir, doc.current_version)
-        pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+        pdf_bytes = build_commented_pdf(
+            str(pdf_path),
+            suggestions,
+            preparation_repairs=preparation.missing_pages,
+            revision_sections=preparation.revision_sections,
+        )
     else:
         working = docx_versioning.version_path(doc.storage_dir, doc.current_version)
         if not working.is_file():
@@ -701,7 +774,12 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
             converted, _ = doc_convert.doc_to_pdf_bytes(working.read_bytes(), ".docx")
             pdf_path = Path(temp_dir) / "working.pdf"
             pdf_path.write_bytes(converted)
-            pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+            pdf_bytes = build_commented_pdf(
+                str(pdf_path),
+                suggestions,
+                preparation_repairs=preparation.missing_pages,
+                revision_sections=preparation.revision_sections,
+            )
     stem = Path(doc.original_filename).stem
     return Response(
         content=pdf_bytes,
@@ -747,6 +825,7 @@ def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db))
 @router.get("/documents/{document_id}/export", response_model=None)
 def export_pdf(
     document_id: uuid.UUID,
+    request: Request,
     format: Optional[Literal["original", "corrected", "commented", "pdf", "docx", "doc"]] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> FileResponse | Response:
@@ -754,7 +833,7 @@ def export_pdf(
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if format == "commented":
-        return _commented_pdf_response(doc, db)
+        return _commented_pdf_response(doc, db, request)
     requested = format or "corrected"
     if requested == "original":
         if doc.source_format == "pdf":
@@ -855,14 +934,18 @@ def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> di
 
 
 @router.get("/documents/{document_id}/commented.pdf")
-def export_commented_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def export_commented_pdf(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
     """PDF **commente** : le PDF fidele + les anomalies retenues (non rejetees)
     estampillees en annotations, plus une page-sommaire. C'est le livrable sur
     lequel le relecteur s'appuie pour corriger son document Word."""
     doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    return _commented_pdf_response(doc, db)
+    return _commented_pdf_response(doc, db, request)
 
 
 @router.post("/documents/{document_id}/rollback", response_model=DocumentOut)

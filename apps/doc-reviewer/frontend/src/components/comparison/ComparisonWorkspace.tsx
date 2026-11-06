@@ -173,7 +173,7 @@ export function ComparisonWorkspace({
               download
             >
               <Download size={16} className="shrink-0" aria-hidden="true" />
-              <span>{t("comparison.exportOne")}</span>
+              <span>{t("comparison.exportCandidate")}</span>
             </a>
           </nav>
         ) : null}

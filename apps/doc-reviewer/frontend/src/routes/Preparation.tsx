@@ -15,14 +15,14 @@ import type { Document } from "../types/domain";
 export function Preparation() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const documents = useDocuments();
+  const documents = useDocuments("preparation");
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
   const targetUnits = useFiltersStore((state) => state.targetUnits);
 
   const handleUpload = (file: File): void => {
     upload.mutate(
-      { file, target: effectiveTarget(targetUnits) },
+      { file, target: effectiveTarget(targetUnits), workspace: "preparation" },
       {
         onSuccess: (result) => {
           if ("id" in result) {
@@ -49,7 +49,7 @@ export function Preparation() {
         ) : null}
       </section>
       <section className="card">
-        <h2 className="card-title">{t("preparation.resumeTitle")}</h2>
+        <h2 className="card-title">{t("preparation.documentsTitle")}</h2>
         {remove.isError ? (
           <p className="error" role="alert">
             {t("documents.deleteFailed", {

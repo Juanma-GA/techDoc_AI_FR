@@ -166,8 +166,25 @@ sub-folders in `norms`, and each sub-folder has its own `manifest.json`
 `default_enabled`). The mapping stays shared at the client level. Each norm
 shows up as its own collapsible group in the Rules screen (group code = folder
 name, label = manifest `label`) and can be enabled or disabled as a whole or
-rule by rule. `thales_rules` has two norms: `ata100/` (enabled by default) and
-`s1000d/` (disabled by default, catalog `THALES-S1000D`).
+rule by rule. `thales_rules` has two norms: `ata100/` and `s1000d/` (catalog
+`THALES-S1000D`), both enabled by default.
+
+Norms are mutually exclusive per document. A norm may ship an optional
+`norm_detector` module exporting `matches_document(parsed)`; the analysis runs
+only the rules of the norm the PDF follows. A PDF that prints a LIST OF EFFECTIVE
+DATA MODULES listing DMCs is S1000D, any other PDF falls back to the norm without
+detector (`ata100`). The S1000D rules of a migration or of an MCO are selected by
+the optional mapping field `meta_update_type` (`Migration` / `MCO`), and the
+SPM/SOPM rules follow `meta_manufacturer`, through `only_if` conditions with
+`equals`.
+
+`POST /documents/{id}/analyze?norm=<code>` forces the norm of one run (its rules run
+even when all of them are disabled in the Rules screen); `GET /documents/{id}/norm`
+returns the detected norm so the UI can ask before an analysis whose detected norm has
+no active rule. A norm without a page classifier of its own (S1000D) does not track
+modified pages: every page is analysed. A norm folder may also export
+`suggest_metadata(pages)` from its `norm_detector` module to feed
+`POST /documents/{id}/metadata-suggestions`.
 
 ## Layout
 

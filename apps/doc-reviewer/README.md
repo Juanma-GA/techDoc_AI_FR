@@ -26,6 +26,10 @@ validation remain environment-dependent.
   The action clears the whole draft, leaves uncertain values blank, and
   requires the user to verify and save explicitly.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
+- Keep ATA100 and S1000D mappings norm-specific. S1000D first-issue metadata is a
+  four-digit year; revision number and manufacturer remain part of its mapping.
+  S1000D RFUs are checked on HIGHLIGHTS against LOEDM status `C` or `R`; no LEP
+  rule is applied to S1000D.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.
 - Compare 2–20 text-layer PDFs against a selected reference in a synchronized
@@ -39,6 +43,17 @@ validation remain environment-dependent.
 	commented PDFs.
 - Export original, corrected, commented, and converted outputs when the local
 	converter supports them.
+- Include a paginated preparation plan in commented PDFs: selected PDF pages and
+  their documentary references, corrections, revised footer dates, LEP entries
+  with the new date and `*`, the ROR insertion date, and Highlights revision
+  fields. The plan uses the preparation mapping and saved decisions, not the
+  independent verification mapping or the existence of generated annotations.
+  Confirmed missing page types have separate creation instructions. Unresolved
+  references, undecided pages, conflicting unchanged decisions, and stale
+  preparation are explicitly flagged. Newly created pages and administrative
+  pages changed as a consequence must have their LEP/Highlights/TOC impacts
+  checked by the author. Original and corrected exports remain unchanged;
+  the plan does not edit the source or claim unperformed checks passed.
 - Show a degradation warning before PDF/Word format conversions.
 
 ## Auth
@@ -70,12 +85,13 @@ offers a direct demo-PDF import action. Demo uploads and their default mapping
 are stored in a separate demo scope in the same SQLite database; switching to
 normal mode shows normal documents and mapping defaults unchanged.
 
-The demo preset is `JUL 27/26`, CMM `80-80-01`, First Issue `JUL 25/95`,
-revision `01`, PNR `1-900-SB`, and language `en`. Manufacturer is omitted from
-the demo mapping. Demo mode uses only the isolated `demo_rules` catalog and its
-demo address; normal rule activation states remain unchanged. Place the PDF at
-that path locally. If a demo PDF is intentionally tracked, its filename must
-contain `anonyme` to pass the content-policy check.
+The demo preset is `JUL 27/26`, CMM `80-80-01`, First Issue `JUL 25/95`
+(stored as `1995` by the S1000D mapping), revision `01`, PNR `1-900-SB`, and
+language `en`. Manufacturer is omitted from the demo mapping. Demo mode uses
+only the isolated `demo_rules` catalog and its demo address; normal rule
+activation states remain unchanged. Place the PDF at that path locally. If a
+demo PDF is intentionally tracked, its filename must contain `anonyme` to pass
+the content-policy check.
 
 In demo mode, Comparison offers **Load both demo PDFs**. This replaces the draft
 selection with the original and `DEMO_CMM_PDF_revision_anonyme.pdf`, selects the

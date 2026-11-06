@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.core.regex_safety import UserRegexPatternError, compile_user_regex
 from app.core.primitive_catalog import PRIMITIVE_CATALOG, REFERENCE_CATALOG
@@ -88,10 +88,28 @@ class Condition(StrictModel):
 
     Example: a rule about the CMM number footer should only run when a CMM
     number was actually captured for this document.
+
+    `equals` narrows a `present` condition to one value (case-insensitive),
+    e.g. a rule that only concerns Boeing documents.
     """
 
     field: str = Field(min_length=1, max_length=120)
     state: Literal["present", "absent"] = "present"
+    equals: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_equals(self) -> Condition:
+        if self.equals is not None and self.state != "present":
+            raise ValueError("equals requires state 'present'")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_equals(self, handler: Any) -> dict[str, Any]:
+        # Keeps the stored catalogs of plain presence conditions byte-identical.
+        data = handler(self)
+        if data.get("equals") is None:
+            data.pop("equals", None)
+        return data
 
 
 class PrimitiveStep(StrictModel):

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 
 import fitz
 import pytest
 
+from app.checks.client_bundle import ClientBundle
 from app.checks.thales_rules.ata100 import rules as thales_rules
 from app.checks.thales_rules.ata100.operations import OPERATIONS
 from app.core.compiled_rule_executor import execute_pdf_rules
+from app.core.rules_engine import filter_preparation_rules
 from app.parsers.pdf_parser import parse_pdf
 
 RULES = {definition.code: definition for definition in thales_rules.RULE_DEFINITIONS}
@@ -116,6 +119,58 @@ def test_highlights_footer_date_must_match_the_new_revision() -> None:
 
     assert _status("CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE", parsed, stale) == "FAIL"
     assert _status("CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE", parsed, updated) == "PASS"
+
+
+def test_preparation_footer_rule_runs_only_in_preparation_context() -> None:
+    preparation_rule = RULES["CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE"]
+    verification_rule = RULES["CUSTOM_REVISION_FOOTER_DATE"]
+    bundle = cast(
+        ClientBundle[Any],
+        SimpleNamespace(rules=[preparation_rule, verification_rule]),
+    )
+    compiled = [preparation_rule.compiled_rule, verification_rule.compiled_rule]
+
+    standard_rules = filter_preparation_rules(
+        compiled, bundle, preparation_context=False
+    )
+    preparation_rules = filter_preparation_rules(
+        compiled, bundle, preparation_context=True
+    )
+
+    assert [rule.id for rule in standard_rules] == [verification_rule.code]
+    assert [rule.id for rule in preparation_rules] == [
+        preparation_rule.code,
+        verification_rule.code,
+    ]
+
+
+def test_highlights_footer_date_suggestion_targets_only_the_stale_page() -> None:
+    revision_date = "JUL 27/26"
+    parsed = _parse(
+        [
+            _lines("Highlights one")
+            + [(40, 770, "Highlights Page 1"), (400, 770, revision_date)],
+            _lines("Highlights two")
+            + [(40, 770, "Highlights Page 2"), (400, 770, "JUL 27/25")],
+            _lines("Highlights three")
+            + [(40, 770, "Highlights Page 3"), (400, 770, revision_date)],
+        ]
+    )
+    _highlights(parsed)
+    rule = RULES["CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE"].compiled_rule
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        db=None,
+        document=_document(meta_revision_date=revision_date),
+        client_operations=OPERATIONS,
+    )
+
+    assert results[0].status == "FAIL"
+    assert [(item.page, item.original, item.proposed) for item in suggestions] == [
+        (2, "JUL 27/25", revision_date)
+    ]
 
 
 def _ror_page(*rows: str) -> list[Placed]:

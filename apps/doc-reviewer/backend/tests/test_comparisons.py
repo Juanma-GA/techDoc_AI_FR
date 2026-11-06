@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 
 import fitz
 from fastapi.testclient import TestClient
@@ -96,8 +94,17 @@ def test_export_single_pdf_and_comment_changes(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/pdf")
     annotated = fitz.open(stream=response.content, filetype="pdf")
-    assert annotated.page_count == 2
-    assert list(annotated[0].annots() or [])
+    assert annotated.page_count == 1
+    annotations = list(annotated[0].annots() or [])
+    assert annotations
+    assert "version 1120" in annotated[0].get_text()
+    assert "version 1180" not in annotated[0].get_text()
+    assert any("revision.pdf" in annotation.info["title"] for annotation in annotations)
+    assert any(
+        "version 1120" in annotation.info["content"]
+        and "version 1180" in annotation.info["content"]
+        for annotation in annotations
+    )
     annotated.close()
 
     individual = client.get(f"/api/v1/comparisons/{result['id']}/export/1?language=en")
@@ -105,24 +112,71 @@ def test_export_single_pdf_and_comment_changes(client: TestClient) -> None:
     assert individual.headers["content-type"].startswith("application/pdf")
 
 
-def test_export_many_pdfs_as_zip_and_delete_saved_comparison(client: TestClient) -> None:
+def test_export_added_text_as_comment_on_reference_pdf(client: TestClient) -> None:
+    reference_text = (
+        "The maintenance procedure requires inspection of the complete pump assembly."
+    )
     result = _create_comparison(
         client,
         [
-            ("reference.pdf", _pdf("Original line")),
-            ("revision-a.pdf", _pdf("Revision A")),
-            ("revision-b.pdf", _pdf("Revision B")),
+            ("reference.pdf", _pdf(reference_text)),
+            ("revision.pdf", _pdf(reference_text, "New inspection warning.")),
         ],
     )
 
-    archive_response = client.get(f"/api/v1/comparisons/{result['id']}/export")
-    assert archive_response.status_code == 200
-    assert archive_response.headers["content-type"].startswith("application/zip")
-    with zipfile.ZipFile(io.BytesIO(archive_response.content)) as archive:
-        assert len(archive.namelist()) == 2
+    response = client.get(f"/api/v1/comparisons/{result['id']}/export")
+    assert response.status_code == 200
+    annotated = fitz.open(stream=response.content, filetype="pdf")
+    assert annotated.page_count == 1
+    page = annotated.load_page(0)
+    assert reference_text in page.get_text()
+    assert "New inspection warning." not in page.get_text()
+    annotations = list(page.annots() or [])
+    assert any(
+        annotation.type[0] == fitz.PDF_ANNOT_TEXT
+        and "New inspection warning." in annotation.info["content"]
+        and "revision.pdf" in annotation.info["title"]
+        for annotation in annotations
+    )
+    annotated.close()
+
+
+def test_export_many_differences_on_reference_pdf_and_delete_saved_comparison(
+    client: TestClient,
+) -> None:
+    result = _create_comparison(
+        client,
+        [
+            ("reference.pdf", _pdf("Reference line revision 1")),
+            ("revision-a.pdf", _pdf("Reference line revision 2A")),
+            ("revision-b.pdf", _pdf("Reference line revision 3B")),
+        ],
+    )
+
+    export_response = client.get(f"/api/v1/comparisons/{result['id']}/export")
+    assert export_response.status_code == 200
+    assert export_response.headers["content-type"].startswith("application/pdf")
+    reference_pdf = fitz.open(stream=export_response.content, filetype="pdf")
+    assert reference_pdf.page_count == 1
+    assert "Reference line revision 1" in reference_pdf[0].get_text()
+    assert "revision 2A" not in reference_pdf[0].get_text()
+    annotations = list(reference_pdf[0].annots() or [])
+    comments = [annotation.info["content"] for annotation in annotations]
+    assert any("revision-a.pdf" in annotation.info["title"] for annotation in annotations)
+    assert any("revision-b.pdf" in annotation.info["title"] for annotation in annotations)
+    assert any("revision 2A" in comment for comment in comments)
+    assert any("revision 3B" in comment for comment in comments)
+    reference_pdf.close()
 
     item_export = client.get(f"/api/v1/comparisons/{result['id']}/export/2")
     assert item_export.status_code == 200
+    individual_pdf = fitz.open(stream=item_export.content, filetype="pdf")
+    assert individual_pdf.page_count == 1
+    assert "Reference line revision 1" in individual_pdf[0].get_text()
+    individual_annotations = list(individual_pdf[0].annots() or [])
+    assert any("revision-b.pdf" in annotation.info["title"] for annotation in individual_annotations)
+    assert all("revision-a.pdf" not in annotation.info["title"] for annotation in individual_annotations)
+    individual_pdf.close()
     deleted = client.delete(f"/api/v1/comparisons/{result['id']}")
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/comparisons/{result['id']}").status_code == 404
