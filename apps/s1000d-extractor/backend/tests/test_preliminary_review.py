@@ -229,6 +229,80 @@ def test_completing_first_procedure_applies_its_tag_to_matching_procedures(tmp_p
     assert inherited["template_source_dm_id"] == "first"
 
 
+def test_completing_template_rebuilds_unfinished_reviews_and_preserves_verified_ones(tmp_path):
+    dm_ids = ("first", "partial", "verified", "skipped", "stale", "missing")
+    dms = []
+    for dm_id in dm_ids:
+        root = IRNode(id=f"{dm_id}-root", kind="section", children=[
+            IRNode(id=f"{dm_id}-table", kind="table", table_rows=[
+                ["REQUIRED PERSON(S)"], ["1 OPER"],
+            ]),
+        ])
+        context_classifier.apply_dm_type(root, "procedural")
+        resolver.resolve(root)
+        dms.append({
+            "dm_id": dm_id, "dm_type": "procedural", "title": "Synthetic procedure",
+            "tree": to_dict(root),
+        })
+
+    with SessionLocal() as db:
+        document = Document(
+            filename="synthetic.docx", source_format="docx",
+            storage_path=str(tmp_path / "synthetic.docx"), s1000d_issue="4.2",
+            wizard_step="preliminary", status="wizard", dms_json=json.dumps(dms),
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        review.prepare(document)
+        state = review.load(document)
+
+        source_passage = next(
+            passage for passage in state["reviews"]["first"]["passages"]
+            if passage["role"] == "content"
+        )
+        partial = state["reviews"]["partial"]
+        partial_passage = next(passage for passage in partial["passages"] if passage["role"] == "content")
+        partial_passage.update(decision="body", target_tag="proceduralStep", text="Manual correction")
+        partial["partial"] = True
+
+        verified = state["reviews"]["verified"]
+        verified_passage = next(
+            passage for passage in verified["passages"] if passage["role"] == "content"
+        )
+        verified_passage.update(decision="body", target_tag="proceduralStep")
+        verified["status"] = "reviewed"
+        verified["partial"] = False
+        verified["saved_at"] = "verified-before-template"
+        verified_before = json.loads(json.dumps(verified))
+
+        state["reviews"]["skipped"]["status"] = "skipped"
+        state["reviews"]["stale"]["status"] = "reviewed"
+        state["reviews"]["stale"]["fingerprint"] = "obsolete-fingerprint"
+        del state["reviews"]["missing"]
+        document.preliminary_review_json = json.dumps(state)
+        db.commit()
+
+        updated = review.apply(db, document, review.ReviewAction(
+            revision=state["revision"], dm_id="first", op="decide",
+            passage_id=source_passage["id"], destination="personnel", target_tag="personnel",
+        ))
+        completed = review.apply(db, document, review.ReviewAction(
+            revision=updated["revision"], dm_id="first", op="complete", confirm_empty=True,
+        ))
+
+    assert completed["reviews"]["verified"] == verified_before
+    for dm_id in ("partial", "skipped", "stale", "missing"):
+        regenerated = completed["reviews"][dm_id]
+        inherited = next(passage for passage in regenerated["passages"] if passage["role"] == "content")
+        assert regenerated["status"] == "reviewed"
+        assert regenerated["partial"] is False
+        assert inherited["text"] == "1 OPER"
+        assert inherited["decision"] == "personnel"
+        assert inherited["target_tag"] == "personnel"
+        assert inherited["template_source_dm_id"] == "first"
+
+
 def test_reference_rules_cover_all_categories_and_every_source_passage(procedure, client):
     doc_id, _ = procedure
     state = client.get(f"/api/v1/documents/{doc_id}/wizard").json()

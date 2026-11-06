@@ -137,13 +137,16 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
     timer.current = setTimeout(() => { void flush(); }, 300);
   }, [flush]);
 
-  const act = useCallback(async (action: ReviewAction) => {
+  const actWithState = useCallback(async (action: ReviewAction) => {
     if (action.op === "decide" && action.passage_id) {
       clearInvalidFailure(action.passage_id);
     }
-    if (!await flush()) return false;
-    return enqueue(action);
+    if (!await flush()) return null;
+    return await enqueue(action) ? latest.current : null;
   }, [clearInvalidFailure, enqueue, flush]);
+
+  const act = useCallback(async (action: ReviewAction) =>
+    Boolean(await actWithState(action)), [actWithState]);
 
   const retry = useCallback(async () => {
     const action = failed.current;
@@ -208,6 +211,6 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
   } : state;
   return {
     state: displayed, saving, dirty, error, validationPassageId, edits, detectorEdits,
-    edit, act, position, flush, retry, reload,
+    edit, act, actWithState, position, flush, retry, reload,
   };
 }

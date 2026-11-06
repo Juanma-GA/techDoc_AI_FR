@@ -91,11 +91,14 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     clearTimeout(skipTimer.current);
   };
   const completeProcedure = async () => {
-    if (!await review.act({ dm_id: active, op: "complete", confirm_empty: confirmed })) return;
+    const completedState = await review.actWithState({
+      dm_id: active, op: "complete", confirm_empty: confirmed,
+    });
+    if (!completedState) return;
     setPendingModified(false);
     const next = procedures.slice(index + 1).concat(procedures.slice(0, index)).find((dm) => {
       if (dm.dm_id === active) return false;
-      const status = review.state.reviews[dm.dm_id]?.status;
+      const status = completedState.reviews[dm.dm_id]?.status;
       return status !== "reviewed" && status !== "skipped";
     });
     if (next) await changeProcedure(next.dm_id);

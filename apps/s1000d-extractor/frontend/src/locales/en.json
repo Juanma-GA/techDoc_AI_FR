@@ -82,7 +82,7 @@
     "classification": "Procedure zones to classify",
     "filter": "Show zones",
     "remaining": "{{count}} zone(s) without a decision out of {{total}}",
-    "templateIntro": "In the first procedure, verify the detector title and cell content, then choose its category and tag. Matching titles prefill the later procedures.",
+    "templateIntro": "In the first procedure, verify the detector title and cell content, then choose its category and tag. When completed, unfinished procedures are regenerated with this template; already-reviewed procedures are kept.",
     "templateApplied": "Categories and tags for matching titles were reused from the first procedure. Only the content is classified.",
     "templatePartial": "The template was applied to matching cell titles or markers; review any zones that remain undecided.",
     "confirmWhole": "I checked the entire DM, including empty categories and passages not detected by the rules.",

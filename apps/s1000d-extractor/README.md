@@ -166,7 +166,9 @@ generation. **Resume** restores the saved step without automatically advancing i
   followed by content, ahead of any table-wide header. Resource rows are
   recombined from those cell decisions for structured XML output. An explicit
   exclusion action moves a zone into the classic procedure body instead of
-  dropping its content.
+  dropping its content. Completing the first procedure regenerates every other
+  unfinished review from its source and reapplies matching template decisions;
+  fully reviewed procedures with unchanged sources are preserved.
   The first procedure is the human template: only decisions for the same
   normalized source marker are reused in later, already-generated procedures.
   Unmatched, ambiguous or schema-incompatible zones remain for human review;

@@ -105,6 +105,28 @@ describe("server-persisted procedural review", () => {
     expect(current.error).toBeNull();
   });
 
+  it("returns the complete server state from a saved action", async () => {
+    const updated: PreliminaryState = {
+      ...initial,
+      revision: 2,
+      reviews: {
+        ...initial.reviews,
+        second: {
+          ...initial.reviews.proc!,
+          fingerprint: "second",
+          status: "reviewed",
+        },
+      },
+    };
+    vi.mocked(preliminaryApi.save).mockResolvedValueOnce(updated);
+    let result: PreliminaryState | null = null;
+    await act(async () => {
+      result = await current.actWithState({ dm_id: "proc", op: "complete", confirm_empty: true });
+    });
+    expect(result).toEqual(updated);
+    expect(current.state.reviews.second?.status).toBe("reviewed");
+  });
+
   it("keeps controls active while saving reader position in the background", async () => {
     let acknowledge: (state: PreliminaryState) => void = () => {};
     vi.mocked(preliminaryApi.save).mockImplementationOnce(() => new Promise((resolve) => {

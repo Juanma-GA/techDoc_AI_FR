@@ -82,7 +82,7 @@
     "classification": "Zones de la procédure à classer",
     "filter": "Afficher les zones",
     "remaining": "{{count}} zone(s) sans décision sur {{total}}",
-    "templateIntro": "Dans la première procédure, vérifiez l'intitulé utilisé comme détecteur, le contenu de chaque cellule, puis choisissez sa catégorie et sa balise. Les intitulés correspondants préremplissent les procédures suivantes.",
+    "templateIntro": "Dans la première procédure, vérifiez l'intitulé utilisé comme détecteur, le contenu de chaque cellule, puis choisissez sa catégorie et sa balise. À sa validation, les autres procédures non terminées sont régénérées avec ce modèle ; celles déjà vérifiées sont conservées.",
     "templateApplied": "Les catégories et balises des intitulés correspondants ont été reprises depuis la première procédure. Seul le contenu est classé.",
     "templatePartial": "Le modèle a été appliqué aux titres de cellule ou repères correspondants ; vérifiez les zones encore sans décision.",
     "confirmWhole": "J'ai vérifié le DM entier, y compris les catégories vides et les passages non repérés par les règles.",

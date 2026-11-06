@@ -324,13 +324,16 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
                 for candidate_dm in procedural_dms[1:]:
                     target_review = state["reviews"].get(candidate_dm["dm_id"])
                     if (
-                        target_review is None
-                        or target_review["status"] in {"reviewed", "skipped", "stale"}
-                        or target_review["fingerprint"] != _fingerprint(
+                        target_review is not None
+                        and target_review["status"] == "reviewed"
+                        and not target_review.get("partial")
+                        and target_review["fingerprint"] == _fingerprint(
                             doc, candidate_dm, state["generation"], rules,
                         )
                     ):
                         continue
+                    target_review = _new_review(doc, candidate_dm, state["generation"], rules)
+                    state["reviews"][candidate_dm["dm_id"]] = target_review
                     apply_template(
                         review, target_review, source_dm_id=action.dm_id, saved_at=saved_at,
                     )
