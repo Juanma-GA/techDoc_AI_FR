@@ -10,6 +10,7 @@ import { ClientMetadataPanel } from "./ClientMetadataPanel";
 
 type Props = {
   document: Document;
+  norm?: string;
 };
 
 type DocumentMetaDraft = {
@@ -51,12 +52,12 @@ function isDraftComplete(draft: DocumentMetaDraft): boolean {
  * Mapping obligatoire par document. Les valeurs sont jointes au contexte
  * d'analyse du document courant ; elles ne servent pas a compiler la checklist.
  */
-function LegacyDocumentMetaPanel({ document }: Props) {
+function LegacyDocumentMetaPanel({ document, norm }: Props) {
   const { t } = useTranslation();
   const missingContextFields = missingDocumentContext(document);
   const [open, setOpen] = useState(missingContextFields.length > 0);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
-  const patch = usePatchDocumentMeta(document.id);
+  const patch = usePatchDocumentMeta(document.id, norm);
 
   const [draft, setDraft] = useState<DocumentMetaDraft>(() => draftFromDocument(document));
   const draftComplete = isDraftComplete(draft);
@@ -260,10 +261,10 @@ function LegacyDocumentMetaPanel({ document }: Props) {
   );
 }
 
-export function DocumentMetaPanel({ document }: Props) {
+export function DocumentMetaPanel({ document, norm }: Props) {
   const { mode, isReady } = useDemoMode();
   return mode === "demo" || !isReady || import.meta.env.VITE_LEGACY_RULES_UI !== "true" ? (
-    <ClientMetadataPanel document={document} />
+    <ClientMetadataPanel document={document} norm={norm} />
   ) : (
     <LegacyDocumentMetaPanel document={document} />
   );

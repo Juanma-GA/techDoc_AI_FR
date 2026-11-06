@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FileDropzone } from "@internal/ui";
+import { FileDropzone, useDemoMode } from "@internal/ui";
 
 import { filesApi } from "../../lib/api";
 import type { CorpusPathOut, FileOut, FolderFileOut, UploadItemResult } from "../../lib/types";
@@ -24,6 +24,7 @@ function skippedLabel(t: TFunction, code: string): string {
 export function FilesCard({ pid }: { pid: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { mode } = useDemoMode();
   const [results, setResults] = useState<UploadItemResult[]>([]);
   const [analysisUpdated, setAnalysisUpdated] = useState(false);
   const [folderPath, setFolderPath] = useState("");
@@ -77,6 +78,15 @@ export function FilesCard({ pid }: { pid: string }) {
       setListing(null);
       setSelected(new Set());
       void qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
+    },
+  });
+  const connectDemoFolder = useMutation({
+    mutationFn: () => filesApi.connectDemoFolder(pid),
+    onSuccess: async () => {
+      setFolderPath("");
+      setListing(null);
+      setSelected(new Set());
+      await qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
     },
   });
   const remove = useMutation({
@@ -174,6 +184,17 @@ export function FilesCard({ pid }: { pid: string }) {
               {t("projects.folderDisconnect")}
             </button>
           )}
+          {mode === "demo" && (
+            <button
+              type="button"
+              className="btn ghost small"
+              disabled={connectDemoFolder.isPending}
+              onClick={() => connectDemoFolder.mutate()}
+            >
+              {connectDemoFolder.isPending ? <span className="spinner" /> : null}{" "}
+              {t("projects.demoFolderConnect")}
+            </button>
+          )}
         </div>
         {connectedPath && (
           <div className="label" style={{ marginTop: 6 }}>
@@ -183,6 +204,13 @@ export function FilesCard({ pid }: { pid: string }) {
         {browse.isError && (
           <div className="error" style={{ marginTop: 6 }}>
             {browse.error instanceof Error ? browse.error.message : String(browse.error)}
+          </div>
+        )}
+        {connectDemoFolder.isError && (
+          <div className="error" role="alert" style={{ marginTop: 6 }}>
+            {connectDemoFolder.error instanceof Error
+              ? connectDemoFolder.error.message
+              : String(connectDemoFolder.error)}
           </div>
         )}
 

@@ -140,6 +140,10 @@ def get_client_config(
             for catalog in configuration.bundle.catalogs
         ],
         mapping=configuration.mapping.model_dump(mode="json"),
+        norm_mappings={
+            code: mapping.model_dump(mode="json")
+            for code, mapping in configuration.bundle.norm_mappings.items()
+        },
         ui_options=configuration.manifest.ui_options,
     )
 

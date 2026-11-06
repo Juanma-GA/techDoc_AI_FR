@@ -1365,6 +1365,11 @@ def condition_met(condition: Condition, ctx: _EvalContext) -> bool:
         if isinstance(value, list)
         else bool(str(value).strip())
     )
+    if condition.equals is not None:
+        values = value if isinstance(value, list) else [value]
+        return present and any(
+            str(item).strip().casefold() == condition.equals.casefold() for item in values
+        )
     return present if condition.state == "present" else not present
 
 

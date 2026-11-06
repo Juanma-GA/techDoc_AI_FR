@@ -18,6 +18,7 @@ import { resetMappingWithSuggestions } from "./metadataSuggestions";
 
 type Props = {
   document: Document;
+  norm?: string;
   mappingValues?: Record<string, unknown>;
   onSaveMapping?: (values: Record<string, unknown>) => Promise<void>;
   titleKey?: string;
@@ -26,6 +27,7 @@ type Props = {
 
 export function ClientMetadataPanel({
   document,
+  norm,
   mappingValues,
   onSaveMapping,
   titleKey = "reviewer.meta.title",
@@ -34,7 +36,10 @@ export function ClientMetadataPanel({
   const { t, i18n } = useTranslation();
   const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
   const config = useClientConfig();
-  const fields = config.data?.mapping.fields ?? {};
+  const fields =
+    (norm ? config.data?.norm_mappings?.[norm]?.fields : undefined)
+    ?? config.data?.mapping.fields
+    ?? {};
   const fieldEntries = Object.entries(fields);
   const requiredFields = fieldEntries
     .filter(([, definition]) => definition.required)
@@ -48,18 +53,20 @@ export function ClientMetadataPanel({
   const [open, setOpen] = useState(missingFields.length > 0);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [savingMapping, setSavingMapping] = useState(false);
-  const patch = usePatchDocumentMeta(document.id);
+  const patch = usePatchDocumentMeta(document.id, norm);
 
   useEffect(() => {
     setDraft(
       createClientMetadataDraft(
         document,
-        config.data?.mapping.fields ?? {},
+        (norm ? config.data?.norm_mappings?.[norm]?.fields : undefined)
+          ?? config.data?.mapping.fields
+          ?? {},
         mappingValues,
       ),
     );
     setSaveState("idle");
-  }, [document, config.data, mappingValues]);
+  }, [document, config.data, mappingValues, norm]);
 
   useEffect(() => {
     if (missingFields.length > 0) setOpen(true);

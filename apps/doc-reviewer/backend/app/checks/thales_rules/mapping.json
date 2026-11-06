@@ -57,6 +57,16 @@
         "Boeing"
       ]
     },
+    "meta_update_type": {
+      "type": "enum",
+      "required": false,
+      "labels": {"fr": "Type de mise à jour", "en": "Update type"},
+      "allowed_values": [
+        "Migration",
+        "MCO"
+      ],
+      "format_hint": {"fr": "S1000D : Migration (ATA 2200 vers S1000D) ou MCO (maintien en condition opérationnelle). Sélectionne les règles applicables.", "en": "S1000D: Migration (ATA 2200 to S1000D) or MCO (maintenance update). Selects the rules that apply."}
+    },
     "document_language": {
       "type": "enum",
       "required": true,

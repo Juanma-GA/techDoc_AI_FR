@@ -103,7 +103,7 @@ describe("ClientMetadataPanel metadata suggestions", () => {
     root = createRoot(container);
     save = vi.fn();
     mocks.useClientConfig.mockReturnValue({
-      data: { mapping: { fields } },
+      data: { mapping: { fields }, norm_mappings: {} },
       isLoading: false,
       isError: false,
     });
@@ -176,6 +176,44 @@ describe("ClientMetadataPanel metadata suggestions", () => {
       },
       expect.objectContaining({ onError: expect.any(Function), onSuccess: expect.any(Function) }),
     );
+  });
+
+  it("uses the selected S1000D mapping to validate the first-issue year", async () => {
+    const s1000dFields = {
+      ...fields,
+      meta_first_issue_date: {
+        type: "string",
+        required: true,
+        max_length: 4,
+        pattern: "\\d{4}",
+      },
+    };
+    mocks.useClientConfig.mockReturnValue({
+      data: {
+        mapping: { fields },
+        norm_mappings: { s1000d: { fields: s1000dFields } },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const document = {
+      ...fixtureDocument,
+      client_metadata: {
+        ...fixtureDocument.client_metadata,
+        meta_first_issue_date: "2024",
+      },
+      meta_first_issue_date: "2024",
+    };
+    await act(async () => {
+      root.render(<ClientMetadataPanel document={document} norm="s1000d" />);
+    });
+
+    await act(async () => container.querySelector("button")?.click());
+
+    const firstIssueLabel = [...container.querySelectorAll("label")].find((label) =>
+      label.textContent?.includes("meta_first_issue_date"),
+    );
+    expect(firstIssueLabel?.querySelector("input")?.getAttribute("aria-invalid")).not.toBe("true");
   });
 
   it("uses isolated mapping values without falling back to verification metadata", async () => {
