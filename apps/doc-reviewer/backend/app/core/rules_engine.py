@@ -92,6 +92,7 @@ def run_all(
     previous_revision_pdf: ParsedPdf | None = None,
     norm: Optional[str] = None,
     filter_norms: bool = True,
+    preparation_context: bool = False,
 ) -> list[RawSuggestion]:
     """Run every check against the parsed PDF, return raw suggestions.
 
@@ -116,6 +117,7 @@ def run_all(
 
     `norm` forces one norm of the client bundle (otherwise it is detected from
     the PDF); `filter_norms=False` keeps the rules of every norm.
+    Preparation-only client rules run only in the preparation context.
     """
     if client_bundle is None:
         client_bundle = load_active_client_configuration().bundle
@@ -215,6 +217,11 @@ def run_all(
     )
     # The legacy catalog runner must not pick up the rules of the norm the document does not follow.
     compiled_ids = {rule.id for rule in compiled_rules}
+    compiled_rules = filter_preparation_rules(
+        compiled_rules,
+        client_bundle,
+        preparation_context=preparation_context,
+    )
     if filter_norms:
         compiled_rules = _keep_document_norm_rules(
             compiled_rules, parsed, client_bundle, warnings, norm=norm
@@ -445,6 +452,20 @@ def load_compiled_rules(
             rule = validate_compiled_rule_json(row.compiled_json)
             compiled[rule.id] = rule
     return list(compiled.values())
+
+
+def filter_preparation_rules(
+    compiled_rules: list[CompiledRule],
+    client_bundle: ClientBundle[Any],
+    *,
+    preparation_context: bool,
+) -> list[CompiledRule]:
+    if preparation_context:
+        return compiled_rules
+    preparation_codes = {
+        definition.code for definition in client_bundle.rules if definition.preparation
+    }
+    return [rule for rule in compiled_rules if rule.id not in preparation_codes]
 
 
 def route_compiled_rules(

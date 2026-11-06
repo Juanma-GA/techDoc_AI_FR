@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from statistics import median
 from typing import Any
 
 from app.checks.client_bundle import ClientOperation, OperationResult
@@ -8,9 +9,9 @@ from app.parsers.pdf_parser import ParsedPdf, Span
 
 from . import revision_engine as revision
 
-_LEP_PAGE_COLUMN_TOLERANCE = 8.0
+_LEP_PAGE_COLUMN_TOLERANCE = 4.0
 _LEP_PAGE_COLUMN_EXPECTED = (
-    "Les numeros de page de chaque colonne PAGE de la LEP doivent etre alignes verticalement a 8 pt pres."
+    "Les numeros de page de chaque colonne PAGE de la LEP doivent etre alignes verticalement a 4 pt pres."
 )
 
 
@@ -104,8 +105,12 @@ def _lep_page_column_findings(
             if len(page_cells) < 2:
                 continue
             checked_columns += 1
+            positions = [cell_bbox[0] for _page_key, cell_bbox in page_cells]
+            column_x = median(positions)
+            if len(positions) == 2 and positions[0] != positions[1]:
+                column_x = min(positions, key=lambda position: abs(position - page_x))
             for page_key, cell_bbox in page_cells:
-                if abs(cell_bbox[0] - page_x) <= _LEP_PAGE_COLUMN_TOLERANCE:
+                if abs(cell_bbox[0] - column_x) <= _LEP_PAGE_COLUMN_TOLERANCE:
                     continue
                 findings.append(
                     OperationResult(

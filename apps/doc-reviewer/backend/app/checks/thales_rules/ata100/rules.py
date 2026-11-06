@@ -1037,6 +1037,7 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     description=(
         "L'en-tete de chaque page Highlights doit contenir les numeros PNR "
         "renseignes dans le mapping du document, ou uniquement le premier. "
+        "Une forme abregee du premier arretee a une frontiere de segment est acceptee. "
         "Un prefixe termine par x est accepte pour les valeurs du mapping qu'il "
         "couvre; il ne remplace pas les autres numeros PNR non couverts."
     ),
@@ -1058,9 +1059,10 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
         "en": {
             "description": (
                 "The header of every Highlights page must contain the PNR numbers "
-                "in the document mapping, or only the first one. A prefix ending "
-                "in x is accepted for mapped values it covers; it does not replace "
-                "other uncovered PNR values."
+                "in the document mapping, or only the first one. An abbreviated "
+                "form of the first value ending at a segment boundary is accepted. "
+                "A prefix ending in x is accepted for mapped values it covers; it "
+                "does not replace other uncovered PNR values."
             ),
             "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }

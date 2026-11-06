@@ -1043,6 +1043,17 @@ def _normalize_pnr_separators(value: str) -> str:
     return re.sub(r"\s*([-\u2010-\u2015\u2212_/.:])\s*", r"\1", value.strip())
 
 
+def _pnr_segment_prefix_matches(value: str, expected: str) -> bool:
+    normalized_value = _normalize_pnr_separators(value).casefold()
+    normalized_expected = _normalize_pnr_separators(expected).casefold()
+    separators = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_/.:"
+    return (
+        normalized_expected.startswith(normalized_value)
+        and len(normalized_expected) > len(normalized_value)
+        and normalized_expected[len(normalized_value)] in separators
+    )
+
+
 def _is_tp1_pnr_candidate(value: str) -> bool:
     separators = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_/.:"
     return (
@@ -1237,7 +1248,12 @@ def _highlights_pnr_header_findings(
             len(pnr_values) > 1
             and len(matches) == 1
             and first_pattern is not None
-            and first_pattern.fullmatch(matches[0].group("value"))
+            and (
+                first_pattern.fullmatch(matches[0].group("value"))
+                or _pnr_segment_prefix_matches(
+                    matches[0].group("value"), pnr_values[0]
+                )
+            )
         ):
             continue
         missing = [

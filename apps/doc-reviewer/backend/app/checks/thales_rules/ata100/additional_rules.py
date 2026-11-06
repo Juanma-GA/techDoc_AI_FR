@@ -13,7 +13,7 @@ CUSTOM_LEP_PAGE_COLUMN_ALIGNMENT = _rule(
     name="Alignement vertical des pages dans la colonne PAGE de la LEP",
     description=(
         "Les numeros de page de chaque colonne PAGE de la LEP doivent etre "
-        "alignes verticalement entre eux et avec l'entete, a 8 pt pres."
+        "alignes verticalement entre eux, a 4 pt pres."
     ),
     message="Les numeros de page de la LEP ne sont pas alignes verticalement.",
     kind="field_required",
@@ -31,7 +31,7 @@ CUSTOM_LEP_PAGE_COLUMN_ALIGNMENT = _rule(
         "en": {
             "description": (
                 "Page numbers in each LEP PAGE column must align vertically with "
-                "one another and with the header, within 8 pt."
+                "one another, within 4 pt."
             ),
             "message": "The LEP page numbers are not vertically aligned.",
         }

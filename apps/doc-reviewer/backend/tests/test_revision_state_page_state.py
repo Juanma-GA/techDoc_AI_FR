@@ -49,7 +49,7 @@ def test_first_page_of_each_revision_section_is_always_modified() -> None:
     assert [page.is_modified for page in parsed.pages] == [True, True, True, True]
 
 
-def test_highlights_page_2_is_forced_modified_and_unmatched_pages_default_unchanged() -> None:
+def test_all_highlights_pages_are_forced_modified_and_unmatched_pages_default_unchanged() -> None:
     parsed = _consistent_document()
     second_highlights = _highlights_page([], page=2)
     for span in second_highlights.spans:
@@ -57,7 +57,13 @@ def test_highlights_page_2_is_forced_modified_and_unmatched_pages_default_unchan
             span.text = "Highlights Page 2"
     second_highlights.text = "\n".join(span.text for span in second_highlights.spans)
     parsed.pages.insert(1, second_highlights)
-    parsed.pages.append(_page(7, _footer(7, "Page 999", "JUL 66")))
+    third_highlights = _highlights_page([], page=3)
+    for span in third_highlights.spans:
+        if span.text == "Highlights Page 1":
+            span.text = "Highlights Page 3"
+    third_highlights.text = "\n".join(span.text for span in third_highlights.spans)
+    parsed.pages.insert(2, third_highlights)
+    parsed.pages.append(_page(8, _footer(8, "Page 999", "JUL 66")))
     for page_number, page in enumerate(parsed.pages, start=1):
         page.page = page_number
         for span in page.spans:
@@ -67,7 +73,7 @@ def test_highlights_page_2_is_forced_modified_and_unmatched_pages_default_unchan
     state = _state(parsed)
 
     assert state.available is True
-    assert parsed.pages[1].is_modified is True
+    assert [page.is_modified for page in parsed.pages[:3]] == [True, True, True]
     assert parsed.pages[-1].is_modified is False
 
 

@@ -40,6 +40,7 @@ from app.core.preparation_classification import load_page_classification
 from app.core.preparation_check_service import apply_preparation_ocr
 from app.core.preparation_state import load_preparation_mapping
 from app.core.rules_engine import (
+    filter_preparation_rules,
     forced_norm_codes,
     load_compiled_rules,
     materialize,
@@ -970,6 +971,7 @@ def analyze_stream(
                                     previous_revision_pdf=previous_parsed,
                                     norm=norm_value,
                                     filter_norms=filter_norms_value,
+                                    preparation_context=preparation_context,
                                 )
                             )
                         )
@@ -1046,6 +1048,11 @@ def analyze_stream(
                             if filter_norms_value
                             else frozenset()
                         ),
+                    )
+                    compiled_rules = filter_preparation_rules(
+                        compiled_rules,
+                        client_bundle,
+                        preparation_context=preparation_context,
                     )
                     compiled_snapshot = json.dumps(
                         {

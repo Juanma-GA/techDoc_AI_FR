@@ -128,7 +128,7 @@ _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"
 )
 _BOEING_FOOTER_PAGE_RE = re.compile(
-    r"(?i)^(?P<prefix>RR|LEP|INTRO|TC)\s*-\s*(?P<number>\d+(?:-\d+)?)$"
+    r"(?i)^(?:PAGES?\s+)?(?P<prefix>RR|LEP|INTRO|TC)\s*-\s*(?P<number>\d+(?:-\d+)?)$"
 )
 _LEP_PAGE_PREFIX_ALIASES = {
     "intro": ("introduction",),
@@ -1482,8 +1482,8 @@ def build_revision_state(parsed: ParsedPdf, document: object | None) -> Revision
     """Extract the three sources and mark every parsed page as modified or not.
 
     Unmatched pages default to unchanged when all three revision sources are
-    available. Contradictory declarations remain undecided. The first page of
-    each revision section and Highlights Page 2 are always marked modified.
+    available. Contradictory declarations remain undecided. Every Highlights
+    page and the first page of each other revision section are always modified.
     """
     expected_footer_keys: dict[int, str] = {}
     section_numbers: dict[str, int] = {}
@@ -1495,7 +1495,7 @@ def build_revision_state(parsed: ParsedPdf, document: object | None) -> Revision
             if section not in section_numbers:
                 first_section_pages.add(page.page)
             section_numbers[section] = section_numbers.get(section, 0) + 1
-            if section == HIGHLIGHTS_KEY_PREFIX and section_numbers[section] == 2:
+            if section == HIGHLIGHTS_KEY_PREFIX:
                 first_section_pages.add(page.page)
             expected_footer_keys[page.page] = f"{section} {section_numbers[section]}"
         elif page.page_type == "TP1" or _is_title_page(page):
@@ -2088,6 +2088,22 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
         if page_key is None:
             continue
         if page_key_prefix(page_key) == HIGHLIGHTS_KEY_PREFIX:
+            if footer.date is not None and revision.same_as(footer.date):
+                continue
+            findings.append(
+                RevisionFinding(
+                    control=FOOTER_DATE,
+                    message=(
+                        f"Le pied de page de « {footer.label_text} » porte "
+                        f"« {footer.date_text or 'aucune date'} » au lieu de la "
+                        f"date de révision {revision.text}."
+                    ),
+                    original=footer.date_text or footer.label_text,
+                    proposed=revision.text,
+                    page=footer.page,
+                    bbox=footer.date_bbox,
+                )
+            )
             continue
         entries = state.lep_entries_for_key(page_key)
 
@@ -2259,10 +2275,11 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
             continue
         if expected_key is not None:
             expected_prefix = expected_key.partition(" ")[0]
+            footer_label = re.sub(r"(?i)^pages?\s+", "", footer.label_text.strip())
             has_expected_format = (
                 not is_boeing
                 or expected_prefix not in {"ROR", "LEP"}
-                or "".join(footer.label_text.split()).casefold()
+                or "".join(footer_label.split()).casefold()
                 == "".join(
                     _display_page_key(expected_key, state.manufacturer).split()
                 ).casefold()

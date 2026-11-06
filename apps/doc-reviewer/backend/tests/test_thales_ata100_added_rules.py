@@ -82,18 +82,30 @@ def _materials_page(
     return ParsedPage(page=1, text=text, spans=spans, page_width=612.0, page_height=792.0)
 
 
-def _lep_page(second_page_x: float = 202.0) -> ParsedPage:
+def _lep_page(
+    second_page_x: float = 202.0,
+    *,
+    first_page_x: float = 202.0,
+    third_page_x: float | None = None,
+) -> ParsedPage:
     spans = [
         _span("LIST OF EFFECTIVE PAGES", 200.0, 20.0, width=200.0),
         _span("SUBJECT", 40.0, 60.0),
         _span("PAGE", 200.0, 60.0),
         _span("DATE", 300.0, 60.0),
         _span("Inspection", 40.0, 90.0),
-        _span("101", 202.0, 90.0, width=25.0),
+        _span("101", first_page_x, 90.0, width=25.0),
         _span("JAN 23/24", 300.0, 90.0),
         _span("102", second_page_x, 110.0, width=25.0),
         _span("JAN 23/24", 300.0, 110.0),
     ]
+    if third_page_x is not None:
+        spans.extend(
+            (
+                _span("103", third_page_x, 130.0, width=25.0),
+                _span("JAN 23/24", 300.0, 130.0),
+            )
+        )
     return ParsedPage(
         page=1,
         text="\n".join(span.text for span in spans),
@@ -238,6 +250,26 @@ def test_lep_page_column_alignment_detects_a_shifted_page_number() -> None:
     assert LEP_PAGE_COLUMN_ALIGNMENT.suggestions is not None
     assert LEP_PAGE_COLUMN_ALIGNMENT.suggestions(shifted_context, {})[0].observed == "102"
     assert CUSTOM_LEP_PAGE_COLUMN_ALIGNMENT.code == "CUSTOM_LEP_PAGE_COLUMN_ALIGNMENT"
+
+
+def test_lep_page_column_alignment_uses_the_column_baseline_not_the_header() -> None:
+    aligned_context = _context(
+        _lep_page(first_page_x=225.0, second_page_x=225.0, third_page_x=225.0)
+    )
+    shifted_context = _context(
+        _lep_page(first_page_x=202.0, second_page_x=202.0, third_page_x=207.0)
+    )
+
+    aligned = LEP_PAGE_COLUMN_ALIGNMENT.execute(aligned_context, {})
+    shifted = LEP_PAGE_COLUMN_ALIGNMENT.execute(shifted_context, {})
+    suggestions = LEP_PAGE_COLUMN_ALIGNMENT.suggestions
+
+    assert aligned.status == "PASS"
+    assert shifted.status == "FAIL"
+    assert suggestions is not None
+    assert [finding.observed for finding in suggestions(shifted_context, {})] == [
+        "103"
+    ]
 
 
 @pytest.mark.parametrize(
