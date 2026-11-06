@@ -25,7 +25,6 @@ from app.core.compiled_rule_runtime import document_metadata
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 from .data_modules import (
-    DMC_RE,
     STATUS_CHANGED,
     STATUS_REVISED,
     STATUS_STATUS,
@@ -41,6 +40,13 @@ from .data_modules import (
     same_issue_date,
     unwrap_dmc,
 )
+from .highlights import (
+    RFU_RE as _RFU_RE,
+)
+from .highlights import (
+    S1000D_HIGHLIGHTS_STATUS,
+    highlights_rfu_dmc_pages,
+)
 
 _STRUCTURE_ATTR = "_s1000d_structure"
 _NO_PDF = "Contrôle disponible uniquement sur un PDF analysé."
@@ -48,8 +54,6 @@ _NO_LOEDM = "LIST OF EFFECTIVE DATA MODULES introuvable ou illisible dans le PDF
 _NO_STATUS = "Colonne statut illisible dans la LIST OF EFFECTIVE DATA MODULES."
 _NO_REVISION_DATE = "Date de révision absente ou illisible dans le mapping du document."
 
-_RFU_RE = re.compile(r"(?i)\bRFU\b|reasons?\s+for\s+update")
-_HIGHLIGHTS_TITLE_RE = re.compile(r"(?m)^\s*HIGHLIGHTS\s*$")
 _FRONT_MATTER_PAGES = 3
 _SECTION_END_PAGES = 3
 
@@ -420,14 +424,8 @@ def _bar_context(
 
 def _highlights_dmcs(doc: _Document) -> set[str] | None:
     """DMCs listed on the HIGHLIGHTS pages, where the reasons for update (RFU) are printed."""
-    pages = [
-        page
-        for page in doc.pages
-        if _HIGHLIGHTS_TITLE_RE.search(page.text) and _RFU_RE.search(page.text)
-    ]
-    if not pages:
-        return None
-    return {code for page in pages for code in DMC_RE.findall(unwrap_dmc(page.text))}
+    dmcs = highlights_rfu_dmc_pages(doc.pages)
+    return None if dmcs is None else set(dmcs)
 
 
 def _changed_dm_bars(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
@@ -683,8 +681,16 @@ def _revision_record_row(doc: _Document, _parameters: Mapping[str, Any]) -> _Out
 def _copyright_years(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
     expected = "Années du copyright = année de première issue et année de révision"
     revision, _raw = _revision_date(doc)
-    first_issue = parse_issue_date(doc.meta.get("meta_first_issue_date"))
-    if revision is None and first_issue is None:
+    first_issue_value = str(doc.meta.get("meta_first_issue_date") or "").strip()
+    first_issue = parse_issue_date(first_issue_value)
+    first_issue_year = (
+        first_issue.year
+        if first_issue is not None
+        else int(first_issue_value)
+        if re.fullmatch(r"\d{4}", first_issue_value)
+        else None
+    )
+    if revision is None and first_issue_year is None:
         return _inconclusive(expected, "Dates de révision et de première issue absentes du mapping.")
     statements = [
         (page.page, match)
@@ -696,7 +702,7 @@ def _copyright_years(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome
     outcome = _Outcome(expected=expected)
     for number, match in statements:
         start, end = int(match.group("start")), int(match.group("end"))
-        expected_start = first_issue.year if first_issue is not None else start
+        expected_start = first_issue_year if first_issue_year is not None else start
         expected_end = revision.year if revision is not None else end
         if start == expected_start and end == expected_end and start <= end:
             continue
@@ -1259,5 +1265,10 @@ S1000D_CONTENT = _operation("s1000d_content", _CONTENT_CONTROLS)
 
 OPERATIONS = {
     operation.name: operation
-    for operation in (S1000D_DM_STATUS, S1000D_FRONT_MATTER, S1000D_CONTENT)
+    for operation in (
+        S1000D_DM_STATUS,
+        S1000D_FRONT_MATTER,
+        S1000D_CONTENT,
+        S1000D_HIGHLIGHTS_STATUS,
+    )
 }

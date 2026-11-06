@@ -21,7 +21,7 @@ _DEFINITIONS = {
 _REVISION_META = {
     "meta_revision_date": "OCT 30/26",
     "meta_revision_number": "05",
-    "meta_first_issue_date": "JUL 2000",
+    "meta_first_issue_date": "2000",
     "meta_manufacturer": "Airbus",
 }
 
@@ -89,8 +89,8 @@ def _bar_page(number: int, text: str, *, bar: bool) -> ParsedPage:
     )
 
 
-def test_catalog_contains_the_32_automatable_excel_rules_with_translations() -> None:
-    assert len(_DEFINITIONS) == 32
+def test_catalog_contains_33_automatable_rules_with_translations() -> None:
+    assert len(_DEFINITIONS) == 33
     for definition in _DEFINITIONS.values():
         assert definition.code.startswith("S1000D_")
         assert definition.compiled_rule.origin_ref == f"THALES-S1000D:v1:{definition.code}"
@@ -112,6 +112,44 @@ def test_unknown_control_is_rejected() -> None:
     runtime = SimpleNamespace(parsed_pdf=_pdf("x"), is_docx=False, document=None)
     with pytest.raises(ValueError, match="known control"):
         operation.execute(SimpleNamespace(runtime=runtime, targets=()), {"control": "nope"})
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [("C", "PASS"), ("R", "PASS"), ("S", "FAIL"), ("", "FAIL")],
+)
+def test_highlights_rfu_requires_loedm_status_c_or_r(
+    status: str,
+    expected: str,
+) -> None:
+    dmc = "F9111CMON-A-72-00-00-00A-500A-A"
+    highlights = f"HIGHLIGHTS\n{dmc}\nReason for update\nChanged procedure.\n"
+    pdf = _pdf(
+        pages=[
+            ParsedPage(page=1, text=_loedm(dm2_status=status)),
+            ParsedPage(page=2, text=highlights),
+        ]
+    )
+
+    result, _suggestions = _run("S1000D_HIGHLIGHTS_RFU_STATUS", pdf)
+
+    assert result == expected
+
+
+def test_highlights_rfu_status_is_inconclusive_without_readable_loedm() -> None:
+    dmc = "F9111CMON-A-72-00-00-00A-500A-A"
+    pdf = _pdf(f"HIGHLIGHTS\n{dmc}\nReason for update\nChanged procedure.")
+
+    assert _run("S1000D_HIGHLIGHTS_RFU_STATUS", pdf)[0] == "INCONCLUSIVE"
+
+
+def test_highlights_without_rfu_still_requires_readable_document_structure() -> None:
+    pdf = _pdf(pages=[
+        ParsedPage(page=1, text=_LOEDM),
+        ParsedPage(page=2, text="HIGHLIGHTS\nNo updates."),
+    ])
+
+    assert _run("S1000D_HIGHLIGHTS_RFU_STATUS", pdf)[0] == "PASS"
 
 
 # ---------------------------------------------------------------- text rules
@@ -357,6 +395,20 @@ def test_copyright_years_follow_first_issue_and_revision_years() -> None:
     )
     assert status == "FAIL"
     assert suggestions[0].proposed == "\u00a9 2000-2026"
+
+
+def test_copyright_year_accepts_four_digit_first_issue_year() -> None:
+    statement = (
+        "\u00a9 2024-2026 THALES AVS FRANCE SAS. This document and any data included are the "
+        "property of THALES AVS FRANCE SAS. They cannot be reproduced, disclosed or used "
+        "without the company's prior written approval"
+    )
+
+    assert _run(
+        "S1000D_DATA_RESTRICTION_COPYRIGHT",
+        _pdf(statement),
+        **{**_REVISION_META, "meta_first_issue_date": "2024"},
+    )[0] == "PASS"
 
 
 _SB_TEMPLATE = (

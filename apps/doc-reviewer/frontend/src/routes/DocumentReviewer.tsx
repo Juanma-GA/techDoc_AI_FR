@@ -57,10 +57,15 @@ export function DocumentReviewer() {
   const ruleResults = useRuleResults(
     document.data?.working_format === "pdf" ? documentId : undefined,
   );
-  const analyze = useAnalyze(documentId, document.data);
   const clientRules = useClientRules();
   const patchRuleBundle = usePatchClientRuleBundle();
   const documentNorm = useDocumentNorm(documentId, document.data?.working_format === "pdf");
+  const [selectedNorm, setSelectedNorm] = useState<string | undefined>();
+  const mappingNorm = selectedNorm
+    ?? documentNorm.data?.detected_norm
+    ?? documentNorm.data?.default_norm
+    ?? undefined;
+  const analyze = useAnalyze(documentId, document.data, undefined, mappingNorm);
   const [normPrompt, setNormPrompt] = useState<{
     range: AnalyzeOptions;
     detection: DocumentNorm;
@@ -108,6 +113,7 @@ export function DocumentReviewer() {
   useEffect(() => {
     setActiveReviewPage(null);
     setPageReviewChoices({});
+    setSelectedNorm(undefined);
   }, [documentId]);
 
   // Image PNG rendue serveur pour la page courante (cf. PdfViewer). `v=`
@@ -177,6 +183,11 @@ export function DocumentReviewer() {
       setNormPrompt({ range, detection });
       return;
     }
+    const resolvedNorm = range.norm
+      ?? detection?.detected_norm
+      ?? detection?.default_norm
+      ?? undefined;
+    if (resolvedNorm) setSelectedNorm(resolvedNorm);
     await analyze.start(range);
   };
 
@@ -184,6 +195,7 @@ export function DocumentReviewer() {
     const prompt = normPrompt;
     if (!prompt) return;
     setNormPrompt(null);
+    setSelectedNorm(norm);
     if (persist && clientRules.data) {
       const verification = clientRules.data.filter((rule) => rule.scope === "verification");
       const normCodes = prompt.detection.norms.map((item) => item.code);
@@ -428,7 +440,9 @@ export function DocumentReviewer() {
         />
 
         <main className="reviewer-canvas reviewer-canvas-stack">
-          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+          {document.data ? (
+            <DocumentMetaPanel document={document.data} norm={mappingNorm} />
+          ) : null}
           <PdfViewer
             pageImageUrl={pageImageUrl}
             pageNumber={currentPage}

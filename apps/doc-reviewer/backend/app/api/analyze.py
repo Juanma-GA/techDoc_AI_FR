@@ -307,6 +307,29 @@ def analyze_stream(
     # La Preparation reste propre a ATA100 : ni choix ni filtre de norme.
     norm_value: Optional[str] = None if preparation_context else (selected_norm or None)
     filter_norms_value = not preparation_context
+    mapping_norm = selected_norm or client_bundle.default_norm
+    if (
+        not preparation_context
+        and not selected_norm
+        and doc.working_format == "pdf"
+        and client_bundle.norm_mappings
+        and client_bundle.norm_selector is not None
+    ):
+        mapping_pdf = current_path(doc.storage_dir, doc.current_version)
+        if not mapping_pdf.is_file():
+            raise AppError("PDF_VERSION_MISSING", "PDF courant absent", status_code=500)
+        try:
+            mapping_norm = detect_document_norm(
+                client_bundle,
+                read_page_texts(mapping_pdf),
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+    analysis_mapping = (
+        client_bundle.mapping
+        if preparation_context
+        else client_bundle.mapping_for_norm(mapping_norm)
+    )
     analysis_metadata = dict(doc.client_metadata or {})
     preparation_page_classification: dict[str, dict[str, str | None]] = {}
     preparation_record: DocumentPreparation | None = None
@@ -363,7 +386,7 @@ def analyze_stream(
     )
     missing_context = missing_document_context(
         doc,
-        client_configuration.mapping,
+        analysis_mapping,
         metadata_override=analysis_metadata if preparation_context else None,
     )
     if missing_context:

@@ -194,6 +194,7 @@ class ClientBundle(Generic[ContextT]):
     norm_codes: tuple[str, ...] = ()
     norm_selector: Callable[[Any], str | None] | None = None
     default_norm: str | None = None
+    norm_mappings: Mapping[str, ClientMapping] = field(default_factory=dict)
     # Per norm: its own page classifier (page revision status) and its metadata suggestions.
     norm_page_classifiers: Mapping[str, Callable[[Any, Any], None]] = field(default_factory=dict)
     norm_metadata_suggesters: Mapping[str, Callable[[Sequence[str]], Mapping[str, Any]]] = field(
@@ -203,6 +204,12 @@ class ClientBundle(Generic[ContextT]):
     def uses_page_classifier(self, norm: str | None) -> bool:
         """A norm without a page classifier of its own does not track modified pages."""
         return not self.norm_page_classifiers or norm is None or norm in self.norm_page_classifiers
+
+    def mapping_for_norm(self, norm: str | None) -> ClientMapping:
+        return self.norm_mappings.get(norm, self.mapping) if norm is not None else self.mapping
+
+    def mapping_scope_for_norm(self, norm: str | None) -> str | None:
+        return norm if norm is not None and norm in self.norm_mappings else None
 
     def __post_init__(self) -> None:
         rule_codes = [definition.code for definition in self.rules]
@@ -221,7 +228,8 @@ class ClientBundle(Generic[ContextT]):
             names = ", ".join(sorted(str(name) for name in unknown_operations))
             raise ValueError(f"client bundle references unknown operation(s): {names}")
         for definition in self.rules:
-            validate_compiled_rule_mapping(definition.compiled_rule, self.mapping)
+            mapping = self.norm_mappings.get(definition.bundle_code, self.mapping)
+            validate_compiled_rule_mapping(definition.compiled_rule, mapping)
         for code, spec in self.standard_specs.items():
             if str(spec.get("code")) != code:
                 raise ValueError(f"standard spec key does not match its code: {code}")

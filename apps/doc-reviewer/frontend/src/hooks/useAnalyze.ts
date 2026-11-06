@@ -42,17 +42,27 @@ export function useAnalyze(
   documentId: string | undefined,
   document?: Document,
   previousRevisionFile?: File | null,
+  norm?: string,
 ) {
   const qc = useQueryClient();
   const clientConfig = useClientConfig();
   const legacyChecklistActive = useFiltersStore((s) => s.checklistActive);
   const checklistActive =
     import.meta.env.VITE_LEGACY_RULES_UI === "true" && legacyChecklistActive;
-  const requiredFields = clientConfig.data
-    ? Object.entries(clientConfig.data.mapping.fields)
-        .filter(([, field]) => field.required)
-        .map(([name]) => name)
-    : undefined;
+  const requiredFieldsForNorm = useCallback(
+    (normCode?: string) => {
+      const mapping = normCode
+        ? clientConfig.data?.norm_mappings?.[normCode] ?? clientConfig.data?.mapping
+        : clientConfig.data?.mapping;
+      return mapping
+        ? Object.entries(mapping.fields)
+            .filter(([, field]) => field.required)
+            .map(([name]) => name)
+        : undefined;
+    },
+    [clientConfig.data],
+  );
+  const requiredFields = requiredFieldsForNorm(norm);
   const missingContextFields = missingDocumentContext(document, requiredFields);
   const contextReady = Boolean(document) && missingContextFields.length === 0;
   const parseProgressIsIndeterminate = document?.working_format === "docx";
@@ -77,7 +87,13 @@ export function useAnalyze(
 
   const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
-    if (!(options.contextReadyOverride ?? contextReady)) {
+    const runNorm = options.preparationContext ? undefined : options.norm ?? norm;
+    const runMissingContextFields = missingDocumentContext(
+      document,
+      requiredFieldsForNorm(runNorm),
+    );
+    const runContextReady = Boolean(document) && runMissingContextFields.length === 0;
+    if (!(options.contextReadyOverride ?? runContextReady)) {
       setStatus("error");
       setError("DOCUMENT_CONTEXT_INCOMPLETE");
       return;
@@ -257,7 +273,18 @@ export function useAnalyze(
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive, parseProgressIsIndeterminate]);
+  }, [
+    checklistActive,
+    document,
+    documentId,
+    norm,
+    pageOverrides,
+    parseProgressIsIndeterminate,
+    previousRevisionFile,
+    qc,
+    requiredFieldsForNorm,
+    status,
+  ]);
 
   const correctPageStatuses = useCallback((statuses: Record<number, boolean>) => {
     const entries = Object.entries(statuses).map(([page, isModified]) => [

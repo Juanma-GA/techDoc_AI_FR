@@ -71,12 +71,17 @@ def test_repository_active_client_configuration_loads() -> None:
         "THALES-S1000D",
         "ASD-STE100",
     ]
-    assert len(configuration.bundle.rules) == 124
+    assert len(configuration.bundle.rules) == 129
+    s1000d_mapping = configuration.bundle.mapping_for_norm("s1000d")
+    assert s1000d_mapping.fields["meta_first_issue_date"].pattern == r"^\d{4}$"
+    assert s1000d_mapping.fields["meta_first_issue_date"].max_length == 4
+    assert "meta_revision_number" in s1000d_mapping.fields
+    assert "meta_manufacturer" in s1000d_mapping.fields
     rules_by_bundle: dict[str, list[str]] = {}
     for rule in configuration.bundle.rules:
         rules_by_bundle.setdefault(rule.bundle_code, []).append(rule.code)
     assert list(rules_by_bundle) == ["ata100", "s1000d", "ste100_rules"]
-    assert [len(codes) for codes in rules_by_bundle.values()] == [85, 32, 7]
+    assert [len(codes) for codes in rules_by_bundle.values()] == [89, 33, 7]
     labels = {rule.bundle_code: rule.bundle_label for rule in configuration.bundle.rules}
     assert labels == {"ata100": "ATA100", "s1000d": "S1000D", "ste100_rules": "ASD-STE100"}
     ste_rule = next(
@@ -90,6 +95,8 @@ def test_repository_active_client_configuration_loads() -> None:
         "shop_verification",
         "storage_note_reference",
         "cmm_mapping_consistency",
+        "ata100_materials",
+        "ata100_lep_page_column_alignment",
         "highlights_holder",
         "highlights_document_type",
         "paragraph_justification",
@@ -102,6 +109,7 @@ def test_repository_active_client_configuration_loads() -> None:
         "s1000d_dm_status",
         "s1000d_front_matter",
         "s1000d_content",
+        "s1000d_highlights_status",
     }
     assert configuration.bundle.page_classifier is not None
 

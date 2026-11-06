@@ -177,9 +177,8 @@ def run_all(
     # avant l'execution des regles compilees qui en dependent (RuleTarget.
     # page_type) via le bundle transmis/resolu pour ce run. Une norme sans
     # classifieur propre (S1000D) ne suit pas les pages modifiees.
-    tracks_pages = not filter_norms or client_bundle.uses_page_classifier(
-        resolve_document_norm(parsed, client_bundle, norm)
-    )
+    document_norm = resolve_document_norm(parsed, client_bundle, norm)
+    tracks_pages = not filter_norms or client_bundle.uses_page_classifier(document_norm)
     for version in versions:
         if tracks_pages and version.standard.code in client_bundle.standard_specs:
             classifier = client_bundle.page_classifier
@@ -289,7 +288,9 @@ def run_all(
             db=db,
             document=document,
             client_operations=client_bundle.operations,
-            client_entities=client_bundle.mapping.entities,
+            client_entities=client_bundle.mapping_for_norm(
+                document_norm if filter_norms else None
+            ).entities,
             warnings=warnings,
             previous_revision_pdf=previous_revision_pdf,
         )

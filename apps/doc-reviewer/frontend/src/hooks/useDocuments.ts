@@ -150,10 +150,13 @@ export function useSuggestDocumentMetadata(id: string) {
 
 /** Mapping manuel par document (repris par les consignes de checklist qui
  * y font reference lors du scan IA). */
-export function usePatchDocumentMeta(id: string | undefined) {
+export function usePatchDocumentMeta(id: string | undefined, norm?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: DocumentMetaPatch) => api.patch<Document>(`/documents/${id}`, body),
+    mutationFn: (body: DocumentMetaPatch) => {
+      const query = norm ? `?${new URLSearchParams({ norm }).toString()}` : "";
+      return api.patch<Document>(`/documents/${id}${query}`, body);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["document", id] });
       void qc.invalidateQueries({ queryKey: ["documents"] });

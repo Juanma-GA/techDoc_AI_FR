@@ -12,6 +12,8 @@ from functools import partial
 from app.checks.thales_rules.rule_factory import build_rule
 from app.core.compiled_rules import Check, Condition, RuleTarget
 
+from .highlights_rules import S1000D_HIGHLIGHTS_RFU_STATUS
+
 _STANDARD_CODE = "THALES-S1000D"
 _CATALOG_VERSION = "v1"
 _TARGET = RuleTarget(page="all", region="full_page")
@@ -965,6 +967,7 @@ RULE_DEFINITIONS = (
     S1000D_IPL_ILLUSTRATION_REVISION_BAR,
     S1000D_IPL_REVISION_BARS,
     S1000D_IPL_LINKS,
+    S1000D_HIGHLIGHTS_RFU_STATUS,
 )
 
 RULE_METADATA = {definition.code: definition.metadata for definition in RULE_DEFINITIONS}

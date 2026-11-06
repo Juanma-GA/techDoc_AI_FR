@@ -95,6 +95,7 @@ class ClientRuleBundleManifest(_StrictModel):
     bundle_version: str = Field(pattern=r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
     catalogs: list[ClientCatalog] = Field(min_length=1)
     modules: dict[str, str] = Field(min_length=1)
+    mapping: str | None = None
     # Rules of a bundle that is not enabled by default start disabled at first sync.
     default_enabled: bool = False
 
@@ -105,7 +106,10 @@ class ClientRuleBundleManifest(_StrictModel):
         catalog_codes = [catalog.code for catalog in self.catalogs]
         if len(catalog_codes) != len(set(catalog_codes)):
             raise ValueError("rule bundle catalog codes must be unique")
-        for relative_path in self.modules.values():
+        declared_paths = list(self.modules.values())
+        if self.mapping is not None:
+            declared_paths.append(self.mapping)
+        for relative_path in declared_paths:
             path = Path(relative_path)
             if (
                 not relative_path.strip()
@@ -144,6 +148,7 @@ class _LoadedRuleBundle:
     page_classifier: Callable[[Any, Any], None] | None
     norm_detector: Callable[[Any], bool] | None = None
     metadata_suggester: Callable[[Sequence[str]], Mapping[str, Any]] | None = None
+    mapping: ClientMapping | None = None
 
     @property
     def default_enabled(self) -> bool:
@@ -342,6 +347,18 @@ def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
         )
         for name, relative_path in manifest.modules.items()
     }
+    mapping = None
+    if manifest.mapping is not None:
+        mapping_payload = _read_bytes(
+            _bundle_file(bundle_dir, manifest.mapping, "mapping"),
+            f"rule bundle '{bundle_code}' mapping",
+        )
+        mapping = _parse_model(
+            ClientMapping,
+            mapping_payload,
+            f"rule bundle '{bundle_code}' mapping",
+        )
+        module_payloads["mapping"] = mapping_payload
     module_digest = sha256(manifest_payload)
     for role, payload in sorted(module_payloads.items()):
         module_digest.update(b"\0")
@@ -425,6 +442,7 @@ def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
             modules.get("norm_detector"), f"{description} norm_detector module"
         ),
         metadata_suggester=getattr(modules.get("norm_detector"), "suggest_metadata", None),
+        mapping=mapping,
     )
 
 
@@ -571,6 +589,11 @@ def _build_client_bundle(
             norm_codes=tuple(bundle.code for bundle in norm_bundles),
             norm_selector=norm_selector,
             default_norm=default_norm,
+            norm_mappings={
+                bundle.code: bundle.mapping
+                for bundle in norm_bundles
+                if bundle.mapping is not None
+            },
             norm_page_classifiers={
                 bundle.code: bundle.page_classifier
                 for bundle in norm_bundles
@@ -636,6 +659,8 @@ def load_active_client_configuration(
         _load_rule_bundle(root, bundle_code)
         for bundle_code in selection.rule_bundles
     )
+    if any(rule_bundle.mapping is not None for rule_bundle in rule_bundles):
+        raise ClientConfigurationError("only norm bundles may declare a mapping")
     configuration_digest = sha256()
     configuration_digest.update(selection.model_dump_json().encode("utf-8"))
     configuration_digest.update(manifest_payload)
@@ -656,7 +681,15 @@ def load_active_client_configuration(
             configuration_digest.update(payload)
 
     manifest_hash = sha256(manifest_payload).hexdigest()
-    mapping_hash = sha256(declared_payloads["mapping"]).hexdigest()
+    mapping_digest = sha256(declared_payloads["mapping"])
+    for norm_bundle in norm_bundles:
+        mapping_payload = norm_bundle.module_payloads.get("mapping")
+        if mapping_payload is not None:
+            mapping_digest.update(b"\0")
+            mapping_digest.update(norm_bundle.code.encode("utf-8"))
+            mapping_digest.update(b"\0")
+            mapping_digest.update(mapping_payload)
+    mapping_hash = mapping_digest.hexdigest()
     configuration_hash = configuration_digest.hexdigest()
     bundle = _build_client_bundle(
         selection,

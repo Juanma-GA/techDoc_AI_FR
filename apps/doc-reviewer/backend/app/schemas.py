@@ -314,6 +314,7 @@ class ClientConfigOut(BaseModel):
     bundle_hash: str
     catalogs: list[ClientCatalogOut] = Field(default_factory=list)
     mapping: dict[str, Any] = Field(default_factory=dict)
+    norm_mappings: dict[str, dict[str, Any]] = Field(default_factory=dict)
     ui_options: dict[str, Any] = Field(default_factory=dict)
 
 

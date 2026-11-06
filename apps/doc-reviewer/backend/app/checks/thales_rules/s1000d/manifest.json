@@ -1,6 +1,7 @@
 {
   "label": "S1000D",
-  "bundle_version": "1.1.0",
+  "bundle_version": "1.2.0",
+  "mapping": "mapping.json",
   "catalogs": [
     {
       "code": "THALES-S1000D",
