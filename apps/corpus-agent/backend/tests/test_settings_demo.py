@@ -22,20 +22,121 @@ def test_demo_mode_defaults_to_normal(client) -> None:
 
 def test_checklists_are_isolated_by_mode(client, monkeypatch, tmp_path) -> None:
     from app.core import rules
+    from app.db.models import AppConfig
+    from app.db.session import SessionLocal
 
     monkeypatch.setattr(rules, "_RULES_FILE", tmp_path / "rules.json")
+    with SessionLocal() as db:
+        db.query(AppConfig).filter(AppConfig.key == "demo_checklist_version").delete()
+        db.commit()
     normal = {"id": "normal", "label": "Normal fixture", "consigne": "Normal check", "validated": True}
     demo = {"id": "demo", "label": "Demo fixture", "consigne": "Demo check", "validated": True}
     client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
     client.put("/api/v1/settings/rules/sparse", json={"regles_personnalisees": [normal]}).raise_for_status()
     client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
-    assert client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"] == []
+    seeded = client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"]
+    assert len(seeded) == 5
+    assert all(rule["validated"] and rule["enabled"] for rule in seeded)
     client.put("/api/v1/settings/rules/sparse", json={"regles_personnalisees": [demo]}).raise_for_status()
     client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
     assert client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"] == [normal]
     client.delete("/api/v1/settings/rules").raise_for_status()
     client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
     assert client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"] == [demo]
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+
+
+def test_demo_checklist_seed_does_not_replace_later_edits(client, monkeypatch, tmp_path) -> None:
+    from app.core import rules
+    from app.db.models import AppConfig
+    from app.db.session import SessionLocal
+
+    monkeypatch.setattr(rules, "_RULES_FILE", tmp_path / "rules.json")
+    with SessionLocal() as db:
+        db.query(AppConfig).filter(AppConfig.key == "demo_checklist_version").delete()
+        db.commit()
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+    client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
+    client.put("/api/v1/settings/rules/sparse", json={"regles_personnalisees": []}).raise_for_status()
+
+    client.get("/api/v1/settings").raise_for_status()
+    assert client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"] == []
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+    client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
+    assert client.get("/api/v1/settings/rules").json()["rules"]["regles_personnalisees"] == []
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+
+
+def test_demo_project_has_an_embedded_connected_folder(client, monkeypatch, tmp_path) -> None:
+    import uuid
+    from pathlib import Path
+
+    from app.core import demo_seed
+    from app.db.models import AppConfig, Project
+    from app.db.session import SessionLocal
+
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setattr(demo_seed.settings, "storage_dir", str(storage_dir))
+    with SessionLocal() as db:
+        db.query(AppConfig).filter(AppConfig.key == "demo_corpus_path").delete()
+        db.commit()
+    client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
+    project_id = client.get("/api/v1/projects").json()[0]["id"]
+
+    with SessionLocal() as db:
+        project = db.get(Project, uuid.UUID(project_id))
+        assert project is not None
+        folder = Path(project.corpus_path)
+    assert folder.is_dir()
+    response = client.post(
+        f"/api/v1/projects/{project_id}/files/list-folder",
+        json={"path": str(folder)},
+    )
+    assert response.status_code == 200
+    assert {item["name"] for item in response.json()["files"]} == {
+        "FTM-DEMO-32-10-01.xlsx",
+        "FTM-DEMO-21-30-02.xlsx",
+        "FTM-DEMO-24-50-03.xlsx",
+    }
+    connected = client.post(f"/api/v1/projects/{project_id}/demo-folder")
+    assert connected.status_code == 200
+    assert connected.json()["path"] == str(folder)
+
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+    assert not folder.exists()
+    assert client.post(f"/api/v1/projects/{project_id}/demo-folder").status_code == 409
+
+
+def test_embedded_demo_folder_preserves_previous_custom_folder(client, monkeypatch, tmp_path) -> None:
+    from pathlib import Path
+    import uuid
+
+    from app.core import demo_seed
+    from app.db.models import AppConfig, Project
+    from app.db.session import SessionLocal
+
+    storage_dir = tmp_path / "storage"
+    custom_folder = tmp_path / "existing-connected-folder"
+    custom_folder.mkdir()
+    monkeypatch.setattr(demo_seed.settings, "storage_dir", str(storage_dir))
+    with SessionLocal() as db:
+        db.query(AppConfig).filter(AppConfig.key == "demo_corpus_path").delete()
+        db.add(AppConfig(key="demo_corpus_path", value=str(custom_folder)))
+        db.commit()
+
+    client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
+    project_id = client.get("/api/v1/projects").json()[0]["id"]
+    response = client.post(f"/api/v1/projects/{project_id}/demo-folder")
+    assert response.status_code == 200
+    assert response.json()["path"] == str(storage_dir / f"project_{project_id}" / "connected-folder")
+
+    client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
+    client.post("/api/v1/settings", json={"demo_enabled": True}).raise_for_status()
+    recreated_id = client.get("/api/v1/projects").json()[0]["id"]
+    with SessionLocal() as db:
+        project = db.get(Project, uuid.UUID(recreated_id))
+        assert project is not None
+        assert Path(project.corpus_path) == custom_folder
     client.post("/api/v1/settings", json={"demo_enabled": False}).raise_for_status()
 
 

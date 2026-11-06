@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import json
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse
@@ -31,6 +30,7 @@ from app.core.prompt_sanitizer import sanitize_document
 from app.core.rules import (
     DEFAULT_RULES,
     basl_columns_for,
+    ensure_demo_checklist,
     is_overridden,
     load_rules,
     reference_columns_for,
@@ -59,6 +59,7 @@ def get_settings(db: Session = Depends(get_db)) -> SettingsOut:
     enabled = get_demo_enabled(db)
     if enabled:
         seed_demo_project(db)
+        ensure_demo_checklist(db)
     return SettingsOut(demo_enabled=enabled)
 
 
@@ -68,6 +69,7 @@ def update_settings(body: SettingsIn, db: Session = Depends(get_db)) -> Settings
         set_demo_enabled(db, body.demo_enabled)
         if body.demo_enabled:
             seed_demo_project(db)
+            ensure_demo_checklist(db)
         else:
             remove_demo_project(db)
     return SettingsOut(demo_enabled=get_demo_enabled(db))

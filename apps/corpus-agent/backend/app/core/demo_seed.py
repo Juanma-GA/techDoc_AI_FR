@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.demo_mode import DEMO_FOLDER_KEY, demo_project_filter
+from app.core.demo_mode import DEMO_FOLDER_KEY, demo_folder_path, demo_project_filter
 from app.db.models import AnalysisRun, Anomaly, AppConfig, File, FileVersion, Project
 
 DEMO_PROJECT_NAME = "Projet démo - Fiches de maintenance"
@@ -209,6 +209,16 @@ def _seed_demo_sources(project: Project) -> None:
     ])
 
 
+def ensure_demo_connected_folder(project: Project) -> Path:
+    folder = demo_folder_path(project.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    for spec in _SHEETS:
+        destination = folder / spec[0]
+        if not destination.exists():
+            destination.write_bytes(_build_workbook(spec))
+    return folder
+
+
 # Anciennete (jours) de chaque analyse : le nombre d'anomalies par analyse
 # diminue (8, 5, 3, 2) pour illustrer l'amelioration de la conformite du corpus.
 _RUN_AGES = (21, 14, 7, 1)
@@ -343,6 +353,16 @@ def seed_demo_project(db: Session) -> Project:
             path and Path(path).is_file()
             for path in (existing.reference_path, existing.basl_path)
         )
+        connected_folder = ensure_demo_connected_folder(existing)
+        if not existing.corpus_path:
+            saved_folder = db.get(AppConfig, DEMO_FOLDER_KEY)
+            restored_folder = (
+                saved_folder.value
+                if saved_folder and saved_folder.value and Path(saved_folder.value).is_dir()
+                else str(connected_folder)
+            )
+            existing.corpus_path = restored_folder
+            db.commit()
         if (
             run_count >= len(_RUN_AGES)
             and not rejected_without_motif
@@ -356,12 +376,20 @@ def seed_demo_project(db: Session) -> Project:
         remove_demo_project(db)
 
     saved_folder = db.get(AppConfig, DEMO_FOLDER_KEY)
+    restored_folder = (
+        saved_folder.value
+        if saved_folder and saved_folder.value and Path(saved_folder.value).is_dir()
+        else None
+    )
     project = Project(
         name=DEMO_PROJECT_NAME, description=DEMO_PROJECT_DESCRIPTION,
-        corpus_path=saved_folder.value if saved_folder and saved_folder.value else None,
+        corpus_path=restored_folder,
     )
     db.add(project)
     db.flush()
+    connected_folder = ensure_demo_connected_folder(project)
+    if not project.corpus_path:
+        project.corpus_path = str(connected_folder)
     for spec in _SHEETS:
         _ingest_file(db, project, _build_workbook(spec), spec[0], _XLSX_MIME)
     _seed_demo_sources(project)
