@@ -8,11 +8,17 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.demo_mode import get_demo_enabled, visible_projects
+from app.core.demo_mode import (
+    get_demo_enabled,
+    is_embedded_demo_folder,
+    remember_demo_folder,
+    visible_projects,
+)
+from app.core.demo_seed import ensure_demo_connected_folder
 from app.core.errors import AppError
 from app.db.models import Project
 from app.db.session import get_db
-from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas import CorpusPathOut, ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter(tags=["projects"])
 
@@ -65,6 +71,23 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db)) -> Projec
 @router.get("/projects/{project_id}", response_model=ProjectOut)
 def get_project(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Project:
     return _project_or_404(db, project_id)
+
+
+@router.post("/projects/{project_id}/demo-folder", response_model=CorpusPathOut)
+def connect_demo_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> CorpusPathOut:
+    if not get_demo_enabled(db):
+        raise AppError(
+            "DEMO_MODE_REQUIRED",
+            "Le dossier de démonstration est disponible uniquement en mode démo.",
+            status_code=409,
+        )
+    project = _project_or_404(db, project_id)
+    folder = ensure_demo_connected_folder(project)
+    if project.corpus_path and not is_embedded_demo_folder(project.id, project.corpus_path):
+        remember_demo_folder(db, project.corpus_path)
+    project.corpus_path = str(folder)
+    db.commit()
+    return CorpusPathOut(path=str(folder))
 
 
 @router.put("/projects/{project_id}", response_model=ProjectOut)

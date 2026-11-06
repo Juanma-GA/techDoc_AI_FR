@@ -124,6 +124,7 @@
   "knowledge.resolution": "Résolution :",
   "knowledge.resolvedAt": "Corrigé le {{date}}",
   "projects.kpi.type.reference_cross_check": "Référentiel / BASL",
+  "projects.demoFolderConnect": "Utiliser le dossier démo intégré",
   "files.analysisUpdated": "Sources mises à jour et analyse relancée.",
   "referentiel.analysisUpdated": "Source mise à jour et analyse relancée."
 }

@@ -166,6 +166,7 @@ export const filesApi = {
     api.delete<void>(`/projects/${pid}/files/${fileId}`),
   // Corpus par dossier connecte (chemin local, ex. OneDrive synchronise).
   getFolder: (pid: string) => api.get<CorpusPathOut>(`/projects/${pid}/corpus-folder`),
+  connectDemoFolder: (pid: string) => api.post<CorpusPathOut>(`/projects/${pid}/demo-folder`, {}),
   listFolder: (pid: string, path: string) =>
     api.post<FolderListOut>(`/projects/${pid}/files/list-folder`, { path }),
   // `only` (chemins relatifs) restreint l'import a une selection ; absent = tout.

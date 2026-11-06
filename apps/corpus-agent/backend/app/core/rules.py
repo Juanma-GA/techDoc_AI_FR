@@ -25,13 +25,18 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.core.demo_mode import get_demo_enabled
+from app.db.models import AppConfig
 from app.db.session import SessionLocal
 
 # `storage_dir` est `…/data/storage`, donc on remonte d'un cran pour
 # placer rules.json à côté de la DB SQLite (`…/data/rules.json`).
 _RULES_FILE = Path(settings.storage_dir).parent / "rules.json"
+_DEMO_CHECKLIST_VERSION_KEY = "demo_checklist_version"
+_DEMO_CHECKLIST_VERSION = "1"
 
 
 def _rules_file() -> Path:
@@ -62,6 +67,65 @@ DEFAULT_RULES: dict[str, Any] = {
     # Consignes libres ajoutées aux prompts Mistral (contexte de jugement).
     "instructions_libres": "",
 }
+
+
+DEMO_CHECKLIST: list[dict[str, Any]] = [
+    {
+        "id": "demo-safety",
+        "label": "Sécurité des interventions",
+        "consigne": (
+            "Pour chaque intervention présentant un risque, vérifier que les étapes "
+            "préalables de sécurité et de mise en sécurité des énergies sont explicites."
+        ),
+        "severity": "high",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-tooling",
+        "label": "Outillage et calibration",
+        "consigne": (
+            "Vérifier que l'outillage nécessaire est identifié par référence et que "
+            "les exigences de calibration applicables sont précisées."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-parts",
+        "label": "Pièces et consommables",
+        "consigne": (
+            "Vérifier que les pièces et consommables indiquent une référence, une "
+            "quantité, une unité et une condition de remplacement compréhensibles."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-qualification",
+        "label": "Qualification requise",
+        "consigne": (
+            "Vérifier que la qualification requise est indiquée pour chaque tâche "
+            "et cohérente avec l'intervention décrite."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-revision-history",
+        "label": "Traçabilité des révisions",
+        "consigne": (
+            "Vérifier que chaque révision comporte une date, un auteur et une "
+            "description suffisamment claire de la modification."
+        ),
+        "severity": "low",
+        "validated": True,
+        "enabled": True,
+    },
+]
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -99,6 +163,27 @@ def load_rules() -> dict[str, Any]:
         except (json.JSONDecodeError, OSError):
             pass
     return defaults
+
+
+def ensure_demo_checklist(db: Session) -> None:
+    """Initialize the demo checklist once without replacing an existing one."""
+    if not get_demo_enabled(db):
+        return
+
+    marker = db.get(AppConfig, _DEMO_CHECKLIST_VERSION_KEY)
+    if marker is not None and marker.value == _DEMO_CHECKLIST_VERSION:
+        return
+
+    rules = load_rules()
+    if not rules.get("regles_personnalisees"):
+        rules["regles_personnalisees"] = copy.deepcopy(DEMO_CHECKLIST)
+        save_rules(rules)
+
+    if marker is None:
+        db.add(AppConfig(key=_DEMO_CHECKLIST_VERSION_KEY, value=_DEMO_CHECKLIST_VERSION))
+    else:
+        marker.value = _DEMO_CHECKLIST_VERSION
+    db.commit()
 
 
 # Colonnes de référence « builtin » : noms réservés, consommés par les checks
