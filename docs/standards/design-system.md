@@ -1,13 +1,17 @@
 # Design System Supplement
 
-Normative supplement to [`STANDARD_POC.md`](../../STANDARD_POC.md) §5 for the shared visual framework: `design-tokens/`, `@internal/ui`, the app template and the guardrails in `scripts/check_standard.sh`. Decision record: [ADR 0005](../adr/0005-design-system-v2.md).
+TECHDOC_AI adaptation of the [framework guide](../../framework/docs/standards/design-system.md).
+The framework owns the shared tokens and UI contract; this file covers the
+consumer's paths, checker, and local branding integration.
+
+Normative supplement to [`STANDARD_POC.md`](../../STANDARD_POC.md) §5 for the shared visual framework: `framework/design-tokens/`, `framework/packages/ui/`, the canonical template in `framework/apps/_template/`, and the guardrails in `scripts/check_standard.sh`. Consumer-owned branding stays in `packages/techdoc-brand/`. Decision record: [ADR 0005](../adr/0005-design-system-v2.md).
 
 Live AACF design rules take precedence. When they cannot be fetched, report `AACF NON VERIFIABLE`; this document is local evidence only.
 
 ## 1. Token Pipeline
 
 ```text
-design-tokens/tokens.json  --(pnpm tokens:build)-->  design-tokens/theme.css   (CSS variables)
+framework/design-tokens/tokens.json  --(pnpm tokens:build)-->  framework/design-tokens/theme.css   (CSS variables)
             |                                                |
             +--> tailwind-preset.ts (utilities)  <-----------+
             +--> index.ts (JS/TS: color, colorByTheme, shadowByTheme, currentTheme)
@@ -16,7 +20,7 @@ design-tokens/tokens.json  --(pnpm tokens:build)-->  design-tokens/theme.css   (
 | File | Role | Edit? |
 |---|---|---|
 | `tokens.json` | Only source of values. `color.*` = dark palette (default theme), `themes.light.color.*` / `themes.light.shadow.*` = light overrides, plus static tokens (`font`, `fontSize`, `lineHeight`, `radius`, `shadow`, `motion`, `layout`). Validated by `tokens.schema.json`. | Yes |
-| `theme.css` | **Generated** by `design-tokens/scripts/build-theme.mjs`. `:root` = light palette + static tokens, `.dark` = dark palette. | Never by hand |
+| `theme.css` | **Generated** by `framework/design-tokens/scripts/build-theme.mjs`. `:root` = light palette + static tokens, `.dark` = dark palette. | Never by hand |
 | `tailwind-preset.ts` | Maps utilities to the generated variables. | When adding a utility |
 | `index.ts` | JS access for charts/canvas/SVG that cannot read CSS variables. | When adding a helper |
 
@@ -76,7 +80,7 @@ Rules:
 - Every legacy variable (`--color-bg-base`, `--color-text-dim`, `--color-border-md`, ...) keeps its name and still holds a full color. App CSS written against `var(--color-*)` keeps working.
 - `color.*`, `colorByTheme`, `font`, `radius`, `shadow`, `layout` exports of `@internal/design-tokens` keep their shape. New exports are additive.
 - Existing Tailwind utilities keep their names; they now also support opacity modifiers.
-- The test `design-tokens/tests/theme.test.mjs` guards the legacy variables and the light/dark key parity.
+- The test `framework/design-tokens/tests/theme.test.mjs` guards the legacy variables and the light/dark key parity.
 
 ## 3. Palettes And Contrast
 
@@ -97,7 +101,7 @@ Dark remains the default theme (`.dark`, applied by the anti-flash script). Ligh
 
 Dark `text.muted` moved from `#4b5563` to `#64748b` (it was 2.3:1 on cards).
 
-`design-tokens/tests/contrast.test.mjs` enforces WCAG ratios for both themes: body text 7:1, secondary text 4.5:1, muted text 3:1, text on brand 4.5:1, active navigation 4.5:1, status colors 3:1 (4.5:1 in light). A palette change that breaks a ratio fails `pnpm --filter @internal/design-tokens test`.
+`framework/design-tokens/tests/contrast.test.mjs` enforces WCAG ratios for both themes: body text 7:1, secondary text 4.5:1, muted text 3:1, text on brand 4.5:1, active navigation 4.5:1, status colors 3:1 (4.5:1 in light). A palette change that breaks a ratio fails `pnpm --filter @internal/design-tokens test`.
 
 Compatibility notes:
 
@@ -125,7 +129,7 @@ Every app has exactly one design-system import, at the top of `frontend/src/inde
 Rules:
 
 - Apps never declare `@fontsource/*` dependencies, never `@import "@fontsource/..."`, and never load `fonts.googleapis.com` / `fonts.gstatic.com` (local-first, offline-capable, no third-party request).
-- CSS uses `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)`; never a literal font name outside `design-tokens/`.
+- CSS uses `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)`; never a literal font name outside `framework/design-tokens/`.
 - Fonts use `font-display: swap`; the stacks fall back to `system-ui` / `Segoe UI` / `Consolas` while loading or if a face is missing.
 - `@import "@internal/design-tokens/theme.css"` alone remains supported for compatibility, but then the app must load fonts itself; migrate to `base.css`.
 
@@ -160,14 +164,14 @@ Shared component conventions (v2):
 
 ## 6. Template And New Apps
 
-`apps/_template` is the reference implementation; `node scripts/new_poc.mjs <slug>` copies it, so every generated app starts compliant:
+`framework/apps/_template` is the reference implementation; `node framework/scripts/new_poc.mjs --repo-root . <slug>` copies it, so every generated app starts compliant:
 
 - `frontend/src/index.css`: only `@import "@internal/design-tokens/base.css";` plus `@tailwind` directives. No `@fontsource/*` dependency in `frontend/package.json`.
 - `frontend/index.html`: anti-flash script (dark unless `light` was saved) and `<meta name="color-scheme" content="dark light">`. The desktop startup page (`--desktop`) has the same meta.
 - Pages: `Home`, `Data`, `Settings` start with `PageHeader`; `Data` uses `KpiCard`, `Skeleton` (with a `role="status"` label) and `Alert`; the `llm` profile Settings page uses `CollapsibleSection` (collapsed once a key is configured), `FormField`, and offers the models returned by the connection test through a `datalist` while keeping free text.
-- Design gallery: `/design` (`routes/DesignGallery.tsx`) is registered when `import.meta.env.DEV` or `VITE_DESIGN_GALLERY=true`. The template commits `frontend/.env.production` with that flag, so the gallery is visible with `start.bat`; `new_poc.mjs` never copies `.env*` files, so generated apps keep it in `pnpm dev` only (the chunk is absent from their builds) unless they opt in. The template launchers rebuild when `.env.production` changes.
+- Design gallery: `/design` (`routes/DesignGallery.tsx`) is registered when `import.meta.env.DEV` or `VITE_DESIGN_GALLERY=true`. The canonical framework template controls that flag; `new_poc.mjs` never copies `.env*` files, so generated apps keep it in `pnpm dev` only unless they opt in. Template launchers rebuild when `.env.production` changes.
 - `tests/e2e/design-system.spec.ts`: 8 combinations (dark/light x FR/EN x 1366/760px). It asserts the theme class, that Inter, JetBrains Mono and Orbitron faces are loaded, and that `main` does not overflow horizontally; screenshots are attached to the report (no committed baselines because rendering differs per OS).
-- The `llm` profile overlay (`apps/_template/profiles/llm`) replaces `App.tsx`, `routes/Settings.tsx` and the locales: any template change to these files must be mirrored there.
+- The `llm` profile overlay (`framework/apps/_template/profiles/llm`) replaces `App.tsx`, `routes/Settings.tsx` and the locales: any template change to these files must be mirrored there.
 
 ## 7. App Migration (October 2026)
 
@@ -200,8 +204,8 @@ Pending opt-in migrations (apps untouched on purpose; each app owner migrates in
 | Check | Fails when |
 |---|---|
 | 18 `theme.css genere depuis tokens.json` | `theme.css` was edited by hand or `tokens.json` changed without `pnpm tokens:build` |
-| 19 `Pas de CDN de polices` | `fonts.googleapis.com` / `fonts.gstatic.com` appears in a frontend, `packages/` or `design-tokens/` |
-| 20 `Polices via var(--font-*) uniquement` | `@fontsource` or a literal `Inter` / `Orbitron` / `JetBrains Mono` font declaration appears in app sources, `packages/ui/src`, or an app `package.json` |
+| 19 `Pas de CDN de polices` | `fonts.googleapis.com` / `fonts.gstatic.com` appears in a frontend, `packages/` or `framework/` |
+| 20 `Polices via var(--font-*) uniquement` | `@fontsource` or a literal `Inter` / `Orbitron` / `JetBrains Mono` font declaration appears in app sources, `framework/packages/ui/src`, or an app `package.json` |
 | 21 `base.css + meta color-scheme` | a frontend `index.html` lacks `<meta name="color-scheme">` or its `src/index.css` does not import `@internal/design-tokens/base.css` |
 | 22 `Pas de surcharge des classes .ui-*` | an app CSS rule selector starts with a shared `.ui-*` class |
 
@@ -213,4 +217,4 @@ Automated tests complete the guardrails:
 | `pnpm --filter @internal/ui test` | one Vitest per shared primitive |
 | `pnpm --filter @apps/TEMPLATE-frontend test:e2e` | `/design` gallery in dark/light x FR/EN x 1366/760px, fonts loaded, no horizontal overflow |
 
-Run them whenever `design-tokens/`, `packages/ui/` or `apps/_template/` change; they are cross-application changes that need explicit approval.
+Run them whenever framework `design-tokens/`, `packages/ui/` or `apps/_template/` change; those cross-consumer changes require a framework PR and an explicit submodule update in each consumer.

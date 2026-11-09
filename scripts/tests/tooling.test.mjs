@@ -6,14 +6,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFrontend, needsBuild } from "../lib/frontend-build.mjs";
 import {
-  expectedAppArtifacts,
   readAppRegistry,
   validateAppRegistry,
 } from "../lib/app-registry.mjs";
+import { expectedAppArtifacts } from "../../framework/scripts/lib/app-registry.mjs";
 import { copySources, resolvePort } from "../lib/scaffold.mjs";
-import { createPoc } from "../new_poc.mjs";
+import { createPoc } from "../../framework/scripts/new_poc.mjs";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
+const framework = path.join(repo, "framework");
 function temporary(t) {
   const root = mkdtempSync(path.join(tmpdir(), "poc-tooling-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -51,7 +52,7 @@ function registryEntry(slug, targetPort, kind = "app") {
   };
 }
 
-test("frontend rebuild includes shared UI, tokens, public assets and the root lockfile", (t) => {
+test("frontend rebuild includes framework UI, tokens and consumer branding sources", (t) => {
   const root = temporary(t);
   const frontend = path.join(root, "apps", "synthetic", "frontend");
   const output = path.join(root, "bundle");
@@ -60,7 +61,8 @@ test("frontend rebuild includes shared UI, tokens, public assets and the root lo
   const now = new Date();
   utimesSync(index, now, now);
   assert.equal(needsBuild(root, frontend, output), false);
-  for (const file of ["packages/ui/src/Button.tsx", "design-tokens/theme.css",
+  for (const file of ["framework/packages/ui/src/Button.tsx",
+    "framework/design-tokens/theme.css", "packages/techdoc-brand/src/AppShell.tsx",
     "pnpm-lock.yaml", "apps/synthetic/frontend/public/splash.html"]) {
     const source = write(root, file);
     const newer = new Date(now.getTime() + 10_000);
@@ -126,7 +128,6 @@ test("registry synchronization preserves CRLF in generated documentation", (t) =
     "QUICK_START.md",
     crlf("# Quick start\n<!-- APP_REGISTRY_START -->\n<!-- APP_REGISTRY_END -->\n"),
   );
-  write(root, "apps/_template/README.md", crlf("# Template\n\n## Auth\n\nLocal only.\n\n## Port\n\n8000.\n"));
 
   const registry = {
     schemaVersion: 1,
@@ -134,12 +135,11 @@ test("registry synchronization preserves CRLF in generated documentation", (t) =
     profiles: ["local-first", "llm", "files"],
     apps: [registryEntry("_template", 8000, "template")],
   };
-  const artifacts = expectedAppArtifacts(root, registry);
+  const artifacts = expectedAppArtifacts(root, registry, framework);
 
   for (const relativePath of [
     "docs/apps/README.md",
     "QUICK_START.md",
-    "apps/_template/README.md",
   ]) {
     const content = artifacts.get(path.join(root, relativePath));
     assert.ok(content?.includes("\r\n"), relativePath);
@@ -174,11 +174,16 @@ for (const desktop of [false, true]) {
   for (const profiles of [undefined, ["llm"], ["files"]]) {
     test(`scaffolds ${profiles?.join("+") ?? "local-first"} ${desktop ? "desktop" : "web"} app`, (t) => {
       const root = temporary(t);
-      copySources(path.join(repo, "apps", "_template"), path.join(root, "apps", "_template"));
       addRegistry(root, [registryEntry("_template", 8000, "template")]);
-      write(root, "scripts/package_TEMPLATE.py", readFileSync(path.join(repo, "scripts/package_TEMPLATE.py"), "utf8"));
       write(root, "package.json", JSON.stringify({ scripts: {} }));
-      const result = createPoc({ repo: root, slug: "synthetic-test", port: 8123, desktop, profiles });
+      const result = createPoc({
+        repo: root,
+        frameworkRepo: framework,
+        slug: "synthetic-test",
+        port: 8123,
+        desktop,
+        profiles,
+      });
       const app = path.join(root, "apps", "synthetic-test");
       const pkg = JSON.parse(readFileSync(path.join(app, "frontend/package.json"), "utf8"));
       const hasLlm = profiles?.includes("llm") ?? false;
@@ -240,16 +245,17 @@ for (const desktop of [false, true]) {
         assert.deepEqual(capability.permissions, ["core:window:allow-set-theme"]);
         assert.deepEqual(capability.remote.urls, ["http://127.0.0.1:*"]);
       }
-      assert.throws(() => createPoc({ repo: root, slug: "synthetic-test" }), /already exists/);
+      assert.throws(
+        () => createPoc({ repo: root, frameworkRepo: framework, slug: "synthetic-test" }),
+        /already exists/,
+      );
     });
   }
 }
 
 test("a failed standard validation rolls back the scaffold and synchronized files", (t) => {
   const root = temporary(t);
-  copySources(path.join(repo, "apps", "_template"), path.join(root, "apps", "_template"));
   addRegistry(root, [registryEntry("_template", 8000, "template")]);
-  write(root, "scripts/package_TEMPLATE.py", readFileSync(path.join(repo, "scripts/package_TEMPLATE.py"), "utf8"));
   write(root, "package.json", JSON.stringify({ scripts: {} }));
   const registryFile = path.join(root, "scripts/apps.json");
   const preservedFiles = [
@@ -257,14 +263,15 @@ test("a failed standard validation rolls back the scaffold and synchronized file
     path.join(root, "package.json"),
     path.join(root, "docs/apps/README.md"),
     path.join(root, "QUICK_START.md"),
-    path.join(root, "apps/_template/README.md"),
-    path.join(root, "apps/_template/frontend/src/locales/fr.json"),
+    path.join(framework, "apps/_template/README.md"),
+    path.join(framework, "apps/_template/frontend/src/locales/fr.json"),
   ];
   const originalContents = preservedFiles.map((file) => readFileSync(file));
 
   assert.throws(
     () => createPoc({
       repo: root,
+      frameworkRepo: framework,
       slug: "synthetic-failure",
       validate: () => { throw new Error("synthetic standard failure"); },
     }),
@@ -280,13 +287,12 @@ test("a failed standard validation rolls back the scaffold and synchronized file
 
 test("validates slugs and port collisions without modifying the repository", (t) => {
   const root = temporary(t);
-  write(root, "apps/_template/README.md");
   addRegistry(root, [registryEntry("_template", 8000, "template"), registryEntry("occupied", 8001)]);
   assert.equal(resolvePort(root), 8002);
   assert.throws(() => resolvePort(root, 8001), /assigned/);
   assert.throws(() => resolvePort(root, 65530), /Invalid port/);
-  assert.throws(() => createPoc({ repo: root, slug: "../unsafe" }), /kebab-case/);
-  assert.deepEqual(createPoc({ repo: root, slug: "safe", dryRun: true }),
+  assert.throws(() => createPoc({ repo: root, frameworkRepo: framework, slug: "../unsafe" }), /kebab-case/);
+  assert.deepEqual(createPoc({ repo: root, frameworkRepo: framework, slug: "safe", dryRun: true }),
     { slug: "safe", port: 8002, desktop: false, profiles: ["local-first"] });
   assert.equal(existsSync(path.join(root, "apps", "safe")), false);
 });

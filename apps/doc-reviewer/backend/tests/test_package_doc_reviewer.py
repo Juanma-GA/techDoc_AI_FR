@@ -91,13 +91,16 @@ def test_zip_without_ui_is_refused(pkg: ModuleType, tmp_path: Path) -> None:
     pkg._assert_zip_has_ui(archive, "doc-reviewer-v1")
 
 
-def test_shipped_files_exclude_tests_and_client_pdfs(pkg: ModuleType) -> None:
+def test_shipped_files_exclude_client_pdfs_but_include_demo_pdfs(pkg: ModuleType) -> None:
     assert pkg._should_skip(Path("apps/doc-reviewer/79-30-02-01_test_erreur.pdf"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/dev_tools/manual_verification/outputs/original.pdf"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/dev_tools/manual_verification/run_manual_verification.bat"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/tests/test_health.py"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/data/doc-reviewer.db"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/.env"))
+    assert not pkg._should_skip(Path("apps/doc-reviewer/frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf"))
+    assert not pkg._should_skip(Path("apps/doc-reviewer/frontend/dist/demo/DEMO_CMM_PDF_anonyme.pdf"))
+    assert pkg._should_skip(Path("apps/doc-reviewer/frontend/public/docs/client.pdf"))
     assert not pkg._should_skip(Path("apps/doc-reviewer/frontend/dist/index.html"))
     assert not pkg._should_skip(Path("apps/doc-reviewer/backend/requirements.lock.txt"))
     assert not pkg._should_skip(Path("apps/doc-reviewer/backend/.env.example"))

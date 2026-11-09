@@ -20,10 +20,18 @@ def _multipage_pdf(pages: list[str]) -> bytes:
     return content
 
 
-def _create(client: TestClient, reference: bytes, comparison: bytes) -> dict:
+def _create(
+    client: TestClient,
+    reference: bytes,
+    comparison: bytes,
+    page_similarity_threshold: int | None = None,
+) -> dict:
+    data = {"reference_index": "0"}
+    if page_similarity_threshold is not None:
+        data["page_similarity_threshold"] = str(page_similarity_threshold)
     response = client.post(
         "/api/v1/comparisons",
-        data={"reference_index": "0"},
+        data=data,
         files=[
             ("files", ("reference.pdf", reference, "application/pdf")),
             ("files", ("revision.pdf", comparison, "application/pdf")),
@@ -110,6 +118,54 @@ def test_replaced_pages_below_similarity_threshold_remain_unmatched(
         "comparison_only",
     }
     assert comparison["changes"] == []
+
+
+def test_page_similarity_threshold_changes_page_matching(client: TestClient) -> None:
+    shared_text = "Rotor assembly"
+    reference = _multipage_pdf([shared_text + " v1"])
+    comparison = _multipage_pdf([shared_text + " v2"])
+
+    permissive_result = _create(
+        client,
+        reference,
+        comparison,
+        page_similarity_threshold=50,
+    )
+    strict_result = _create(
+        client,
+        reference,
+        comparison,
+        page_similarity_threshold=99,
+    )
+
+    permissive_alignment = permissive_result["report"]["comparisons"][0]["page_alignment"]
+    strict_alignment = strict_result["report"]["comparisons"][0]["page_alignment"]
+    assert len(permissive_alignment) == 1
+    assert permissive_alignment[0]["status"] == "changed"
+    assert {row["status"] for row in strict_alignment} == {
+        "reference_only",
+        "comparison_only",
+    }
+
+
+def test_page_similarity_threshold_rejects_values_outside_supported_range(
+    client: TestClient,
+) -> None:
+    reference = _multipage_pdf(["Reference page"])
+    comparison = _multipage_pdf(["Comparison page"])
+    for threshold in (49, 100):
+        response = client.post(
+            "/api/v1/comparisons",
+            data={
+                "reference_index": "0",
+                "page_similarity_threshold": str(threshold),
+            },
+            files=[
+                ("files", ("reference.pdf", reference, "application/pdf")),
+                ("files", ("revision.pdf", comparison, "application/pdf")),
+            ],
+        )
+        assert response.status_code == 422
 
 
 def test_page_text_alignment_keeps_inserted_pages_as_slots_and_renders_png(

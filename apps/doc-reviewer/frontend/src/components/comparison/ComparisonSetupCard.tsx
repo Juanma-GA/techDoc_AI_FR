@@ -1,4 +1,4 @@
-import { Button, useDemoMode } from "@internal/ui";
+import { Button, Tooltip, useDemoMode } from "@internal/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,7 +6,11 @@ import { loadDemoComparisonPdfs } from "../../lib/demoPdf";
 import { PdfUploadZone } from "../upload/PdfUploadZone";
 
 type Props = {
-  onCompare: (files: File[], referenceIndex: number) => void;
+  onCompare: (
+    files: File[],
+    referenceIndex: number,
+    pageSimilarityThreshold: number,
+  ) => void;
   isCreating: boolean;
   createError: string | null;
 };
@@ -16,6 +20,7 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
   const { mode, isReady } = useDemoMode();
   const [files, setFiles] = useState<File[]>([]);
   const [referenceIndex, setReferenceIndex] = useState(0);
+  const [pageSimilarityThreshold, setPageSimilarityThreshold] = useState(85);
   const [draftError, setDraftError] = useState("");
   const [demoLoading, setDemoLoading] = useState(false);
   const isBusy = isCreating || demoLoading;
@@ -128,6 +133,48 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
             </div>
           </div>
         ) : null}
+        <details className="collapsible">
+          <summary className="cursor-pointer text-sm font-medium text-fg-dim">
+            {t("comparison.advancedSettings")}
+          </summary>
+          <div className="mt-3 space-y-3 rounded-md border border-md bg-card p-4">
+            <div className="flex items-center gap-2">
+              <label className="label" htmlFor="comparison-page-similarity-threshold">
+                {t("comparison.pageSimilarityThreshold")}
+              </label>
+              <Tooltip content={t("comparison.pageSimilarityHint")}>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  aria-label={t("comparison.pageSimilarityHelp")}
+                >
+                  ?
+                </button>
+              </Tooltip>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="comparison-page-similarity-threshold"
+                type="range"
+                min={50}
+                max={99}
+                step={1}
+                value={pageSimilarityThreshold}
+                disabled={isBusy}
+                className="min-w-0 flex-1"
+                aria-valuetext={`${pageSimilarityThreshold}%`}
+                onChange={(event) => setPageSimilarityThreshold(Number(event.target.value))}
+              />
+              <output
+                htmlFor="comparison-page-similarity-threshold"
+                className="label tabular-nums"
+                aria-live="polite"
+              >
+                {pageSimilarityThreshold}%
+              </output>
+            </div>
+          </div>
+        </details>
         <div className="space-y-3 border-t border-md pt-4">
           <p className="hint">{t("comparison.retention")}</p>
           {createError ? <p className="error" role="alert">{createError}</p> : null}
@@ -135,7 +182,7 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
             type="button"
             className="btn primary"
             disabled={files.length < 2 || isBusy}
-            onClick={() => onCompare(files, referenceIndex)}
+            onClick={() => onCompare(files, referenceIndex, pageSimilarityThreshold)}
           >
             {isCreating ? t("comparison.working") : t("comparison.compareButton")}
           </button>

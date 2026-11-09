@@ -29,15 +29,22 @@ type DmrlReviewProps = {
 
 function MatchBadge({ row }: { row: DmrlRow }) {
   const { t } = useTranslation();
-  if (!row.matched) return <Badge variant="warning">{t("migration.match.notFound")}</Badge>;
-  if (row.match_rank === "exact")
-    return <Badge variant="success" className="whitespace-nowrap">
-      {t("migration.match.exact", { page: row.page ?? "?" })}
-    </Badge>;
-  return (
-    <Badge variant="warning" title={row.matched_text} className="whitespace-nowrap">
-      {t(`migration.match.${row.match_rank || "contains"}`)}
+  const badge = row.type_conflict || row.type_issue ? (
+    <Badge variant="warning" className="whitespace-nowrap">
+      {t("migration.match.infoCodeReview")}
     </Badge>
+  ) : !row.matched ? (
+    <Badge variant="warning">{t("migration.match.notFound")}</Badge>
+  ) : row.match_rank === "exact" ? (
+    <Badge variant="success" className="whitespace-nowrap">
+      {t("migration.match.exact", { page: row.page ?? "?" })}
+    </Badge>
+  ) : null;
+
+  return (
+    <span className="min-w-0" aria-hidden={badge === null}>
+      {badge}
+    </span>
   );
 }
 
@@ -58,11 +65,9 @@ export function DmrlReview({
   const dmRows = rows.filter((row) => !row.is_pm_title);
   const missingRows = dmRows.filter((row) => !row.matched);
   const missingCount = missingRows.length;
-  const uncertainCount = dmRows.filter(
-    (row) => row.matched && row.match_rank !== "exact",
-  ).length;
   const pmTitleCount = rows.length - dmRows.length;
   const typeReviewRows = dmRows.filter((row) => row.type_conflict || row.type_issue);
+  const typeIssueCount = typeReviewRows.length;
   const unresolvedTypeCount = typeReviewRows.filter((row) => !row.dm_type).length;
 
   return (
@@ -73,7 +78,7 @@ export function DmrlReview({
         {t("migration.dmrl.help")}{" "}
         {t("migration.dmrl.counts", {
           missing: missingCount,
-          uncertain: uncertainCount,
+          typeIssues: typeIssueCount,
           pmTitles: pmTitleCount,
         })}
       </p>

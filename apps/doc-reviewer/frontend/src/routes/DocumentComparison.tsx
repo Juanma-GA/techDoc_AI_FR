@@ -34,8 +34,15 @@ export function DocumentComparison() {
     },
   });
   const create = useMutation({
-    mutationFn: ({ files, referenceIndex }: { files: File[]; referenceIndex: number }) =>
-      comparisonApi.create(files, referenceIndex),
+    mutationFn: ({
+      files,
+      referenceIndex,
+      pageSimilarityThreshold,
+    }: {
+      files: File[];
+      referenceIndex: number;
+      pageSimilarityThreshold: number;
+    }) => comparisonApi.create(files, referenceIndex, pageSimilarityThreshold),
     onSuccess: (result) => {
       setFormVersion((version) => version + 1);
       setSelectedId(result.id);
@@ -78,7 +85,9 @@ export function DocumentComparison() {
       <div className="grid gap-6 lg:grid-cols-2">
         <ComparisonSetupCard
           key={formVersion}
-          onCompare={(files, referenceIndex) => create.mutate({ files, referenceIndex })}
+          onCompare={(files, referenceIndex, pageSimilarityThreshold) =>
+            create.mutate({ files, referenceIndex, pageSimilarityThreshold })
+          }
           isCreating={create.isPending}
           createError={create.isError ? t("comparison.createError", { message: errorMessage(create.error) }) : null}
         />

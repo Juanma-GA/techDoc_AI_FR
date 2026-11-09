@@ -99,7 +99,7 @@ def _create_project(client: TestClient) -> str:
     return r.json()["id"]
 
 
-def _upload_reference(client: TestClient, pid: str, path: Path) -> None:
+def _upload_reference(client: TestClient, pid: str, path: Path) -> dict:
     with path.open("rb") as fh:
         r = client.post(
             f"/api/v1/projects/{pid}/reference",
@@ -107,19 +107,41 @@ def _upload_reference(client: TestClient, pid: str, path: Path) -> None:
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         )
     assert r.status_code == 200, r.text
+    return r.json()
 
 
 def test_mapping_persists_header_rows(client: TestClient, tmp_path: Path) -> None:
     pid = _create_project(client)
-    _upload_reference(client, pid, _make_workbook(tmp_path))
+    uploaded = _upload_reference(client, pid, _make_workbook(tmp_path))
+    assert uploaded["analysis_run_id"]
 
     r = client.put(f"/api/v1/projects/{pid}/reference/mapping",
                    json={"columns": [], "header_rows": {"ATM": 3}})
     assert r.status_code == 200, r.text
     assert r.json()["header_rows"] == {"ATM": 3}
+    assert r.json()["analysis_run_id"]
 
     # GET reference renvoie la ligne persistée.
     assert client.get(f"/api/v1/projects/{pid}/reference").json()["header_rows"] == {"ATM": 3}
+
+
+def test_basl_upload_starts_analysis(client: TestClient, tmp_path: Path) -> None:
+    pid = _create_project(client)
+    path = _make_workbook(tmp_path)
+    with path.open("rb") as fh:
+        response = client.post(
+            f"/api/v1/projects/{pid}/basl",
+            files={
+                "file": (
+                    "basl.xlsx",
+                    fh,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["analysis_run_id"]
 
 
 def test_columns_endpoint_uses_persisted_header_row(client: TestClient, tmp_path: Path) -> None:

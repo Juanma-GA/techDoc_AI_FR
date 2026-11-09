@@ -33,14 +33,22 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/health", h.Health)
 	router.POST("/merge", h.Merge)
 	router.POST("/images-to-pdf", h.ImagesToPDF)
+	router.POST("/extract-images", h.ExtractImages)
+	router.POST("/crop", h.Crop)
 	router.POST("/compress", h.Compress)
+	router.POST("/clean", h.Clean)
+	router.POST("/edit-metadata", h.EditMetadata)
+	router.POST("/protect", h.Protect)
+	router.POST("/change-password", h.ChangePassword)
 	router.POST("/extract", h.Extract)
 	router.POST("/delete", h.Delete)
+	router.POST("/insert", h.Insert)
 	router.POST("/reorder", h.Reorder)
 	router.POST("/rotate", h.Rotate)
 	router.POST("/split", h.Split)
 	router.GET("/split/progress/:jobID", h.SplitProgress)
 	router.POST("/signature", h.Signature)
+	router.POST("/comments", h.Comments)
 }
 
 func (h *PDFHandler) Health(c *gin.Context) {
@@ -105,6 +113,31 @@ func (h *PDFHandler) ImagesToPDF(c *gin.Context) {
 	h.sendPDF(c, output, "images.pdf")
 }
 
+func (h *PDFHandler) ExtractImages(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	upload, err := parseMultipart(c.Request, tempDir, "file", 1)
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) != 1 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez un fichier PDF.")
+		return
+	}
+
+	output := filepath.Join(tempDir, "extracted-images.zip")
+	if err := h.service.ExtractImages(c.Request.Context(), upload.files[0].path, output); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	sendFile(c, output, "extracted-images.zip", "application/zip")
+}
+
 func (h *PDFHandler) Compress(c *gin.Context) {
 	tempDir, ok := createWorkspace(c)
 	if !ok {
@@ -158,6 +191,49 @@ func (h *PDFHandler) Delete(c *gin.Context) {
 		return
 	}
 	h.sendPDF(c, output, "trimmed.pdf")
+}
+
+func (h *PDFHandler) Insert(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	// files[0] is the target document (B), files[1] the source of the inserted pages (A).
+	upload, err := parseMultipart(c.Request, tempDir, "files", 0, "pages", "after")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) != 2 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez le PDF de destination puis le PDF source.")
+		return
+	}
+	selection, err := optionalSingleField(upload.fields, "pages")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	rawAfter, err := singleField(upload.fields, "after")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	after, err := strconv.Atoi(rawAfter)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "La position d'insertion est invalide.")
+		return
+	}
+
+	output := filepath.Join(tempDir, "inserted.pdf")
+	if err := h.service.InsertPages(
+		c.Request.Context(), upload.files[0].path, upload.files[1].path, output, selection, after,
+	); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	h.sendPDF(c, output, "inserted.pdf")
 }
 
 func (h *PDFHandler) Reorder(c *gin.Context) {
@@ -305,6 +381,10 @@ func (h *PDFHandler) writeServiceError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, services.ErrUnsupportedSignatureText) {
 		writeError(c, http.StatusBadRequest, "Le nom ou la date contient un caractère que le PDF ne peut pas afficher.")
+		return
+	}
+	if errors.Is(err, services.ErrNoImages) {
+		writeError(c, http.StatusUnprocessableEntity, "Le PDF ne contient aucune image à extraire.")
 		return
 	}
 	if errors.Is(err, services.ErrInvalidInput) {

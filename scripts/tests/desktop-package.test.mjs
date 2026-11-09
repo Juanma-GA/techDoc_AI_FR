@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { packageDesktop } from "../package_pdf_toolkit_desktop.mjs";
+import { buildTauri, packageDesktop } from "../package_pdf_toolkit_desktop.mjs";
 
 function fixture(t) {
   const app = mkdtempSync(path.join(tmpdir(), "desktop-package-test-"));
@@ -24,6 +24,26 @@ function fixture(t) {
   };
   return { app, installer, build };
 }
+
+test("desktop build cleans its dedicated Cargo target before building Tauri", (t) => {
+  const { app } = fixture(t);
+  const frontend = path.join(app, "frontend");
+  mkdirSync(path.join(frontend, "node_modules"));
+  const commands = [];
+
+  buildTauri(app, (command, args, cwd, env) => commands.push({ command, args, cwd, env }));
+
+  assert.deepEqual(commands.map(({ command, args, cwd }) => ({ command, args, cwd })), [
+    { command: "cargo", args: ["clean"], cwd: path.join(frontend, "src-tauri") },
+    {
+      command: "pnpm",
+      args: ["tauri:build", "--bundles", "nsis", "--target", "x86_64-pc-windows-msvc", "--ci", "--", "--locked"],
+      cwd: frontend,
+    },
+  ]);
+  assert.equal(commands[0].env.CARGO_TARGET_DIR, path.join(app, "dist", "tauri"));
+  assert.equal(commands[1].env.CARGO_TARGET_DIR, path.join(app, "dist", "tauri"));
+});
 
 test("desktop ZIP contains only the generated setup and repeated packages preserve earlier ZIPs", {
   skip: process.platform !== "win32",

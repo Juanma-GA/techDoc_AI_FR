@@ -3,6 +3,8 @@ import { create } from "zustand";
 export type ChatBubble = { role: "user" | "assistant" | "system"; content: string };
 
 type ChatState = {
+  draft: string;
+  setDraft: (draft: string) => void;
   currentSessionId: string | null;
   pendingNew: boolean;
   scopeProjectIds: string[];
@@ -30,14 +32,16 @@ function patchLastAssistant(messages: ChatBubble[], update: (content: string) =>
 }
 
 export const useChatStore = create<ChatState>((set) => ({
+  draft: "",
+  setDraft: (draft) => set({ draft }),
   currentSessionId: null,
   pendingNew: false,
   scopeProjectIds: [],
   messages: [],
   streaming: false,
   setScope: (ids) => set({ scopeProjectIds: ids }),
-  startNew: () => set({ currentSessionId: null, pendingNew: true, messages: [] }),
-  selectSession: (id, messages) => set({ currentSessionId: id, pendingNew: false, messages }),
+  startNew: () => set({ draft: "", currentSessionId: null, pendingNew: true, messages: [] }),
+  selectSession: (id, messages) => set({ draft: "", currentSessionId: id, pendingNew: false, messages }),
   setSessionId: (id) => set({ currentSessionId: id, pendingNew: false }),
   pushUser: (content) => set((s) => ({ messages: [...s.messages, { role: "user", content }] })),
   startAssistant: () =>
@@ -45,5 +49,5 @@ export const useChatStore = create<ChatState>((set) => ({
   appendToken: (delta) => set((s) => ({ messages: patchLastAssistant(s.messages, (c) => c + delta) })),
   setAssistant: (content) => set((s) => ({ messages: patchLastAssistant(s.messages, () => content) })),
   endStream: () => set({ streaming: false }),
-  reset: () => set({ currentSessionId: null, pendingNew: false, messages: [], streaming: false }),
+  reset: () => set({ draft: "", currentSessionId: null, pendingNew: false, messages: [], streaming: false }),
 }));

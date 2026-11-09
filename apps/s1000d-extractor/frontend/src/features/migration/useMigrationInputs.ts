@@ -3,13 +3,86 @@ import { useDemoMode } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import {
-  documentsApi, migrationInputsApi, resourcesApi, type ResourceKind, type S1000dIssue,
+  ApiRequestError, documentsApi, migrationInputsApi, resourcesApi, type ResourceKind, type S1000dIssue,
 } from "../../lib/api";
 import { loadDemoMigrationFiles } from "../../lib/demoMigrationFiles";
 import { formatApiError } from "../../lib/migrationUtils";
 import { useMigrationStore } from "./useMigrationStore";
 
 const resourceKinds = ["dmrl", "cir", "brex_rules", "dm_header"] as const;
+
+async function loadSavedFile(
+  kind: "document" | ResourceKind,
+  filename: string,
+): Promise<File | null> {
+  try {
+    return await migrationInputsApi.file(kind, filename);
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.code === "SAVED_INPUT_NOT_FOUND") return null;
+    throw error;
+  }
+}
+
+export async function cacheLastMigrationInputs(mode: "normal" | "demo"): Promise<void> {
+  const current = useMigrationStore.getState();
+  const sameMode = current.mode === mode;
+  let mapping = sameMode ? current.mapping : null;
+  let file = sameMode ? current.file : null;
+  const resources: Partial<Record<ResourceKind, File>> = sameMode ? { ...current.resources } : {};
+  const removedResources = sameMode ? current.removedResources : [];
+
+  if (mode === "demo") {
+    if (!sameMode || !current.ready) {
+      const demoFiles = await loadDemoMigrationFiles();
+      file ??= demoFiles.document;
+      Object.assign(resources, {
+        dmrl: demoFiles.dmrl,
+        dm_header: demoFiles.dm_header,
+        ...resources,
+      });
+    }
+    mapping = null;
+  } else {
+    mapping ??= await migrationInputsApi.read();
+    const documentWasCleared = sameMode && current.mapping !== null &&
+      Object.prototype.hasOwnProperty.call(current.mapping.files, "document") &&
+      current.mapping.files.document === undefined;
+    if (!file && !documentWasCleared && mapping.files.document) {
+      file = await loadSavedFile("document", mapping.files.document.filename) ?? null;
+    }
+
+    for (const kind of resourceKinds) {
+      if (resources[kind] || removedResources.includes(kind)) continue;
+      const saved = mapping.files[kind];
+      if (saved) {
+        const resource = await loadSavedFile(kind, saved.filename);
+        if (resource) resources[kind] = resource;
+      }
+    }
+  }
+
+  const issue = sameMode
+    ? current.issue
+    : mode === "demo" ? "4.1" : mapping?.issue === "5.0" ? "4.2" : mapping?.issue ?? "4.2";
+  const brexId = sameMode ? current.brexId : mode === "demo" ? null : mapping?.brex_id ?? null;
+  const cachedMapping = mapping
+    ? { ...mapping, issue, brex_id: brexId, files: {} }
+    : null;
+
+  useMigrationStore.getState().patch({
+    mode,
+    ready: true,
+    loading: false,
+    error: null,
+    file,
+    resources,
+    mapping: cachedMapping,
+    issue,
+    brexId,
+    ...(sameMode ? {} : { currentDocId: null, uploaded: null, removedResources: [] }),
+  });
+}
+
 export function useMigrationInputs() {
   const { mode, isReady } = useDemoMode();
   const { t } = useTranslation();
@@ -116,6 +189,7 @@ export function useMigrationInputs() {
   return {
     ...draft, mode, loading: draft.loading || !isReady,
     selectDocument, selectResource, upload,
+    cacheLastFiles: () => cacheLastMigrationInputs(mode),
     setIssue: (issue: S1000dIssue) => draft.patch({ issue }),
     setBrexId: (brexId: string | null) => draft.patch({ brexId }),
   };

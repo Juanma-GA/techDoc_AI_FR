@@ -32,6 +32,8 @@ def test_page_key_normalization_unifies_the_three_sources() -> None:
     assert revision.normalize_page_key("ROR Page 1") == "ROR 1"
     assert revision.normalize_page_key("RR-1") == "ROR 1"
     assert revision.normalize_page_key("LEP-1") == "LEP 1"
+    assert revision.normalize_page_key("Page RR-1") == "ROR 1"
+    assert revision.normalize_page_key("Page LEP-1") == "LEP 1"
     assert revision.normalize_page_key("INTRO-1") == "INTRO 1"
     assert revision.normalize_page_key("TC-1") == "TC 1"
     assert revision.normalize_page_key("Page 401") == "401"

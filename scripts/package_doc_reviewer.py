@@ -23,8 +23,9 @@ dependency is installed with `pip --require-hashes`.
 Excluded everywhere:
     - `.venv/`, `__pycache__/`, `*.pyc`     — runtime venv & bytecode
     - `data/`                               — local SQLite + uploaded PDFs (user state)
-    - `tests/`, `*.pdf`                     — test suites and sample documents (may be
-                                              client-proprietary: never distributed)
+    - `tests/`, `*.pdf`                     — except the anonymized PDFs under
+                                              `frontend/public/demo/` and their built
+                                              copies under `frontend/dist/demo/`
     - `node_modules/`, `.cache/`            — package manager + script caches
     - `.git/`, `.claude/`, IDE / cache dirs
 
@@ -70,9 +71,13 @@ _EXCLUDED_DIRS = {
     # Manual verification scripts write client documents to their `outputs/`.
     "dev_tools",
 }
-# `.pdf`: no PDF is needed at runtime; the PDFs in the repository are client
-# document samples that must never leave with the ZIP.
+# `.pdf`: repository samples are excluded except the anonymized demo assets
+# served by the frontend and their copies in the Vite build.
 _EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".log", ".zip", ".pdf"}
+_DEMO_PDF_ROOTS = {
+    ("apps", "doc-reviewer", "frontend", "public", "demo"),
+    ("apps", "doc-reviewer", "frontend", "dist", "demo"),
+}
 
 _UI_INDEX = Path("apps") / "doc-reviewer" / "frontend" / "dist" / "index.html"
 
@@ -80,7 +85,14 @@ _UI_INDEX = Path("apps") / "doc-reviewer" / "frontend" / "dist" / "index.html"
 def _should_skip(rel: Path) -> bool:
     if any(part in _EXCLUDED_DIRS for part in rel.parts):
         return True
-    if rel.suffix.lower() in _EXCLUDED_SUFFIXES:
+    is_demo_pdf = (
+        rel.suffix.lower() == ".pdf"
+        and any(
+            tuple(part.lower() for part in rel.parts[: len(root)]) == root
+            for root in _DEMO_PDF_ROOTS
+        )
+    )
+    if rel.suffix.lower() in _EXCLUDED_SUFFIXES and not is_demo_pdf:
         return True
     if rel.name.startswith(".") and rel.name not in {".env.example"}:
         return True
@@ -444,12 +456,19 @@ def _walk_sources(repo: Path, source_paths: list[str]) -> list[tuple[Path, Path]
     out: list[tuple[Path, Path]] = []
     for src_rel in source_paths:
         src_root = repo / src_rel
+        archive_root = Path(src_rel)
+        if src_rel == "design-tokens":
+            src_root = repo / "framework" / src_rel
+            if not src_root.is_dir():
+                raise PackagingError(
+                    "Framework design tokens are missing; initialize the framework submodule."
+                )
         if not src_root.is_dir():
             raise PackagingError(f"missing source directory: {src_rel}")
         for path in sorted(src_root.rglob("*")):
             if not path.is_file():
                 continue
-            rel = path.relative_to(repo)
+            rel = archive_root / path.relative_to(src_root)
             if _should_skip(rel):
                 continue
             out.append((path, rel))

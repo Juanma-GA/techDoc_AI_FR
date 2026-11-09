@@ -7,7 +7,7 @@ describe("comparison multipart upload", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sends every PDF and the selected reference index as multipart form data", async () => {
+  it("sends every PDF, the reference index, and the page threshold as multipart form data", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(JSON.stringify({ id: "comparison-id" })),
@@ -16,7 +16,7 @@ describe("comparison multipart upload", () => {
     const first = new File(["%PDF-first"], "first.pdf", { type: "application/pdf" });
     const second = new File(["%PDF-second"], "second.pdf", { type: "application/pdf" });
 
-    await comparisonApi.create([first, second], 1);
+    await comparisonApi.create([first, second], 1, 93);
 
     const call = fetchMock.mock.calls[0];
     if (!call) throw new Error("Expected the comparison request to call fetch.");
@@ -28,5 +28,6 @@ describe("comparison multipart upload", () => {
     const body = init?.body as FormData;
     expect(body.getAll("files")).toHaveLength(2);
     expect(body.get("reference_index")).toBe("1");
+    expect(body.get("page_similarity_threshold")).toBe("93");
   });
 });

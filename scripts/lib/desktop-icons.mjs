@@ -3,7 +3,10 @@ import path from "node:path";
 import { run } from "./frontend-build.mjs";
 
 export function prepareDesktopIcons(frontend, repo) {
-  const { color } = JSON.parse(readFileSync(path.join(repo, "design-tokens", "tokens.json"), "utf8"));
+  const { color } = JSON.parse(readFileSync(
+    path.join(repo, "framework", "design-tokens", "tokens.json"),
+    "utf8",
+  ));
   const icons = path.join(frontend, "src-tauri", "icons");
   mkdirSync(icons, { recursive: true });
   const source = path.join(icons, "source.svg");

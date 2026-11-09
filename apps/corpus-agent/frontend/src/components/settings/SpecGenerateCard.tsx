@@ -1,3 +1,4 @@
+import { FileDropzone } from "@internal/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,8 +25,10 @@ export function SpecGenerateCard() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [filename, setFilename] = useState("");
 
   async function onPick(f: File | null) {
+    setFilename(f?.name ?? "");
     setProposals(null);
     setSelected(new Set());
     setMsg("");
@@ -95,11 +98,13 @@ export function SpecGenerateCard() {
       <h2 className="card-title">{t("settings.specGenTitle")}</h2>
       <div className="label">{t("settings.specGenIntro")}</div>
 
-      <input
-        type="file"
+      <FileDropzone
         accept=".docx,.doc,.pdf,.txt,.md,.xml"
+        multiple={false}
         disabled={busy}
-        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+        label={t("settings.chooseReference")}
+        description={filename || t("settings.referenceFormats")}
+        onFiles={(files) => void onPick(files[0] ?? null)}
       />
       {busy && !proposals && <div className="label">{t("settings.specGenAnalyzing")}</div>}
 
@@ -123,7 +128,7 @@ export function SpecGenerateCard() {
                   <td><input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} /></td>
                   <td>{p.label}</td>
                   <td>{p.consigne}</td>
-                  <td><span className={`badge ${severityClass(p.severity)}`}>{p.severity}</span></td>
+                  <td><span className={`badge ${severityClass(p.severity)}`}>{t(p.severity === "high" ? "redacteur.sevHigh" : p.severity === "medium" ? "redacteur.sevMedium" : "redacteur.sevLow")}</span></td>
                 </tr>
               ))}
             </tbody>

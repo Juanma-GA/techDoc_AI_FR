@@ -143,10 +143,18 @@ class ReviewPassageOut(OutputModel):
     id: str
     node_id: str
     row: int | None
+    column: int | None = None
     start: int
     end: int
     source_text: str
     text: str
+    source_marker: str | None = None
+    marker_key: str | None = None
+    detector_title: str | None = None
+    source_cells: list[str] | None = None
+    source_labels: list[str] | None = None
+    anchor_texts: list[str] = Field(default_factory=list)
+    anchor_rects: list[list[float]] = Field(default_factory=list)
     page: int | None
     kind: str
     role: str = "content"
@@ -154,20 +162,26 @@ class ReviewPassageOut(OutputModel):
     suggested: str
     rule: str
     decision: str | None
+    target_tag: str | None = None
+    tag_options: dict[str, list[str]] = Field(default_factory=dict)
+    template_source_dm_id: str | None = None
 
 
 class ProcedureReviewOut(OutputModel):
     fingerprint: str
     rules_revision: int = 0
     status: Literal["pending", "reviewed", "skipped", "stale"]
+    partial: bool = False
     passages: list[ReviewPassageOut]
     position: ReaderPositionOut
     saved_at: str | None
+    template_source_dm_id: str | None = None
 
 
 class PreliminaryStateOut(OutputModel):
     revision: int
     active_dm_id: str | None
+    template_dm_id: str | None = None
     source_format: str
     source_changed: bool
     reviews: dict[str, ProcedureReviewOut]

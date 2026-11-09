@@ -82,10 +82,11 @@ export type ComparisonSynthesis = {
 export const comparisonApi = {
   list: () => api.get<ComparisonListItem[]>("/comparisons"),
   read: (id: string) => api.get<ComparisonDetail>(`/comparisons/${id}`),
-  create: (files: File[], referenceIndex: number) => {
+  create: (files: File[], referenceIndex: number, pageSimilarityThreshold = 85) => {
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
     formData.append("reference_index", String(referenceIndex));
+    formData.append("page_similarity_threshold", String(pageSimilarityThreshold));
     return api.upload<ComparisonDetail>("/comparisons", formData);
   },
   synthesize: (id: string, language: "fr" | "en") =>

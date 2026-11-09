@@ -47,7 +47,7 @@ Validation empirique sur un template métier de dossier technique (4 slides,
 > extraction Python déterministe → analyse Mistral en mode JSON (avec
 > `response_format`) → cache du résultat sur l'entité concernée.
 > Graceful degradation obligatoire : la feature doit fonctionner (avec
-> capacités réduites) sans clé Mistral. Voir [ADR 0004](docs/adr/0004-llm-native-document-analysis.md).
+> capacités réduites) sans clé Mistral. Voir la proposition d'ADR 0004 ci-dessous.
 
 ## Proposition 2 — Section STANDARD_POC.md (sous §6 LLM)
 

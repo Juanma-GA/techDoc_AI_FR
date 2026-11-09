@@ -175,7 +175,6 @@ export function ReorderTool() {
           }}
           onError={setError}
           label={t("files.dropLabel")}
-          description={t("reorder.dropDescription")}
         />
         {file ? (
           <div className="selected-file">

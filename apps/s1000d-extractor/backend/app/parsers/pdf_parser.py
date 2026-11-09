@@ -22,11 +22,11 @@ import structlog
 
 from app.core.ir import InlineRun, RawBlock
 from app.core.pdf_overlays import is_large_red_image_cross
+from app.parsers.pdf_table_styles import extract_table_cell_titles, span_is_bold
 
-# Bit 2^4 (=16) du flag span PyMuPDF = gras ; on detecte aussi via le nom.
+# Bit 2^4 (=16) du flag span PyMuPDF = gras.
 _BOLD_FLAG = 1 << 4
 _ITALIC_FLAG = 1 << 1
-_MEDIUM_OR_BOLD_FONT = re.compile(r"(?:^|[-_])(?:md|bd)(?:it)?$")
 _ITALIC_FONT = re.compile(r"(?:^|[-_])(?:lt|md|bd)?it$")
 # En-dessous de ce nombre de caracteres, on considere la page non lisible
 # (scannee) et on la bascule vers l'OCR.
@@ -82,7 +82,7 @@ def _span_run(span: dict, text: str) -> InlineRun:
     flags = int(span.get("flags", 0))
     return InlineRun(
         text=text,
-        bold=bool(flags & _BOLD_FLAG) or "bold" in font or bool(_MEDIUM_OR_BOLD_FONT.search(font)),
+        bold=span_is_bold(span),
         italic=bool(flags & _ITALIC_FLAG) or "italic" in font or "oblique" in font
         or bool(_ITALIC_FONT.search(font)),
     )
@@ -114,12 +114,11 @@ def _line_runs(spans: list[dict]) -> list[InlineRun]:
 
 
 def _block_is_bold(spans: list[dict]) -> bool:
-    for s in spans:
-        if int(s.get("flags", 0)) & _BOLD_FLAG:
-            return True
-        if "bold" in str(s.get("font", "")).lower():
-            return True
-    return False
+    return any(
+        int(span.get("flags", 0)) & _BOLD_FLAG
+        or "bold" in str(span.get("font", "")).lower()
+        for span in spans
+    )
 
 
 def _image_infos(page: fitz.Page) -> list[dict]:
@@ -231,7 +230,7 @@ def _in_vertical_band(y0: float, y1: float, band: tuple, *, pad: float = 3.0) ->
 
 
 def _table_blocks(
-    page: fitz.Page, page_idx: int, page_height: float | None
+    page: fitz.Page, page_idx: int, page_height: float | None, *, page_width: float | None = None,
 ) -> tuple[list[RawBlock], list[tuple]]:
     """Detecte les tableaux (PyMuPDF `find_tables`) -> RawBlock CALS + bboxes.
 
@@ -248,14 +247,27 @@ def _table_blocks(
         return blocks, bboxes
     for tbl in getattr(found, "tables", []) or []:
         try:
-            rows = [[(c or "").strip() for c in row] for row in tbl.extract()]
+            extracted = tbl.extract()
         except (fitz.FileDataError, RuntimeError, ValueError, OSError) as exc:
             log.warning("pdf_table_extraction_failed", page=page_idx,
                         error_type=type(exc).__name__, exc_info=True)
             continue
-        rows = [r for r in rows if any(r)]
+        table_rows = getattr(tbl, "rows", []) or []
+        rows: list[list[str]] = []
+        cell_bboxes: list[list[list[float] | None]] = []
+        for index, row in enumerate(extracted):
+            cleaned = [(cell or "").strip() for cell in row]
+            if not any(cleaned):
+                continue
+            row_cells = getattr(table_rows[index], "cells", []) if index < len(table_rows) else []
+            rows.append(cleaned)
+            cell_bboxes.append([
+                [round(float(value), 1) for value in cell] if cell is not None else None
+                for cell in row_cells
+            ])
         if not rows:
             continue
+        cell_titles = extract_table_cell_titles(page, rows, cell_bboxes)
         header = None
         names = [n for n in (getattr(getattr(tbl, "header", None), "names", None) or []) if n]
         if names:
@@ -264,6 +276,7 @@ def _table_blocks(
         blocks.append(RawBlock(
             text=" ".join(c for r in rows for c in r),
             page=page_idx, is_table=True, table_rows=rows, table_header=header,
+            table_cell_bboxes=cell_bboxes, table_cell_titles=cell_titles, page_width=page_width,
             y0=round(bbox[1], 1), y1=round(bbox[3], 1), page_height=page_height,
         ))
         bboxes.append(bbox)
@@ -302,9 +315,12 @@ def parse_pdf_pages(
                 if progress_cb:
                     progress_cb(idx, total_pages)
                 continue
+            page_width = None if int(page.rotation) != 0 else round(float(page.rect.width), 1)
             page_height = None if int(page.rotation) != 0 else round(float(page.rect.height), 1)
             stage_started = perf_counter()
-            tbl_blocks, tbl_bboxes = _table_blocks(page, idx, page_height)
+            tbl_blocks, tbl_bboxes = _table_blocks(
+                page, idx, page_height, page_width=page_width,
+            )
             table_detect_ms += (perf_counter() - stage_started) * 1000
             stage_started = perf_counter()
             text_blocks = _page_blocks(page, idx, block_profile)

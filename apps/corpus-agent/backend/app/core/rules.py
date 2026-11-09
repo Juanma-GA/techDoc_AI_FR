@@ -13,6 +13,9 @@ codées ont été retirées. Ce module ne conserve donc que :
   avec `DEFAULT_RULES` pour les clés absentes ; sinon `DEFAULT_RULES`.
 - `save_rules(rules)` écrit `data/rules.json`.
 - `reset_rules()` supprime le fichier → revient aux défauts du code.
+
+The demo checklist uses `rules.demo.json`; normal checklist operations never
+read or modify that file, and demo operations never modify `rules.json`.
 """
 
 from __future__ import annotations
@@ -22,19 +25,30 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from app.config import settings
+from sqlalchemy.orm import Session
 
+from app.config import settings
+from app.core.demo_mode import get_demo_enabled
+from app.db.models import AppConfig
+from app.db.session import SessionLocal
 
 # `storage_dir` est `…/data/storage`, donc on remonte d'un cran pour
 # placer rules.json à côté de la DB SQLite (`…/data/rules.json`).
 _RULES_FILE = Path(settings.storage_dir).parent / "rules.json"
+_DEMO_CHECKLIST_VERSION_KEY = "demo_checklist_version"
+_DEMO_CHECKLIST_VERSION = "1"
+
+
+def _rules_file() -> Path:
+    with SessionLocal() as db:
+        demo = get_demo_enabled(db)
+    return _RULES_FILE.with_name("rules.demo.json") if demo else _RULES_FILE
 
 
 # Liste des types d'anomalie émis par le moteur. Sert de source de vérité pour
-# les agrégats KPI (api/kpis.py) et les filtres de l'UI React. Seule la
-# checklist (règles personnalisées) produit encore des anomalies → un unique
-# type `personnalisee`.
+# les agrégats KPI (api/kpis.py) et les filtres de l'UI React.
 ANOMALY_TYPES: list[str] = [
+    "reference_cross_check",
     "personnalisee",
 ]
 
@@ -53,6 +67,65 @@ DEFAULT_RULES: dict[str, Any] = {
     # Consignes libres ajoutées aux prompts Mistral (contexte de jugement).
     "instructions_libres": "",
 }
+
+
+DEMO_CHECKLIST: list[dict[str, Any]] = [
+    {
+        "id": "demo-safety",
+        "label": "Sécurité des interventions",
+        "consigne": (
+            "Pour chaque intervention présentant un risque, vérifier que les étapes "
+            "préalables de sécurité et de mise en sécurité des énergies sont explicites."
+        ),
+        "severity": "high",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-tooling",
+        "label": "Outillage et calibration",
+        "consigne": (
+            "Vérifier que l'outillage nécessaire est identifié par référence et que "
+            "les exigences de calibration applicables sont précisées."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-parts",
+        "label": "Pièces et consommables",
+        "consigne": (
+            "Vérifier que les pièces et consommables indiquent une référence, une "
+            "quantité, une unité et une condition de remplacement compréhensibles."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-qualification",
+        "label": "Qualification requise",
+        "consigne": (
+            "Vérifier que la qualification requise est indiquée pour chaque tâche "
+            "et cohérente avec l'intervention décrite."
+        ),
+        "severity": "medium",
+        "validated": True,
+        "enabled": True,
+    },
+    {
+        "id": "demo-revision-history",
+        "label": "Traçabilité des révisions",
+        "consigne": (
+            "Vérifier que chaque révision comporte une date, un auteur et une "
+            "description suffisamment claire de la modification."
+        ),
+        "severity": "low",
+        "validated": True,
+        "enabled": True,
+    },
+]
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -81,14 +154,36 @@ def load_rules() -> dict[str, Any]:
     UI qui n'aurait pas exposé toutes les clés.
     """
     defaults = copy.deepcopy(DEFAULT_RULES)
-    if _RULES_FILE.exists():
+    rules_file = _rules_file()
+    if rules_file.exists():
         try:
-            data = json.loads(_RULES_FILE.read_text(encoding="utf-8"))
+            data = json.loads(rules_file.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 return _deep_merge(defaults, data)
         except (json.JSONDecodeError, OSError):
             pass
     return defaults
+
+
+def ensure_demo_checklist(db: Session) -> None:
+    """Initialize the demo checklist once without replacing an existing one."""
+    if not get_demo_enabled(db):
+        return
+
+    marker = db.get(AppConfig, _DEMO_CHECKLIST_VERSION_KEY)
+    if marker is not None and marker.value == _DEMO_CHECKLIST_VERSION:
+        return
+
+    rules = load_rules()
+    if not rules.get("regles_personnalisees"):
+        rules["regles_personnalisees"] = copy.deepcopy(DEMO_CHECKLIST)
+        save_rules(rules)
+
+    if marker is None:
+        db.add(AppConfig(key=_DEMO_CHECKLIST_VERSION_KEY, value=_DEMO_CHECKLIST_VERSION))
+    else:
+        marker.value = _DEMO_CHECKLIST_VERSION
+    db.commit()
 
 
 # Colonnes de référence « builtin » : noms réservés, consommés par les checks
@@ -247,9 +342,10 @@ def basl_column(project: Any, name: str) -> Optional[dict[str, Any]]:
 
 
 def save_rules(rules: dict[str, Any]) -> None:
-    """Écrit le dict de règles dans `data/rules.json`."""
-    _RULES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _RULES_FILE.write_text(
+    """Write rules to the current mode's isolated checklist."""
+    rules_file = _rules_file()
+    rules_file.parent.mkdir(parents=True, exist_ok=True)
+    rules_file.write_text(
         json.dumps(rules, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -257,9 +353,10 @@ def save_rules(rules: dict[str, Any]) -> None:
 
 def reset_rules() -> None:
     """Supprime le fichier override → revient aux défauts du code."""
-    if _RULES_FILE.exists():
-        _RULES_FILE.unlink()
+    rules_file = _rules_file()
+    if rules_file.exists():
+        rules_file.unlink()
 
 
 def is_overridden() -> bool:
-    return _RULES_FILE.exists()
+    return _rules_file().exists()

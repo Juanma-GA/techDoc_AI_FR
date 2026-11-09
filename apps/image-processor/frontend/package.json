@@ -18,6 +18,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@internal/design-tokens": "workspace:*",
+    "@internal/techdoc-brand": "workspace:*",
     "@internal/ui": "workspace:*",
     "@tanstack/react-query": "^5.59.0",
     "i18next": "^23.16.0",

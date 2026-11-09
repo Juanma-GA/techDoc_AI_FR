@@ -17,11 +17,14 @@ import {
   ToastProvider,
   ToastTitle,
   Toaster,
+  useDemoMode,
 } from "@internal/ui";
 import { adminApi, type AdminStatsDto } from "../lib/api";
 import { createConfirmToken } from "../lib/confirmToken";
 import { formatApiError } from "../lib/migrationUtils";
 import { ConfirmButton } from "../components/ConfirmButton";
+import { cacheLastMigrationInputs } from "../features/migration/useMigrationInputs";
+import { useMigrationStore } from "../features/migration/useMigrationStore";
 
 function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -31,7 +34,9 @@ function formatSize(n: number): string {
 
 export function Data() {
   const { t } = useTranslation();
+  const { mode, isReady } = useDemoMode();
   const qc = useQueryClient();
+  const [resetting, setResetting] = useState(false);
   const [feedback, setFeedback] = useState<{
     kind: "success" | "danger";
     text: string;
@@ -43,9 +48,16 @@ export function Data() {
   const stats = statsQuery.data;
 
   const reset = async (scope: "documents" | "all") => {
+    setResetting(true);
     try {
+      if (scope === "documents") await cacheLastMigrationInputs(mode);
       const confirmToken = createConfirmToken();
       const r = await adminApi.reset(scope, confirmToken);
+      if (scope === "documents") {
+        useMigrationStore.getState().patch({ currentDocId: null, uploaded: null });
+      } else {
+        useMigrationStore.getState().reset(mode);
+      }
       const items =
         Object.entries(r.deleted ?? {})
           .map(([k, v]) => `${k}: ${v}`)
@@ -53,10 +65,12 @@ export function Data() {
       setFeedback({ kind: "success", text: t("data.resetSuccess", { items }) });
       void qc.invalidateQueries({ queryKey: ["admin", "stats"] });
       void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
-      window.dispatchEvent(new Event("s1000d-documents-reset"));
+      window.dispatchEvent(new CustomEvent("s1000d-documents-reset", { detail: { scope } }));
     } catch (e) {
       const message = formatApiError(t, e);
       setFeedback({ kind: "danger", text: t("data.resetError", { message }) });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -91,10 +105,12 @@ export function Data() {
             <div className="flex flex-wrap gap-3">
               <ConfirmButton
                 label={t("data.deleteDocuments")}
+                disabled={!isReady || resetting}
                 onConfirm={() => void reset("documents")}
               />
               <ConfirmButton
                 label={t("data.deleteAll")}
+                disabled={!isReady || resetting}
                 onConfirm={() => void reset("all")}
               />
             </div>

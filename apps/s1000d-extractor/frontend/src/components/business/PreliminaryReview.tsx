@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import type { WizardDm } from "../../lib/api";
 import {
-  isReviewable, procedureCategories, reviewDestinations, type PreliminaryState, type ReviewPassage,
+  detectorTitleFor, isReviewable, procedureCategories, reviewDestinations,
+  type PreliminaryState, type ReviewPassage,
 } from "../../lib/preliminaryTypes";
 import { usePreliminaryReview } from "../../lib/usePreliminaryReview";
 import { PreliminaryPassage } from "./PreliminaryPassage";
@@ -30,6 +31,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const [jump, setJump] = useState(0);
   const [readerEpoch, setReaderEpoch] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
+  const [pendingModified, setPendingModified] = useState(false);
   const [filter, setFilter] = useState("all");
   const [restartArmed, setRestartArmed] = useState(false);
   const [reloadArmed, setReloadArmed] = useState(false);
@@ -54,9 +56,23 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     filter === "all" || (filter === "pending"
       ? !passage.decision
       : passage.decision === filter || (!passage.decision && passage.suggested === filter));
+  const filteredPassages = passages
+    .filter((passage) => passage.decision !== "body")
+    .filter(matchesFilter);
   const complete = Object.values(review.state.reviews).every(
     (item) => item.status === "reviewed" || item.status === "skipped",
   );
+  const hasSavedProcedureWork = Object.values(review.state.reviews).some(
+    (item) => item.status === "reviewed" || (item.partial && item.status !== "stale"),
+  ) || pendingModified || Object.keys(review.edits).length > 0;
+  const remainingProcedures = procedures.filter((dm) => {
+    const item = review.state.reviews[dm.dm_id];
+    return !item || item.status === "stale" || (item.status === "pending" && !item.partial);
+  }).length;
+  const skipLabel = !hasSavedProcedureWork ? "skip"
+    : remainingProcedures > 0 ? "skipRemaining" : "skipModified";
+  const skipConfirmLabel = !hasSavedProcedureWork ? "skipConfirm"
+    : remainingProcedures > 0 ? "skipRemainingConfirm" : "skipModifiedConfirm";
 
   const changeProcedure = async (id: string) => {
     if (!await review.flush()) return;
@@ -69,15 +85,20 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     setSelectedId(target.position.selected_id);
     setJump(0);
     setConfirmed(false);
+    setPendingModified(false);
     setRestartArmed(false);
     setSkipArmed(false);
     clearTimeout(skipTimer.current);
   };
   const completeProcedure = async () => {
-    if (!await review.act({ dm_id: active, op: "complete", confirm_empty: confirmed })) return;
+    const completedState = await review.actWithState({
+      dm_id: active, op: "complete", confirm_empty: confirmed,
+    });
+    if (!completedState) return;
+    setPendingModified(false);
     const next = procedures.slice(index + 1).concat(procedures.slice(0, index)).find((dm) => {
       if (dm.dm_id === active) return false;
-      const status = review.state.reviews[dm.dm_id]?.status;
+      const status = completedState.reviews[dm.dm_id]?.status;
       return status !== "reviewed" && status !== "skipped";
     });
     if (next) await changeProcedure(next.dm_id);
@@ -98,26 +119,42 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
     <Card>
       <CardContent className="space-y-4 pt-4">
         <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
           <h2 className="font-display text-lg">{t("preliminary.title")}</h2>
           <div className="ml-auto">
-            <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
-              {t(skipArmed ? "preliminary.skipConfirm" : "preliminary.skip")}
+            <Button variant="secondary" disabled={disabled} onClick={() => void skipReviews()}>
+              {t(`preliminary.${skipArmed ? skipConfirmLabel : skipLabel}`, { count: remainingProcedures })}
             </Button>
           </div>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
           <strong>{t("preliminary.progress", { current: index + 1, total: procedures.length })}</strong>
-          <span>{t(`preliminary.status.${current.status}`)}</span>
+          <span>{t(`preliminary.status.${current.partial && current.status === "pending" ? "partial" : current.status}`)}</span>
           <span role="status" aria-live="polite">{t(`preliminary.${savedLabel}`)}</span>
           {current.saved_at ? <time dateTime={current.saved_at}>{new Date(current.saved_at).toLocaleTimeString()}</time> : null}
         </div>
+        {index === 0 && procedures.length > 1 ? (
+          <p className="text-sm text-fg-dim">{t("preliminary.templateIntro")}</p>
+        ) : null}
+        {current.template_source_dm_id ? (
+          <p role="status" className="text-sm text-fg-dim">
+            {current.status === "reviewed"
+              ? t("preliminary.templateApplied")
+              : t("preliminary.templatePartial")}
+          </p>
+        ) : null}
         {review.error ? (
           <div role="alert" className="border border-danger rounded-sm p-3 space-y-3">
             <p>{t("preliminary.saveFailed")}: {review.error}</p>
+            {review.validationPassageId ? (
+              <p>{t("preliminary.correctInvalidDecision")}</p>
+            ) : null}
             <div className="flex gap-3 flex-wrap">
-              <Button variant="secondary" disabled={review.saving} onClick={() => void review.retry()}>
-                {t("preliminary.retry")}
-              </Button>
+              {!review.validationPassageId ? (
+                <Button variant="secondary" disabled={review.saving} onClick={() => void review.retry()}>
+                  {t("preliminary.retry")}
+                </Button>
+              ) : null}
               <Button variant="secondary" disabled={review.saving} onClick={() => {
                 if (!reloadArmed) {
                   setReloadArmed(true);
@@ -130,6 +167,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                     setSelectedId(next.reviews[next.active_dm_id]?.position.selected_id ?? null);
                     setJump(0);
                     setConfirmed(false);
+                    setPendingModified(false);
                     setReaderEpoch((value) => value + 1);
                   });
                 }
@@ -160,7 +198,11 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
               } else {
                 setRestartArmed(false);
                 void review.act({ dm_id: active, op: "restart" }).then((saved) => {
-                  if (saved) { setSelectedId(null); setJump(0); }
+                  if (saved) {
+                    setSelectedId(null);
+                    setJump(0);
+                    setPendingModified(false);
+                  }
                 });
               }
             }}>{t(restartArmed ? "preliminary.confirmAgain" : "preliminary.restart")}</Button>
@@ -178,44 +220,69 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                 sourceFormat={review.state.source_format} selectedId={selectedId} jump={jump}
                 onPosition={(value) => review.position(active, value)} />
               <section className="min-w-0 space-y-3" aria-label={t("preliminary.classification")}>
-                <label className="block">
-                  <span>{t("preliminary.filter")}</span>
-                  <SelectMenu label={t("preliminary.filter")} value={filter}
-                    options={["all", "pending", ...reviewDestinations].map((value) => ({
-                      value, label: t(`preliminary.category.${value}`),
-                    }))} onValueChange={setFilter} />
-                </label>
-                <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,14rem)] sm:items-end">
+                  <div>
+                    <h3 className="font-semibold">{t("preliminary.classification")}</h3>
+                    <p className="text-sm text-fg-dim">
+                      {t("preliminary.remaining", { count: undecided, total: passages.length })}
+                    </p>
+                  </div>
+                  <label className="block">
+                    <span>{t("preliminary.filter")}</span>
+                    <SelectMenu label={t("preliminary.filter")} value={filter}
+                      options={["all", "pending", ...reviewDestinations].map((value) => ({
+                        value, label: t(`preliminary.category.${value}`),
+                      }))} onValueChange={setFilter} />
+                  </label>
+                </div>
                 <div data-testid="passage-list" className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
-                  {passages.filter(matchesFilter)
-                    .map((passage) => (
+                  {filteredPassages.map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}
                         text={review.edits[passage.id] ?? passage.text}
-                        disabled={disabled} editDisabled={busy} selected={selectedId === passage.id}
+                        detectorTitle={review.detectorEdits[passage.id] ?? detectorTitleFor(passage)}
+                        isTemplate={index === 0}
+                        disabled={busy || review.saving || Boolean(
+                          review.error && review.validationPassageId !== passage.id,
+                        )}
+                        editDisabled={busy || review.saving || Boolean(
+                          review.error && review.validationPassageId !== passage.id,
+                        )}
+                        selected={selectedId === passage.id || review.validationPassageId === passage.id}
                         onSelect={() => { setSelectedId(passage.id); setJump((n) => n + 1); }}
                         onAction={async (action) => {
+                          if (action.op === "decide" || action.op === "split") setPendingModified(true);
                           const saved = await review.act(action);
+                          if (!saved && !review.state.reviews[active]?.partial) setPendingModified(false);
                           if (saved && action.op === "split") { setSelectedId(null); setJump(0); }
+                          if (saved && action.op === "decide" && action.destination === "body") {
+                            setSelectedId(null);
+                            setJump(0);
+                          }
                           return saved;
-                        }} onEdit={review.edit} />
+                        }} onEdit={(action) => {
+                          setPendingModified(true);
+                          review.edit(action);
+                        }} />
                     ))}
-                  {!passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
+                  {!passages.length ? <p>{t("preliminary.noPassages")}</p>
+                    : !filteredPassages.length ? <p>{t("preliminary.noMatchingPassages")}</p> : null}
                 </div>
-                <div className="flex gap-3 items-start">
-                  <Checkbox checked={confirmed} disabled={disabled}
-                    aria-label={t("preliminary.confirmWhole")} onCheckedChange={setConfirmed} />
-                  <span>{t("preliminary.confirmWhole")}</span>
+                <div className="space-y-3 border-t border-md pt-3">
+                  <label className="flex gap-3 items-start">
+                    <Checkbox checked={confirmed} disabled={disabled}
+                      aria-label={t("preliminary.confirmWhole")} onCheckedChange={setConfirmed} />
+                    <span>{t("preliminary.confirmWhole")}</span>
+                  </label>
+                  <Button disabled={disabled || review.dirty || undecided > 0 || !confirmed || current.status === "reviewed"}
+                    onClick={() => void completeProcedure()}>
+                    {t("preliminary.complete")}
+                  </Button>
                 </div>
-                <Button disabled={disabled || review.dirty || undecided > 0 || !confirmed || current.status === "reviewed"}
-                  onClick={() => void completeProcedure()}>
-                  {t("preliminary.complete")}
-                </Button>
               </section>
             </div>
           </>
         )}
-        <div className="flex flex-wrap gap-3 justify-between">
-          <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
+        <div className="flex justify-end">
           <Button disabled={disabled || !complete || review.dirty} onClick={onGenerate}>
         {t("preliminary.generate")}
           </Button>

@@ -80,7 +80,7 @@ bash scripts/check_standard.sh
 
 For application changes, also run the applicable backend tests, frontend build, typecheck, lint, Vitest, Playwright smoke test, and packaging validation. Record checks that were executed separately from checks that remain recommended.
 
-For shared design-system changes (`design-tokens/`, `packages/ui/`, `apps/_template/`), also run `pnpm --filter @internal/design-tokens test`, `pnpm --filter @internal/ui test`, the template `design-system.spec.ts` Playwright test, and a build of every app frontend. See [the design system supplement](docs/standards/design-system.md#8-guardrails).
+For shared design-system changes (`framework/design-tokens/`, `framework/packages/ui/`, `framework/apps/_template/`), also run `pnpm --filter @internal/design-tokens test`, `pnpm --filter @internal/ui test`, the template `design-system.spec.ts` Playwright test, and a build of every app frontend. See [the design system supplement](docs/standards/design-system.md#8-guardrails).
 
 Never read or commit user databases, uploaded files, generated user content, secrets, or files under application data and storage directories.
 

@@ -21,14 +21,14 @@ If execution permission is absent, remain in planning mode.
 
 1. `STANDARD_POC.md` defines required local checks.
 2. `CLAUDE.md` defines safety and mandatory validation behavior.
-3. `docs/history/AACF_TESTING_GUIDE.md` is archived historical material, not a current operational or normative source.
+3. `docs/index.md` identifies current operational documents; archived reports are not normative.
 4. Application README files and manifests define app-specific commands.
 
 ## Procedure
 
 1. Identify the changed or requested scope.
 2. Discover available validation commands from manifests, application documentation, and repository scripts.
-3. Build a matrix covering, when applicable: `check_standard`, backend pytest, frontend build, typecheck, lint, Vitest, Playwright smoke tests, and packaging. When `design-tokens/`, `packages/ui/` or `apps/_template/` change, add `pnpm --filter @internal/design-tokens test` (theme sync + WCAG contrast), `pnpm --filter @internal/ui test`, the template `tests/e2e/design-system.spec.ts` (themes, languages, viewports, fonts loaded), and a build of every app frontend (see `docs/standards/design-system.md` §8).
+3. Build a matrix covering, when applicable: `check_standard`, backend pytest, frontend build, typecheck, lint, Vitest, Playwright smoke tests, and packaging. When shared design tokens, `framework/packages/ui/` or the canonical template (`framework/apps/_template/`) change, add `pnpm --filter @internal/design-tokens test` (theme sync + WCAG contrast), `pnpm --filter @internal/ui test`, the template `tests/e2e/design-system.spec.ts` (themes, languages, viewports, fonts loaded), and a build of every app frontend (see `docs/standards/design-system.md` §8).
 4. Rank checks from narrow and cheap to broad and expensive.
 5. Mark each check `required`, `recommended`, or `not applicable`, with its reason.
 6. Before executing any command that may create caches, builds, reports, virtual environments, packages, or other artifacts, ask for explicit confirmation naming the commands and likely artifacts.

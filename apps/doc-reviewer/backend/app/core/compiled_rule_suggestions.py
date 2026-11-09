@@ -452,6 +452,11 @@ def fuzzy_required_suggestions(
     expected_compact = " ".join(expected.split())
     expected_folded = expected_compact.casefold()
     for target in targets:
+        target_folded = " ".join(target.text.split()).casefold()
+        if check.expected_display == "{{meta_first_pnr_number}}":
+            target_folded = target_folded.replace(" - ", "-")
+        if expected_folded in target_folded:
+            continue
         candidates = candidate_ranges(target)
         if not candidates:
             continue
@@ -464,7 +469,7 @@ def fuzzy_required_suggestions(
             candidate_folded = candidate_compact.casefold()
             if check.expected_display == "{{meta_first_pnr_number}}":
                 candidate_folded = candidate_folded.replace(" - ", "-")
-            if check.suggestion_mode == "all" and expected_folded in candidate_folded:
+            if expected_folded in candidate_folded:
                 continue
             if check.missing_anchor_position == "below":
                 expected_label = expected_compact.split(":", 1)[0].strip()

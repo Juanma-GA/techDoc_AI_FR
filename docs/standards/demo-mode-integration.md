@@ -1,5 +1,9 @@
 # Demo Mode And Shared Identity Integration
 
+TECHDOC_AI adaptation of the [framework guide](../../framework/docs/standards/demo-mode-integration.md).
+The framework document owns the reusable contract; this file covers consumer
+integration and branding.
+
 This guide describes the reusable frontend contract and the template backend setting. It is supporting guidance, not a new application profile.
 
 ## Shared Contract
@@ -19,7 +23,7 @@ const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 </DemoModeProvider>
 ```
 
-Use `DemoModeSettingsCard` in Settings (it wraps `DemoModeSelector` with the title, hint and save-error message; the app keeps the mutation that persists `demo_enabled`, see `apps/_template/frontend/src/routes/DemoModeSettings.tsx`) and update the app's Settings API. Use `useDemoMode` in routes, `DemoModeBadge` in the application shell, and mount `DemoScenarioPanel` only for a ready demo mode. The settings card, selector, badge, input editing, run action, result display, and scenario reset are shared; an application registers only its own scenario definitions and local runner.
+Use `DemoModeSettingsCard` in Settings (it wraps `DemoModeSelector` with the title, hint and save-error message; the app keeps the mutation that persists `demo_enabled`, see `framework/apps/_template/frontend/src/routes/DemoModeSettings.tsx`) and update the app's Settings API. Use `useDemoMode` in routes, `DemoModeBadge` in the application shell, and mount `DemoScenarioPanel` only for a ready demo mode. The settings card, selector, badge, input editing, run action, result display, and scenario reset are shared; an application registers only its own scenario definitions and local runner.
 
 ## Register Scenarios
 
@@ -46,18 +50,19 @@ Register only synthetic, app-specific examples. Keep file content inline or gene
 
 ## Persist The Mode
 
-The template adds optional `demo_enabled` to `/api/v1/settings` and stores it as the `AppConfig` key `demo_enabled`. Missing means `false` (normal mode). Follow that small pattern in an app's own backend Settings API; do not store the mode or scenario data in browser storage. Existing `AppConfig` reset-preservation behavior keeps the preference intact.
+The framework template adds optional `demo_enabled` to `/api/v1/settings` and stores it as the `AppConfig` key `demo_enabled`. Missing means `false` (normal mode). Follow that small pattern in an app's own backend Settings API; do not store the mode or scenario data in browser storage. Existing `AppConfig` reset-preservation behavior keeps the preference intact.
 
-The template's Home route registers one neutral text-summary scenario and one synthetic `.txt` sample defined in locale resources. It has no business workflow and its runner performs only local word/character counts.
+The framework template's Home route registers one neutral text-summary scenario and one synthetic `.txt` sample defined in locale resources. It has no business workflow and its runner performs only local word/character counts.
 
-## Use The Shared Icon
+## Consumer-Owned Brand
 
-The canonical asset is [`packages/ui/src/assets/ai4techdoc.svg`](../../packages/ui/src/assets/ai4techdoc.svg), exposed by `Ai4TechDocLogo` from `@internal/ui`:
+Company branding is not part of the framework's `@internal/ui`. TECHDOC_AI keeps its mark and favicon integration in [`packages/techdoc-brand/`](../../packages/techdoc-brand/), while the framework `AppShell` remains generic:
 
 ```tsx
-import { Ai4TechDocLogo } from "@internal/ui";
+import { AppShell, setAi4TechDocFavicon } from "@internal/techdoc-brand";
 
-<AppShell headerStart={<Ai4TechDocLogo alt="" />} ... />
+<AppShell ... />
+setAi4TechDocFavicon();
 ```
 
-The source is already SVG; no raster conversion is needed. It selects its light/dark palette from the system `prefers-color-scheme` setting (rather than the app's theme toggle). Use the shared component rather than copying the asset into an application. Call `setAi4TechDocFavicon()` once from the frontend entry point (for example, `src/main.tsx`) to register the same SVG as the browser tab icon. It creates or updates the `<link rel="icon" type="image/svg+xml">` element using Vite's bundled asset URL.
+The asset is [`packages/techdoc-brand/src/assets/ai4techdoc.svg`](../../packages/techdoc-brand/src/assets/ai4techdoc.svg). Keep it in this consumer-owned package; do not add a company logo to the framework submodule.

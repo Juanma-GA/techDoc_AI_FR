@@ -523,15 +523,11 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
 ) -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")
     ordinary_missing, missing_suggestions = execute_pdf_rules(
-        _highlights_structure_pdf(
-            [("Repair", "", ""), ("Page 601", "R", "")]
-        ),
+        _highlights_structure_pdf([("Repair", "R", "")]),
         [rule],
     )
     ordinary_present, present_suggestions = execute_pdf_rules(
-        _highlights_structure_pdf(
-            [("Repair", "", ""), ("Page 601", "R", "Corrected assembly instruction")]
-        ),
+        _highlights_structure_pdf([("Repair", "R", "Corrected assembly instruction")]),
         [rule],
     )
     illustrated_list, illustrated_suggestions = execute_pdf_rules(
@@ -563,6 +559,19 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     assert illustrated_suggestions == []
     assert illustrated_missing[0].status == "FAIL"
     assert len(illustrated_missing_suggestions) == 1
+
+
+@pytest.mark.parametrize("page_label", ["Page 601", "Pages 1007 to 1010"])
+def test_revised_highlights_page_only_rows_do_not_require_a_description(
+    page_label: str,
+) -> None:
+    results, suggestions = execute_pdf_rules(
+        _highlights_structure_pdf([(page_label, "R", "")]),
+        [_rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 @pytest.mark.parametrize(

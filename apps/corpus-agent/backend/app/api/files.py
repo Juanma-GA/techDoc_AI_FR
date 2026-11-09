@@ -72,6 +72,13 @@ def _project_or_404(db: Session, project_id: uuid.UUID) -> Project:
     return p
 
 
+def _reanalyze_source_change(project_id: uuid.UUID, db: Session) -> uuid.UUID:
+    """Run the standard analysis pipeline after a source mutation."""
+    from app.api.analysis import run_analysis
+
+    return run_analysis(project_id, db=db).id
+
+
 @router.get("/projects/{project_id}/files", response_model=list[FileOut])
 def list_files(project_id: uuid.UUID, db: Session = Depends(get_db)) -> list[DBFile]:
     return list(_project_or_404(db, project_id).files)
@@ -193,7 +200,9 @@ def upload_files(
             created.append({"filename": safe_name, "ok": False, "error": msg})
 
     db.commit()
-    return UploadResultOut(uploaded=created)
+    changed = any(item.get("ok") and item.get("skipped") != "unchanged" for item in created)
+    run_id = _reanalyze_source_change(project.id, db) if changed else None
+    return UploadResultOut(uploaded=created, analysis_run_id=run_id)
 
 
 @router.delete("/projects/{project_id}/files/{file_id}", status_code=204, response_class=Response)
@@ -204,6 +213,7 @@ def delete_file(project_id: uuid.UUID, file_id: uuid.UUID, db: Session = Depends
                        detail={"id": str(file_id)})
     db.delete(f)
     db.commit()
+    _reanalyze_source_change(project_id, db)
     return Response(status_code=204)
 
 
@@ -328,12 +338,14 @@ def sync_corpus_folder(
     project.corpus_path = str(folder)
     db.commit()
 
+    changed = any(item.get("ok") and item.get("skipped") != "unchanged" for item in created)
+    run_id = _reanalyze_source_change(project.id, db) if changed else None
     if truncated:
         created.append({
             "filename": "", "ok": False,
             "error": f"Limite de {_FOLDER_MAX_FILES} fichiers atteinte — dossier tronque.",
         })
-    return UploadResultOut(uploaded=created)
+    return UploadResultOut(uploaded=created, analysis_run_id=run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +373,10 @@ def _header_rows(project: Project) -> dict[str, int]:
     return out
 
 
-def _reference_out(project: Project) -> ReferenceOut:
+def _reference_out(
+    project: Project,
+    analysis_run_id: uuid.UUID | None = None,
+) -> ReferenceOut:
     """`ReferenceOut` complet (chemin + onglets + registre de colonnes +
     lignes d'en-tête)."""
     path = project.reference_path or None
@@ -370,6 +385,7 @@ def _reference_out(project: Project) -> ReferenceOut:
         sheets=sheet_names(path) if path else [],
         columns=[ReferenceColumnDef(**c) for c in reference_columns_for(project)],
         header_rows=_header_rows(project),
+        analysis_run_id=analysis_run_id,
     )
 
 
@@ -396,7 +412,8 @@ def upload_reference(
     dest.write_bytes(raw)
     project.reference_path = str(dest)
     db.commit()
-    return _reference_out(project)
+    run_id = _reanalyze_source_change(project.id, db)
+    return _reference_out(project, run_id)
 
 
 @router.get("/projects/{project_id}/reference", response_model=ReferenceOut)
@@ -459,6 +476,7 @@ def update_reference_mapping(
     colonnes ajoutées doivent porter un nom unique en `[A-Za-z][A-Za-z0-9_]*`
     — utilisable comme placeholder `{nom}` dans les règles personnalisées."""
     project = _project_or_404(db, project_id)
+    previous_mapping = (project.reference_columns, project.reference_header_rows)
     incoming = {c.name.strip(): c for c in body.columns}
 
     registry: list[dict] = []
@@ -522,7 +540,9 @@ def update_reference_mapping(
     )
 
     db.commit()
-    return _reference_out(project)
+    changed = previous_mapping != (project.reference_columns, project.reference_header_rows)
+    run_id = _reanalyze_source_change(project.id, db) if changed else None
+    return _reference_out(project, run_id)
 
 
 @router.delete("/projects/{project_id}/reference", status_code=204, response_class=Response)
@@ -530,6 +550,7 @@ def delete_reference(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Re
     project = _project_or_404(db, project_id)
     project.reference_path = None
     db.commit()
+    _reanalyze_source_change(project.id, db)
     return Response(status_code=204)
 
 
@@ -553,7 +574,10 @@ def _basl_header_rows(project: Project) -> dict[str, int]:
     return out
 
 
-def _basl_out(project: Project) -> ReferenceOut:
+def _basl_out(
+    project: Project,
+    analysis_run_id: uuid.UUID | None = None,
+) -> ReferenceOut:
     """`ReferenceOut` complet de la BASL (chemin + onglets + registre de
     colonnes + lignes d'en-tête) — même contrat que le référentiel."""
     path = project.basl_path or None
@@ -562,6 +586,7 @@ def _basl_out(project: Project) -> ReferenceOut:
         sheets=sheet_names(path) if path else [],
         columns=[ReferenceColumnDef(**c) for c in basl_columns_for(project)],
         header_rows=_basl_header_rows(project),
+        analysis_run_id=analysis_run_id,
     )
 
 
@@ -589,7 +614,8 @@ def upload_basl(
     dest.write_bytes(raw)
     project.basl_path = str(dest)
     db.commit()
-    return _basl_out(project)
+    run_id = _reanalyze_source_change(project.id, db)
+    return _basl_out(project, run_id)
 
 
 @router.get("/projects/{project_id}/basl", response_model=ReferenceOut)
@@ -652,6 +678,7 @@ def update_basl_mapping(
     (onglet/colonne vide) fait retomber le check sur l'union de toutes les
     cellules de la BASL."""
     project = _project_or_404(db, project_id)
+    previous_mapping = (project.basl_columns, project.basl_header_rows)
     incoming = {c.name.strip(): c for c in body.columns}
 
     registry: list[dict] = []
@@ -701,7 +728,9 @@ def update_basl_mapping(
     )
 
     db.commit()
-    return _basl_out(project)
+    changed = previous_mapping != (project.basl_columns, project.basl_header_rows)
+    run_id = _reanalyze_source_change(project.id, db) if changed else None
+    return _basl_out(project, run_id)
 
 
 @router.delete("/projects/{project_id}/basl", status_code=204, response_class=Response)
@@ -709,4 +738,5 @@ def delete_basl(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Respons
     project = _project_or_404(db, project_id)
     project.basl_path = None
     db.commit()
+    _reanalyze_source_change(project.id, db)
     return Response(status_code=204)

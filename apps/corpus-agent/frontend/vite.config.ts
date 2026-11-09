@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ command }) => ({
   plugins: [react()],
   resolve: {
+    dedupe: ["react", "react-dom"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
@@ -38,5 +39,10 @@ export default defineConfig(({ command }) => ({
     environment: "jsdom",
     globals: true,
     css: false,
+    server: {
+      deps: {
+        inline: true,
+      },
+    },
   },
 }));

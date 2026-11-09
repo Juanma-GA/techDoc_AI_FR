@@ -72,6 +72,17 @@ async function syntheticConversion(page: Page, generated = false, unresolvedType
         counts.documents = 1;
         await route.fulfill({ status: 201, json: doc, headers: reused ? { "X-Reused": "true" } : {} });
       } else await route.fulfill({ json: counts.documents ? [doc] : [] });
+    } else if (path === "/api/v1/documents/synthetic-doc" && route.request().method() === "DELETE") {
+      counts.documents = 0;
+      await route.fulfill({ json: { id: "synthetic-doc", status: "deleted" } });
+    } else if (path === "/api/v1/admin/stats") {
+      await route.fulfill({ json: {
+        documents: counts.documents, extracted: 0, brex_profiles: 0, total_size_bytes: 0,
+      } });
+    } else if (path === "/api/v1/admin/reset/documents") {
+      const deleted = counts.documents;
+      counts.documents = 0;
+      await route.fulfill({ json: { scope: "documents", deleted: { documents: deleted } } });
     } else if (path.endsWith("/pdf-cut/detect")) await route.fulfill({ json: {
       validation_required: false, selected_page: 1, selected_end_page: 1,
       default_start_page: 1, total_pages: 1, dmrl_titles: [], candidates: [],
@@ -199,6 +210,39 @@ test("keeps inputs across navigation, reuses the upload and restores metadata wi
   await expect(page.getByText(fr.migration.ui.reused)).toBeVisible();
   expect(counts.downloads).toBe(1);
   expect(counts.documents).toBe(1);
+});
+
+test("keeps the latest files in the inputs after deleting their document", async ({ page }) => {
+  const counts = await syntheticConversion(page, true);
+  await page.goto("/migration/synthetic-doc");
+  await page.getByRole("button", { name: fr.migration.docs.delete, exact: true }).click();
+  await page.getByRole("button", { name: fr.common.confirmAgain, exact: true }).click();
+  await expect(page).toHaveURL(/\/migration$/);
+  await expect(page.getByText(/synthetic\.pdf/).first()).toBeVisible();
+  expect(counts.downloads).toBe(1);
+
+  await page.getByRole("button", { name: fr.migration.upload.start, exact: true }).click();
+  await expect(page).toHaveURL(/\/migration\/synthetic-doc$/);
+  await expect(page.getByRole("button", { name: fr.migration.generate.validate, exact: true })).toBeVisible();
+  expect(counts.uploads).toBe(1);
+  expect(counts.streams).toBe(1);
+});
+
+test("keeps the latest files after deleting all documents from Data", async ({ page }) => {
+  const counts = await syntheticConversion(page, true);
+  await page.goto("/data");
+  await page.getByRole("button", { name: fr.data.deleteDocuments, exact: true }).click();
+  await page.getByRole("button", { name: fr.common.confirmAgain, exact: true }).click();
+  await expect(page.getByText(/Réinitialisation OK/)).toBeVisible();
+  expect(counts.downloads).toBe(1);
+
+  await page.getByRole("link", { name: "Conversion S1000D", exact: true }).click();
+  await expect(page.getByText(/synthetic\.pdf/).first()).toBeVisible();
+  await page.getByRole("button", { name: fr.migration.upload.start, exact: true }).click();
+  await expect(page).toHaveURL(/\/migration\/synthetic-doc$/);
+  await expect(page.getByRole("button", { name: fr.migration.generate.validate, exact: true })).toBeVisible();
+  expect(counts.uploads).toBe(1);
+  expect(counts.streams).toBe(1);
 });
 
 test("validates stored DMs without downloading XML and returns to the document URL", async ({ page }) => {

@@ -11,6 +11,7 @@ from typing import Optional
 
 import fitz
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -27,6 +28,7 @@ from app.core.demo_scope import get_document_in_current_mode
 from app.core.document_context import missing_document_context
 from app.core.errors import AppError
 from app.core.logging import get_logger
+from app.core.norm_detection import detect_document_norm, read_page_texts
 from app.core.page_range import (
     filter_docx,
     filter_pdf_pages,
@@ -37,7 +39,14 @@ from app.core.pdf_versioning import current_path, path_for  # noqa: F401
 from app.core.preparation_classification import load_page_classification
 from app.core.preparation_check_service import apply_preparation_ocr
 from app.core.preparation_state import load_preparation_mapping
-from app.core.rules_engine import load_compiled_rules, materialize, run_all
+from app.core.rules_engine import (
+    filter_preparation_rules,
+    forced_norm_codes,
+    load_compiled_rules,
+    materialize,
+    resolve_document_norm,
+    run_all,
+)
 from app.core.security import read_upload_bounded
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.preparation_models import DocumentPreparation
@@ -47,6 +56,19 @@ from app.schemas import SuggestionOut
 
 router = APIRouter(tags=["analyze"])
 _logger = get_logger(__name__)
+
+
+class NormOut(BaseModel):
+    code: str
+    label: str
+
+
+class DocumentNormOut(BaseModel):
+    detected_norm: str | None = None
+    default_norm: str | None = None
+    norms: list[NormOut] = Field(default_factory=list)
+    # False when the detected norm does not follow modified pages (S1000D).
+    page_revision_tracking: bool = True
 
 
 def _parse_page_overrides(raw: str | None, page_count: int) -> dict[int, bool]:
@@ -122,6 +144,34 @@ def latest_rule_results(
         return []
 
 
+@router.get("/documents/{document_id}/norm", response_model=DocumentNormOut)
+def detect_document_norm_endpoint(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> DocumentNormOut:
+    doc = get_document_in_current_mode(db, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    bundle = get_request_client_configuration(request, db).bundle
+    labels = {definition.bundle_code: definition.bundle_label for definition in bundle.rules}
+    detected: str | None = None
+    if doc.working_format == "pdf" and bundle.norm_codes:
+        pdf_path = current_path(doc.storage_dir, doc.current_version)
+        if not pdf_path.is_file():
+            raise AppError("PDF_VERSION_MISSING", "Snapshot absent", status_code=404)
+        try:
+            detected = detect_document_norm(bundle, read_page_texts(pdf_path))
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+    return DocumentNormOut(
+        detected_norm=detected,
+        default_norm=bundle.default_norm,
+        norms=[NormOut(code=code, label=labels.get(code, code)) for code in bundle.norm_codes],
+        page_revision_tracking=bundle.uses_page_classifier(detected),
+    )
+
+
 @router.delete(
     "/documents/{document_id}/pages/{page_number}/suggestions",
     status_code=204,
@@ -187,6 +237,13 @@ def analyze_stream(
         default=None,
         description="JSON des statuts de page corriges manuellement, indexe par numero physique.",
     ),
+    norm: Optional[str] = Query(
+        default=None,
+        description=(
+            "Norme a appliquer pour ce run (code d'une norme du bundle). "
+            "Absent ou `auto` : detectee depuis le contenu du PDF."
+        ),
+    ),
     previous_revision_file: UploadFile | None = File(
         default=None,
         description="PDF optionnel du CMM de revision N-1 pour les controles comparatifs.",
@@ -237,6 +294,42 @@ def analyze_stream(
     )
     client_configuration = get_request_client_configuration(request, db)
     client_bundle = client_configuration.bundle
+    selected_norm = (norm or "").strip().lower()
+    if selected_norm in {"", "auto"}:
+        selected_norm = ""
+    elif selected_norm not in client_bundle.norm_codes:
+        raise AppError(
+            "NORM_INVALID",
+            "La norme demandee n'existe pas dans le bundle actif.",
+            detail={"norm": norm, "allowed": list(client_bundle.norm_codes)},
+            status_code=422,
+        )
+    # La Preparation reste propre a ATA100 : ni choix ni filtre de norme.
+    norm_value: Optional[str] = None if preparation_context else (selected_norm or None)
+    filter_norms_value = not preparation_context
+    mapping_norm = selected_norm or client_bundle.default_norm
+    if (
+        not preparation_context
+        and not selected_norm
+        and doc.working_format == "pdf"
+        and client_bundle.norm_mappings
+        and client_bundle.norm_selector is not None
+    ):
+        mapping_pdf = current_path(doc.storage_dir, doc.current_version)
+        if not mapping_pdf.is_file():
+            raise AppError("PDF_VERSION_MISSING", "PDF courant absent", status_code=500)
+        try:
+            mapping_norm = detect_document_norm(
+                client_bundle,
+                read_page_texts(mapping_pdf),
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+    analysis_mapping = (
+        client_bundle.mapping
+        if preparation_context
+        else client_bundle.mapping_for_norm(mapping_norm)
+    )
     analysis_metadata = dict(doc.client_metadata or {})
     preparation_page_classification: dict[str, dict[str, str | None]] = {}
     preparation_record: DocumentPreparation | None = None
@@ -293,7 +386,7 @@ def analyze_stream(
     )
     missing_context = missing_document_context(
         doc,
-        client_configuration.mapping,
+        analysis_mapping,
         metadata_override=analysis_metadata if preparation_context else None,
     )
     if missing_context:
@@ -730,7 +823,12 @@ def analyze_stream(
                 page_status_payload: list[dict[str, object]] = []
                 full_page_count = parsed.page_count if not is_docx_value else doc_page_count_value
                 if not is_docx_value:
-                    page_classifier = client_bundle.page_classifier
+                    # Une norme sans classifieur propre (S1000D) ne suit pas les pages modifiees :
+                    # toutes les pages sont analysees, sans statut ni revue manuelle.
+                    tracks_pages = not filter_norms_value or client_bundle.uses_page_classifier(
+                        resolve_document_norm(parsed, client_bundle, norm_value)
+                    )
+                    page_classifier = client_bundle.page_classifier if tracks_pages else None
                     if page_classifier is not None:
                         for version in versions:
                             if version.standard.code in client_bundle.standard_specs:
@@ -746,12 +844,12 @@ def analyze_stream(
                             preparation_page_classification,
                         )
                     revision_state = getattr(parsed, "_thales_revision_state", None)
-                    has_revision_evidence = revision_state is not None and bool(
+                    has_revision_evidence = tracks_pages and revision_state is not None and bool(
                         getattr(revision_state, "highlights_pages", ())
                         or getattr(revision_state, "lep_pages", ())
                     )
                     for page in parsed.pages:
-                        if page.page in page_overrides_value:
+                        if tracks_pages and page.page in page_overrides_value:
                             page.is_modified = page_overrides_value[page.page]
                     page_status_payload = [
                         {
@@ -763,7 +861,7 @@ def analyze_stream(
                             ),
                         }
                         for page in parsed.pages
-                    ]
+                    ] if tracks_pages else []
                     yield {
                         "event": "page_statuses",
                         "data": json.dumps({"pages": page_status_payload}),
@@ -813,6 +911,7 @@ def analyze_stream(
                         "additional_pages": additional_pages_value,
                         "selected_pages": selected_page_numbers,
                         "page_overrides": page_overrides_value,
+                        "norm": norm_value,
                     }
                     context_payload["page_statuses"] = page_status_payload
                     run_row.context_snapshot_json = json.dumps(
@@ -893,6 +992,9 @@ def analyze_stream(
                                     compiled_results=compiled_results,
                                     client_bundle=client_bundle,
                                     previous_revision_pdf=previous_parsed,
+                                    norm=norm_value,
+                                    filter_norms=filter_norms_value,
+                                    preparation_context=preparation_context,
                                 )
                             )
                         )
@@ -958,6 +1060,22 @@ def analyze_stream(
                         scoped_session,
                         versions,
                         checklist_enabled=checklist_enabled_value,
+                        force_codes=(
+                            forced_norm_codes(
+                                scoped_session,
+                                versions,
+                                client_bundle,
+                                norm_value,
+                                checklist_enabled=checklist_enabled_value,
+                            )
+                            if filter_norms_value
+                            else frozenset()
+                        ),
+                    )
+                    compiled_rules = filter_preparation_rules(
+                        compiled_rules,
+                        client_bundle,
+                        preparation_context=preparation_context,
                     )
                     compiled_snapshot = json.dumps(
                         {

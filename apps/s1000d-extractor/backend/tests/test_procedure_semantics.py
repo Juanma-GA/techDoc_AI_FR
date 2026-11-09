@@ -8,7 +8,7 @@ import pytest
 
 from app.core import context_classifier, preliminary_detection, preliminary_review, resolver, xml_safe
 from app.core.errors import AppError
-from app.core.ir import IRNode, to_dict
+from app.core.ir import Candidate, IRNode, to_dict
 from app.core.preliminary_detection import is_reviewable, passages
 from app.core.preliminary_projection import reviewed_root
 from app.core.procedure_semantics import heading_scope, heading_text, resource_rows
@@ -68,8 +68,11 @@ def reviewed_document(tree: IRNode, issue: str, tmp_path) -> Document:
     review = state["reviews"]["proc"]
     for passage in review["passages"]:
         if is_reviewable(passage):
-            assert passage["suggested"] != "review"
-            passage["decision"] = passage["suggested"]
+            passage["decision"] = (
+                "discard" if passage["suggested"] == "review" else passage["suggested"]
+            )
+            if passage["decision"] == "discard":
+                passage["target_tag"] = None
     review["status"] = "reviewed"
     document.preliminary_review_json = json.dumps(state)
     return document
@@ -84,17 +87,157 @@ def test_headings_and_table_headers_are_not_requirements_but_remain_source_ancho
         assert by_node[node_id]["role"] == "heading"
         assert not is_reviewable(by_node[node_id])
         assert by_node[node_id]["decision"] is None
-    header, resource = [item for item in items if item["node_id"] == "resources"]
-    assert header["role"] == "table-header"
-    assert resource["suggested"] == "support"
-    assert resource["rule"] == "heading"
-    assert resource["source_text"] == "Safety lock | LOCK-3.2 | D1234 | 2 | ea | 24 V"
+    resource_items = [item for item in items if item["node_id"] == "resources"]
+    headers = [item for item in resource_items if item["row"] == 0]
+    resources = [item for item in resource_items if item["row"] == 1]
+    assert all(item["role"] == "table-header" for item in headers)
+    assert [item["source_text"] for item in resources] == [
+        "Safety lock", "LOCK-3.2", "D1234", "2", "ea", "24 V",
+    ]
+    assert all(item["suggested"] == "support" for item in resources)
+    assert all(item["rule"] == "heading" for item in resources)
     assert by_node["tighten"]["suggested"] == by_node["grease"]["suggested"] == "body"
     assert by_node["local-caution"]["suggested"] == "body"
     assert by_node["general-warning"]["suggested"] == "safety"
     assert by_node["final-state"]["suggested"] == "closing"
     assert by_node["applicability"]["suggested"] == "common"
     assert to_dict(tree) == source
+
+
+def test_pdf_table_marker_keeps_its_label_separate_from_the_value_cell():
+    cell_boxes = [
+        [[30.0, 30.0, 165.0, 75.0], [165.0, 30.0, 300.0, 75.0],
+         [300.0, 30.0, 400.0, 75.0], [400.0, 30.0, 530.0, 75.0]],
+        [[30.0, 75.0, 165.0, 120.0], [165.0, 75.0, 300.0, 120.0],
+         [300.0, 75.0, 400.0, 120.0], [400.0, 75.0, 530.0, 120.0]],
+        [[30.0, 120.0, 165.0, 165.0], [165.0, 120.0, 300.0, 165.0],
+         [300.0, 120.0, 400.0, 165.0], [400.0, 120.0, 530.0, 165.0]],
+    ]
+    tree = IRNode(id="root", kind="section", children=[
+        IRNode(
+            id="summary", kind="table", page=1, page_width=600, page_height=300,
+            table_header=["EQUIPMENT : SIMFADS", "", "OBJECT: CM001", ""],
+            table_rows=[
+                ["EQUIPMENT : SIMFADS", "", "OBJECT: CM001", ""],
+                ["MAINTENANCE LEVEL(S)", "REQUIRED PERSON(S)", "TOTAL TIME", "PERIODICITY"],
+                ["LEVEL 2", "1 OPER", "0.23", "UNSCHEDULED"],
+            ],
+            table_cell_bboxes=cell_boxes,
+        ),
+    ])
+
+    items = passages(to_dict(tree), source_format="pdf", page_offset=2)
+
+    assert len(items) == 4
+    by_marker = {item["source_marker"]: item for item in items}
+    item = by_marker["REQUIRED PERSON(S)"]
+    assert item["source_marker"] == "REQUIRED PERSON(S)"
+    assert item["marker_key"] == "required person s"
+    assert item["source_text"] == item["text"] == "1 OPER"
+    assert item["suggested"] == "personnel"
+    assert item["target_tag"] == "personnel"
+    assert item["page"] == 3
+    assert item["anchor_rects"] == [
+        [0.275, 0.25, 0.5, 0.4],
+        [0.275, 0.4, 0.5, 0.55],
+    ]
+    assert {
+        marker for marker, passage in by_marker.items() if passage["suggested"] == "review"
+    } == {"MAINTENANCE LEVEL(S)", "TOTAL TIME", "PERIODICITY"}
+    assert all("|" not in passage["source_text"] for passage in items)
+
+
+def test_table_cell_title_is_a_template_anchor_not_requirement_content():
+    tree = IRNode(id="root", kind="section", children=[
+        IRNode(
+            id="personnel", kind="table", page=1, page_width=600, page_height=300,
+            table_rows=[
+                ["Description", "REQUIRED PERSON(S)"],
+                ["Safety lock", "1 OPER"],
+            ],
+            table_cell_bboxes=[
+                [[30.0, 30.0, 300.0, 75.0], [300.0, 30.0, 570.0, 75.0]],
+                [[30.0, 75.0, 300.0, 120.0], [300.0, 75.0, 570.0, 120.0]],
+            ],
+        ),
+    ])
+
+    items = passages(to_dict(tree), source_format="pdf", page_offset=2)
+    title_cells = [item for item in items if item["row"] == 0]
+    person = next(item for item in items if item["row"] == 1 and item["column"] == 1)
+
+    assert all(item["role"] == "table-header" for item in title_cells)
+    assert person["source_text"] == person["text"] == "1 OPER"
+    assert person["source_labels"][1] == "REQUIRED PERSON(S)"
+    assert person["marker_key"] == "required person s"
+    assert person["anchor_texts"] == ["REQUIRED PERSON(S)", "1 OPER"]
+    assert person["anchor_rects"] == [
+        [0.5, 0.1, 0.95, 0.25],
+        [0.5, 0.25, 0.95, 0.4],
+    ]
+
+
+def test_reviewed_table_marker_projects_only_its_associated_value(tmp_path):
+    tree = procedure_tree()
+    tree.children[1].children.append(IRNode(
+        id="personnel-field", kind="table", table_rows=[
+            ["EQUIPMENT : SIMFADS", "", "OBJECT: CM001", ""],
+            ["MAINTENANCE LEVEL(S)", "REQUIRED PERSON(S)", "TOTAL TIME", "PERIODICITY"],
+            ["LEVEL 2", "1 OPER", "0.23", "UNSCHEDULED"],
+        ],
+    ))
+    document = reviewed_document(tree, "4.2", tmp_path)
+    dm = json.loads(document.dms_json)[0]
+
+    projected = reviewed_root(document, dm, tree)
+
+    assert not [node for node in projected.walk() if node.kind == "table"]
+    personnel = resource_rows(projected.reviewed_requirements["personnel"])
+    assert [resource.text for resource in personnel] == ["1 OPER"]
+    assert all(
+        unwanted not in resource.text
+        for resource in personnel
+        for unwanted in ("EQUIPMENT", "OBJECT", "REQUIRED PERSON", "TOTAL TIME", "|")
+    )
+    xml = serialize(projected, issue="4.2", dm_type="procedural")
+    generated = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    person = generated.find("./content/procedure/preliminaryRqmts/reqPersons/personnel")
+    assert person is not None
+    assert person.get("numRequired") == "1"
+    assert person.findtext("trade") == "OPER"
+    assert "REQUIRED PERSON(S)" not in xml
+    assert "EQUIPMENT : SIMFADS" not in xml
+    assert "|" not in xml
+
+
+def test_excluded_preliminary_zone_is_kept_in_the_classic_procedure_body(tmp_path):
+    tree = procedure_tree()
+    tree.children[1].children.append(IRNode(
+        id="personnel-field", kind="table", table_rows=[
+            ["EQUIPMENT : SIMFADS", "", "OBJECT: CM001", ""],
+            ["MAINTENANCE LEVEL(S)", "REQUIRED PERSON(S)", "TOTAL TIME", "PERIODICITY"],
+            ["LEVEL 2", "1 OPER", "0.23", "UNSCHEDULED"],
+        ],
+    ))
+    document = reviewed_document(tree, "4.2", tmp_path)
+    state = preliminary_review.load(document)
+    zone = next(
+        passage for passage in state["reviews"]["proc"]["passages"]
+        if passage.get("source_marker") == "REQUIRED PERSON(S)"
+    )
+    zone.update(decision="body", target_tag="proceduralStep")
+    document.preliminary_review_json = json.dumps(state)
+
+    projected = reviewed_root(document, json.loads(document.dms_json)[0], tree)
+    generated = xml_safe.fromstring(
+        serialize(projected, issue="4.2", dm_type="procedural"),
+        allow_internal_dtd=True,
+    )
+    procedure = generated.find("./content/procedure")
+
+    assert procedure.find("./preliminaryRqmts/reqPersons") is None
+    assert "1 OPER" in "".join(procedure.find("mainProcedure").itertext())
+    assert "REQUIRED PERSON(S)" not in "".join(procedure.itertext())
 
 
 @pytest.mark.parametrize("text", ["1.5", "24 V", "12 N m", "2", "LOCK-3.2", "1.5 mm"])
@@ -202,6 +345,118 @@ def test_procedural_sections_resources_and_local_warnings_survive_valid_xml(issu
     assert to_dict(source_tree) == before
 
 
+@pytest.mark.parametrize("issue", ["4.1", "4.2"])
+def test_human_selected_requirement_tags_reach_valid_xml(issue, tmp_path):
+    tree = procedure_tree()
+    document = reviewed_document(tree, issue, tmp_path)
+    state = preliminary_review.load(document)
+    review = state["reviews"]["proc"]
+    resource = next(
+        passage for passage in review["passages"]
+        if passage["suggested"] == "support" and passage["row"] is not None
+    )
+    other_resource = next(
+        passage for passage in review["passages"]
+        if passage["node_id"] == "resources" and passage["source_text"] == "LOCK-3.2"
+    )
+    warning = next(
+        passage for passage in review["passages"]
+        if passage["node_id"] == "general-warning" and passage["role"] == "content"
+    )
+    resource["target_tag"] = "partNumber"
+    other_resource["target_tag"] = "name"
+    warning["target_tag"] = "note"
+    document.preliminary_review_json = json.dumps(state, ensure_ascii=False)
+
+    root = reviewed_root(document, json.loads(document.dms_json)[0], tree)
+    xml = serialize(root, issue=issue, dm_type="procedural")
+    generated = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    procedure = generated.find("./content/procedure")
+
+    assert procedure.findtext(
+        "./preliminaryRqmts/reqSupportEquips/supportEquipDescrGroup/"
+        "supportEquipDescr/identNumber/partAndSerialNumber/partNumber"
+    ) == resource["text"]
+    assert procedure.findtext(
+        "./preliminaryRqmts/reqSupportEquips/supportEquipDescrGroup/"
+        "supportEquipDescr/name"
+    ) == other_resource["text"]
+    assert procedure.findtext("./preliminaryRqmts/reqSafety/safetyRqmts/note/notePara") == warning["text"]
+    assert procedure.find("./preliminaryRqmts/reqSafety/safetyRqmts/warning") is None
+    assert not [
+        violation for violation in validate_xsd(xml, issue, dm_type="procedural", allow_internal_dtd=True)
+        if violation["severity"] == "error"
+    ]
+
+
+@pytest.mark.parametrize("issue", ["4.1", "4.2"])
+@pytest.mark.parametrize(("category", "tag", "text"), [
+    ("conditions", "reqCondNoRef", "The electrical supply is isolated."),
+    ("conditions", "noConds", "No preliminary conditions are required."),
+    ("personnel", "personnel", "Qualified technician"),
+    ("personnel", "personCategory", "Qualified technician"),
+    ("personnel", "personSkill", "Level 2"),
+    ("support", "reqSupportEquips", "Synthetic support tool"),
+    ("support", "noSupportEquips", "No support equipment is required."),
+    ("support", "supportEquipDescr", "Synthetic support tool"),
+    ("support", "name", "Synthetic support tool"),
+    ("support", "identNumber", "Synthetic identifier"),
+    ("support", "manufacturerCode", "Synthetic manufacturer"),
+    ("support", "partAndSerialNumber", "Synthetic serial reference"),
+    ("support", "partNumber", "SYN-001"),
+    ("support", "reqQuantity", "2"),
+    ("supplies", "reqSupplies", "Synthetic supply"),
+    ("supplies", "noSupplies", "No supplies are required."),
+    ("supplies", "name", "Synthetic supply"),
+    ("supplies", "identNumber", "Synthetic identifier"),
+    ("supplies", "manufacturerCode", "Synthetic manufacturer"),
+    ("supplies", "partAndSerialNumber", "Synthetic serial reference"),
+    ("supplies", "partNumber", "SYN-002"),
+    ("supplies", "reqQuantity", "1"),
+    ("spares", "reqSpares", "Synthetic spare"),
+    ("spares", "noSpares", "No spare parts are required."),
+    ("spares", "spareDescrGroup", "Synthetic spare"),
+    ("spares", "spareDescr", "Synthetic spare"),
+    ("spares", "name", "Synthetic spare"),
+    ("spares", "identNumber", "Synthetic identifier"),
+    ("spares", "manufacturerCode", "Synthetic manufacturer"),
+    ("spares", "partAndSerialNumber", "Synthetic serial reference"),
+    ("spares", "partNumber", "SYN-003"),
+    ("spares", "reqQuantity", "1"),
+    ("safety", "warning", "Wear eye protection."),
+    ("safety", "caution", "Avoid contact with the hot surface."),
+    ("safety", "note", "Use the supplied inspection light."),
+    ("closing", "reqCondNoRef", "The access panel is secured."),
+    ("closing", "noConds", "No closing conditions are required."),
+])
+def test_reviewed_requirement_tag_choices_are_xsd_valid(issue, category, tag, text):
+    content = IRNode(
+        id=f"selected-{tag}", kind="paragraph", text=text,
+        candidates=[Candidate(tag, 1.0, "human-reviewed")],
+    )
+    requirements = {
+        key: [] for key in (
+            "conditions", "personnel", "support", "supplies", "spares", "safety",
+            "closing", "common",
+        )
+    }
+    requirements[category] = [IRNode(
+        id=f"section-{category}", kind="section", children=[content],
+    )]
+    root = IRNode(
+        id="reviewed-root", kind="section",
+        children=[IRNode(
+            id="step", kind="section", text="Perform the synthetic task",
+            children=[IRNode(id="action", kind="paragraph", text="Complete the task.")],
+        )],
+        reviewed_requirements=requirements,
+    )
+
+    xml = serialize(root, issue=issue, dm_type="procedural")
+    violations = validate_xsd(xml, issue, dm_type="procedural", allow_internal_dtd=True)
+    assert not [item for item in violations if item["severity"] == "error"], f"{category}/{tag}"
+
+
 def test_warning_without_an_action_is_an_explicit_error_not_silently_pruned():
     with pytest.raises(AppError) as error:
         procedure_steps([IRNode(id="warning", kind="admonition", admonition="warning", text="Risk.")])
@@ -219,25 +474,35 @@ def test_old_rule_versions_become_stale_without_erasing_decisions(monkeypatch, t
     assert error.value.code == "PRELIMINARY_REVIEW_REQUIRED"
 
 
-def test_split_table_rows_project_only_the_reviewed_spans_not_two_full_resources(tmp_path):
+def test_split_table_cells_project_reviewed_spans_without_duplicate_resources(tmp_path):
     tree = procedure_tree()
     document = reviewed_document(tree, "4.2", tmp_path)
     state = preliminary_review.load(document)
     items = state["reviews"]["proc"]["passages"]
-    row = next(item for item in items if item["node_id"] == "resources" and item["row"] == 1)
-    split = len("Safety lock")
+    row = next(
+        item for item in items
+        if item["node_id"] == "resources" and item["row"] == 1 and item["column"] == 1
+    )
+    split = len("LOCK-")
+    original_text = row["source_text"]
     pieces = [
         {**row, "id": f"piece-{start}", "start": start, "end": end,
-         "source_text": row["source_text"][start:end], "text": row["source_text"][start:end]}
-        for start, end in ((0, split), (split, len(row["source_text"])))
+         "source_text": original_text[start:end], "text": original_text[start:end],
+         "decision": decision, "target_tag": "supportEquipDescr" if decision == "support" else "table"}
+        for (start, end), decision in (
+            ((0, split), "support"), ((split, len(original_text)), "body"),
+        )
     ]
     index = items.index(row)
     items[index:index + 1] = pieces
     document.preliminary_review_json = json.dumps(state)
     projected = reviewed_root(document, json.loads(document.dms_json)[0], tree)
     resources = resource_rows(projected.reviewed_requirements["support"])
-    assert [resource.name for resource in resources] == [piece["text"].strip() for piece in pieces]
-    assert all(resource.quantity is None for resource in resources)
+    assert len(resources) == 1
+    assert resources[0].name == "Safety lock"
+    assert resources[0].part_number == "LOCK-"
+    projected_table = next(node for node in projected.walk() if node.id == "resources")
+    assert projected_table.table_rows[0][1] == "3.2"
 
 
 def test_structure_is_read_only_but_does_not_block_completed_review(client, tmp_path):
@@ -247,7 +512,7 @@ def test_structure_is_read_only_but_does_not_block_completed_review(client, tmp_
         db.commit()
         doc_id = document.id
         revision = preliminary_review.load(document)["revision"]
-    for passage_id, op in (("tools:text:0", "decide"), ("resources:0:0", "split")):
+    for passage_id, op in (("tools:text:0", "decide"), ("resources:0:0:0", "split")):
         response = client.post(f"/api/v1/documents/{doc_id}/wizard/preliminary", json={
             "revision": revision, "dm_id": "proc", "op": op, "passage_id": passage_id,
             "destination": "support", "split_at": 4,

@@ -84,7 +84,8 @@ def _reference_pattern(
 ) -> re.Pattern[str]:
     escaped = re.escape(expected).replace(r"\ ", r"\s+")
     escaped = (
-        escaped.replace(r"\-", _DASH_PATTERN)
+        escaped.replace(r"CMON\-A", rf"CMON\s*{_DASH_PATTERN}?\s*A")
+        .replace(r"\-", _DASH_PATTERN)
         .replace(r"\–", _DASH_PATTERN)
         .replace("–", _DASH_PATTERN)
     )

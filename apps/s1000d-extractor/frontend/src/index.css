@@ -26,10 +26,10 @@
 
   .s1k-dmrl-row {
     display: grid;
-    grid-template-columns: 2rem minmax(0, 2fr) 18rem 11rem minmax(0, 0.5fr) minmax(0, 0.5fr) auto;
+    grid-template-columns: 2rem minmax(0, 2fr) 18rem 13rem minmax(0, 0.5fr) minmax(0, 0.5fr) auto;
     align-items: center;
     gap: 0.75rem;
-    min-width: 80rem;
+    min-width: 82rem;
   }
 
   .s1k-validation-page {

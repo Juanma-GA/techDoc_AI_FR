@@ -13,7 +13,7 @@ the same registered value.
 <!-- APP_REGISTRY_START -->
 | Application | Backend | Profiles | Target default port | Desktop |
 |---|---|---|---:|---:|
-| [_template](../../apps/_template/README.md) | fastapi | `local-first` | 8000 | Yes |
+| [_template](../../framework/apps/_template/README.md) | fastapi | `local-first` | 8000 | Yes |
 | [corpus-agent](../../apps/corpus-agent/README.md) | fastapi | `local-first`, `llm`, `files` | 8001 | No |
 | [doc-writer](../../apps/doc-writer/README.md) | fastapi | `local-first`, `llm`, `files` | 8002 | No |
 | [doc-reviewer](../../apps/doc-reviewer/README.md) | fastapi | `local-first`, `llm`, `files` | 8003 | No |
@@ -24,6 +24,16 @@ the same registered value.
 | [flowchart-generator](../../apps/flowchart-generator/README.md) | fastapi | `local-first`, `llm`, `files` | 8010 | No |
 | [pdf-toolkit](../../apps/pdf-toolkit/README.md) | go | `local-first`, `files` | 8085 | Yes |
 <!-- APP_REGISTRY_END -->
+
+## Exception hors registre
+
+[`image-processor`](../../apps/image-processor/README.md) reste une application
+utilisable, mais n'est volontairement pas dans `scripts/apps.json`. Son
+`pnpm dev:image-processor` personnalisé démarre l'API, LaMa dans son
+environnement Python séparé et Vite. Le synchroniseur du registre ne sait
+générer que le lanceur FastAPI + Vite standard : l'y ajouter remplacerait ce
+script et omettrait LaMa. Utilise `pnpm dev:image-processor` pour le
+développement ou `apps\image-processor\start.bat` pour le lancement local.
 
 ## Adding an App
 

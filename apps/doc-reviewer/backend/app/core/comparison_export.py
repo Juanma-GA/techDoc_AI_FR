@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,94 +12,109 @@ def build_commented_pdf(
     pdf_path: Path,
     *,
     reference_filename: str,
-    comparison: dict[str, Any],
+    comparisons: list[dict[str, Any]],
     language: Literal["fr", "en"],
 ) -> bytes:
     labels = {
         "fr": {
-            "title": "Comparaison de {candidate} avec {reference}",
-            "add": "Ajout",
-            "remove": "Suppression",
-            "empty": "Aucune différence textuelle détectée.",
+            "reference": "Référence",
+            "candidate": "Version",
             "page": "page",
+            "difference": "Différence",
         },
         "en": {
-            "title": "Comparison of {candidate} with {reference}",
-            "add": "Added",
-            "remove": "Removed",
-            "empty": "No text differences detected.",
+            "reference": "Reference",
+            "candidate": "Version",
             "page": "page",
+            "difference": "Difference",
         },
     }[language]
     document = fitz.open(str(pdf_path))
     try:
-        for change in comparison["changes"]:
-            if change["kind"] != "added":
-                continue
-            page_number = int(change["page"])
-            bbox = change["bbox"]
-            if page_number < 1 or page_number > document.page_count:
-                continue
-            if isinstance(bbox, dict):
-                coordinates = tuple(bbox.get(key) for key in ("x0", "y0", "x1", "y1"))
-            elif isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-                coordinates = tuple(bbox)
-            else:
-                continue
-            if any(not isinstance(value, (int, float)) for value in coordinates):
-                continue
-            rect = fitz.Rect(*(float(value) for value in coordinates))
-            if rect.is_empty or rect.is_infinite:
-                continue
-            page = document.load_page(page_number - 1)
-            annotation = page.add_highlight_annot(rect)
-            annotation.set_colors(stroke=(0.12, 0.55, 0.28))
-            annotation.set_info(
-                title=f"{labels['add']} — {labels['page']} {page_number}",
-                content=str(change["text"]),
-            )
-            annotation.update()
+        for comparison in comparisons:
+            page_map = {
+                row["comparison_page"]: row["reference_page"]
+                for row in comparison["page_alignment"]
+                if row["comparison_page"] is not None and row["reference_page"] is not None
+            }
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for change in comparison["changes"]:
+                groups.setdefault(change["group_id"], []).append(change)
+            for changes in groups.values():
+                removed = [change for change in changes if change["kind"] == "removed"]
+                added = [change for change in changes if change["kind"] == "added"]
+                candidate_page = int((added or removed)[0]["page"])
+                title = (
+                    f"{labels['difference']} — {comparison['filename']} — "
+                    f"{labels['page']} {candidate_page}"
+                )
+                content_lines = [
+                    f"{labels['reference']} ({reference_filename}): "
+                    f"{', '.join(str(change['text']) for change in removed) or '—'}",
+                    f"{labels['candidate']} ({comparison['filename']}): "
+                    f"{', '.join(str(change['text']) for change in added) or '—'}",
+                ]
+                content = "\n".join(content_lines)
 
-        _append_summary_page(
-            document,
-            comparison=comparison,
-            reference_filename=reference_filename,
-            labels=labels,
-        )
+                if removed:
+                    for change in removed:
+                        page_number = int(change["page"])
+                        rect = _change_rect(change)
+                        if rect is None or not 1 <= page_number <= document.page_count:
+                            continue
+                        page = document.load_page(page_number - 1)
+                        annotation = page.add_highlight_annot(rect)
+                        annotation.set_colors(stroke=(0.75, 0.2, 0.2))
+                        annotation.set_info(title=title, content=content)
+                        annotation.update()
+                    continue
+
+                change = added[0]
+                reference_page_number = page_map.get(int(change["page"]))
+                if reference_page_number is None:
+                    reference_page_number = 1
+                if not 1 <= reference_page_number <= document.page_count:
+                    continue
+                reference_page = document[reference_page_number - 1]
+                rect = _change_rect(change)
+                if rect is None:
+                    point = fitz.Point(36, 36)
+                else:
+                    bbox = change["bbox"]
+                    source_width = bbox.get("page_w") if isinstance(bbox, dict) else None
+                    source_height = bbox.get("page_h") if isinstance(bbox, dict) else None
+                    if (
+                        isinstance(source_width, (int, float))
+                        and source_width > 0
+                        and isinstance(source_height, (int, float))
+                        and source_height > 0
+                    ):
+                        point = fitz.Point(
+                            rect.x0 * reference_page.rect.width / float(source_width),
+                            rect.y0 * reference_page.rect.height / float(source_height),
+                        )
+                    else:
+                        point = fitz.Point(rect.x0, rect.y0)
+                    point.x = min(max(point.x, 18), reference_page.rect.width - 18)
+                    point.y = min(max(point.y, 18), reference_page.rect.height - 18)
+                annotation = reference_page.add_text_annot(point, content, icon="Comment")
+                annotation.set_info(title=title, content=content)
+                annotation.update()
+
         return document.tobytes(deflate=True, garbage=3)
     finally:
         document.close()
 
 
-def _append_summary_page(
-    document: fitz.Document,
-    *,
-    comparison: dict[str, Any],
-    reference_filename: str,
-    labels: dict[str, str],
-) -> None:
-    title = labels["title"].format(
-        candidate=str(comparison["filename"]),
-        reference=reference_filename,
-    )
-    summary_lines = [title, ""]
-    if not comparison["changes"]:
-        summary_lines.append(labels["empty"])
+def _change_rect(change: dict[str, Any]) -> fitz.Rect | None:
+    bbox = change["bbox"]
+    if isinstance(bbox, dict):
+        coordinates = tuple(bbox.get(key) for key in ("x0", "y0", "x1", "y1"))
+    elif isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        coordinates = tuple(bbox)
     else:
-        for change in comparison["changes"]:
-            kind = labels["add"] if change["kind"] == "added" else labels["remove"]
-            prefix = f"{kind} — {labels['page']} {change['page']}: "
-            wrapped = textwrap.wrap(str(change["text"]), width=105) or [""]
-            summary_lines.append(prefix + wrapped[0])
-            summary_lines.extend(f"    {line}" for line in wrapped[1:])
-
-    width, height = fitz.paper_size("a4")
-    margin = 48
-    for start in range(0, len(summary_lines), 58):
-        page = document.new_page(width=width, height=height)
-        page.insert_textbox(
-            fitz.Rect(margin, margin, width - margin, height - margin),
-            "\n".join(summary_lines[start : start + 58]),
-            fontname="helv",
-            fontsize=8,
-        )
+        return None
+    if any(not isinstance(value, (int, float)) for value in coordinates):
+        return None
+    rect = fitz.Rect(*(float(value) for value in coordinates))
+    return None if rect.is_empty or rect.is_infinite else rect

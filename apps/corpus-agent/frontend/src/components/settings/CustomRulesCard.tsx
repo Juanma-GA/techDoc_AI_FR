@@ -7,7 +7,11 @@ import { settingsApi } from "../../lib/api";
 import { useUnsavedGuardStore } from "../../stores/useUnsavedGuardStore";
 import type { CustomRule, RulesLegacyOut } from "../../lib/types";
 
-const SEVERITIES = ["low", "medium", "high"];
+const SEVERITIES = [
+  { value: "low", label: "redacteur.sevLow" },
+  { value: "medium", label: "redacteur.sevMedium" },
+  { value: "high", label: "redacteur.sevHigh" },
+];
 
 function DeleteButton({ onDelete }: { onDelete: () => void }) {
   const { t } = useTranslation();
@@ -45,7 +49,7 @@ function RuleRow({
       <td><textarea value={rule.consigne} onChange={(e) => onChange({ consigne: e.target.value })} /></td>
       <td>
         <select className="input" value={rule.severity ?? "medium"} onChange={(e) => onChange({ severity: e.target.value })}>
-          {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {SEVERITIES.map(({ value, label }) => <option key={value} value={value}>{t(label)}</option>)}
         </select>
       </td>
       <td className="row" style={{ gap: "0.35rem" }}>

@@ -43,6 +43,13 @@ _COLUMNS = {
     "part_number": {"part number", "part no", "partnumber", "pn", "p n", "reference", "ref"},
     "manufacturer": {"manufacturer", "manufacturer code", "cage", "cage code", "code fabricant", "fabricant"},
 }
+_TABLE_ANCHOR_EXCLUDED = {
+    "equipment", "object", "removal and installation", "installation and removal",
+}
+_PERSONNEL_TABLE_ANCHORS = {
+    "required person", "required persons", "required person s", "required personnel",
+    "personnel required", "manpower",
+}
 
 
 def normalize(text: str) -> str:
@@ -76,6 +83,22 @@ def heading_scope(text: str, *, headings: dict[str, set[str]] | None = None) -> 
     return "unknown", None
 
 
+def table_anchor_key(text: str) -> str:
+    return heading_label(text)
+
+
+def table_anchor_category(
+    text: str, *, headings: dict[str, set[str]] | None = None,
+) -> str | None:
+    label = table_anchor_key(text)
+    if not label or label in _TABLE_ANCHOR_EXCLUDED:
+        return None
+    if label in _PERSONNEL_TABLE_ANCHORS:
+        return "personnel"
+    phase, category = heading_scope(text, headings=headings)
+    return category if phase == "preliminary" else None
+
+
 def is_main_container(text: str) -> bool:
     return normalize(heading_text(text)).strip(" :") in {
         "main procedure", "mainprocedure", "procedure principale",
@@ -92,6 +115,9 @@ def table_heading(node: dict, *, headings: dict[str, set[str]] | None = None) ->
         return node["table_header"]
     rows = node.get("table_rows") or []
     if rows:
+        first_row = rows[0]
+        if any(table_anchor_category(cell, headings=headings) for cell in first_row):
+            return first_row
         keys = [
             column_key(cell) or (
                 "name" if heading_scope(cell, headings=headings)[1] in {"personnel", "support", "supplies", "spares"}
@@ -144,34 +170,70 @@ class Resource:
     part_number: str | None = None
     manufacturer: str | None = None
     remarks: str | None = None
+    target_tag: str | None = None
 
 
 def resource_rows(sections: Sequence[IRNode]) -> list[Resource]:
     result = []
     for section in sections:
         for node in section.walk()[1:]:
+            target_tag = node.candidates[0].element if node.candidates else None
             if node.kind in {"paragraph", "item"} and node.text.strip():
-                result.append(Resource(text=node.text.strip(), name=node.text.strip()))
+                result.append(Resource(
+                    text=node.text.strip(), name=node.text.strip(), target_tag=target_tag,
+                ))
             elif node.kind == "table":
                 header = table_heading({"table_header": node.table_header, "table_rows": node.table_rows})
-                for row in node.table_rows or []:
+                for row_index, row in enumerate(node.table_rows or []):
                     if row == header:
                         continue
                     fields: dict[str, str] = {}
+                    priorities: dict[str, int] = {}
                     remarks = []
+                    cell_tags = (
+                        node.reviewed_table_cell_tags[row_index]
+                        if node.reviewed_table_cell_tags
+                                               and row_index < len(node.reviewed_table_cell_tags)
+                        else []
+                    )
+                    person_tag = None
+                    person_tag_priority = 0
+                    no_requirement_tag = None
                     for index, value in enumerate(row):
                         if not value.strip():
                             continue
                         label = header[index] if index < len(header) else ""
-                        key = column_key(label)
-                        if key and key not in fields:
-                            fields[key] = value.strip()
+                        selected_tag = cell_tags[index] if index < len(cell_tags) else None
+                        header_key = column_key(label)
+                        tag_key = {
+                            "name": "name",
+                            "partNumber": "part_number",
+                            "partAndSerialNumber": "part_number",
+                            "manufacturerCode": "manufacturer",
+                            "reqQuantity": "quantity",
+                        }.get(selected_tag)
+                        if selected_tag == "identNumber":
+                            tag_key = header_key or "manufacturer"
+                        key = tag_key or header_key
+                        if selected_tag in {"personnel", "personCategory", "personSkill"}:
+                            priority = 2 if selected_tag != "personnel" else 1
+                            if priority > person_tag_priority:
+                                person_tag = selected_tag
+                                person_tag_priority = priority
+                        if selected_tag in {"noSupportEquips", "noSupplies", "noSpares"}:
+                            no_requirement_tag = selected_tag
+                        if key:
+                            priority = 2 if tag_key else 1
+                            if priority > priorities.get(key, 0):
+                                fields[key] = value.strip()
+                                priorities[key] = priority
                         elif header:
                             remarks.append(f"{label}: {value}".strip(": "))
-                    text = " | ".join(row)
+                    text = " ".join(cell.strip() for cell in row if cell.strip())
                     result.append(Resource(text=text, name=fields.get("name", text),
                                            quantity=fields.get("quantity"), unit=fields.get("unit"),
                                            part_number=fields.get("part_number"),
                                            manufacturer=fields.get("manufacturer"),
-                                           remarks="; ".join(remarks) or None))
+                                           remarks="; ".join(remarks) or None,
+                                           target_tag=person_tag or no_requirement_tag or target_tag))
     return result

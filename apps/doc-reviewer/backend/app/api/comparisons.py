@@ -80,6 +80,7 @@ def _to_detail(row: DocumentComparison, db: Session) -> ComparisonDetail:
 def create_comparison(
     files: list[UploadFile] = File(...),
     reference_index: int = Form(0),
+    page_similarity_threshold: int = Form(85, ge=50, le=99),
     db: Session = Depends(get_db),
 ) -> ComparisonDetail:
     if len(files) < 2 or len(files) > MAX_COMPARISON_FILES:
@@ -124,7 +125,12 @@ def create_comparison(
             paths.append(path)
             filenames.append(filename)
 
-        report = build_comparison_report(paths, filenames, reference_index)
+        report = build_comparison_report(
+            paths,
+            filenames,
+            reference_index,
+            page_similarity_threshold / 100,
+        )
         row = DocumentComparison(
             id=comparison_id,
             title=filenames[reference_index],

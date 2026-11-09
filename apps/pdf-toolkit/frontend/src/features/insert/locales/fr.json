@@ -1,0 +1,42 @@
+{
+  "tools": {
+    "insert": {
+      "tab": "Insérer",
+      "title": "Insérer des pages",
+      "description": "Insérez des pages d'un PDF source A à la position de votre choix dans un PDF de destination B."
+    }
+  },
+  "insert": {
+    "targetHeading": "PDF de destination (B)",
+    "targetDescription": "Le document qui recevra les pages insérées.",
+    "targetDrop": "Déposer le PDF de destination",
+    "sourceHeading": "PDF source (A)",
+    "sourceDescription": "Le document dont les pages seront copiées.",
+    "sourceDrop": "Déposer le PDF source",
+    "countingPages": "Lecture des pages…",
+    "documentFailed": "PDF illisible",
+    "pageCount_one": "{{count}} page",
+    "pageCount_other": "{{count}} pages",
+    "optionsHeading": "Pages et position",
+    "optionsDescription": "Choisissez les pages de A et l'endroit où les placer dans B.",
+    "pagesLabel": "Pages de A à insérer",
+    "pagesPlaceholder": "Toutes les pages, ou ex. 5,1-3",
+    "pagesHelp": "Laissez vide pour tout insérer. Pages 1 à {{count}}, insérées dans l'ordre saisi.",
+    "positionLabel": "Position dans B",
+    "positionStart": "Au début",
+    "positionAfter": "Après la page…",
+    "positionEnd": "À la fin",
+    "afterPageLabel": "Après la page de B",
+    "afterPageHelp": "Numéro de page entre 1 et {{count}}.",
+    "outputDescription": "PDF B complété des pages de A.",
+    "summary_one": "{{count}} page insérée après la page {{after}} de B.",
+    "summary_other": "{{count}} pages insérées après la page {{after}} de B.",
+    "summaryStart_one": "{{count}} page insérée au début de B.",
+    "summaryStart_other": "{{count}} pages insérées au début de B.",
+    "action": "Insérer et télécharger",
+    "filesRequired": "Sélectionnez le PDF de destination puis le PDF source.",
+    "invalidPages": "Sélection invalide : pages hors limites, doublons ou plage décroissante.",
+    "invalidPosition": "Position invalide pour le PDF de destination.",
+    "success": "{{fileName}} est prêt."
+  }
+}

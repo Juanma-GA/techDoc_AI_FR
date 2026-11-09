@@ -211,13 +211,13 @@ def test_boeing_revision_section_footers_accept_boeing_page_labels() -> None:
     parsed = _consistent_document()
     for span in parsed.pages[1].spans:
         if span.text == "LEP Page 1":
-            span.text = "LEP-1"
+            span.text = "Page LEP-1"
     parsed.pages[1].text = "\n".join(span.text for span in parsed.pages[1].spans)
     parsed.pages.append(
         _page(
             6,
             [_span("RECORD OF REVISIONS", 100.0, 120.0, 6)]
-            + _footer(6, "RR-1", _REVISION_DATE),
+            + _footer(6, "Page RR-1", _REVISION_DATE),
         )
     )
     parsed.page_count = 6
@@ -235,6 +235,35 @@ def test_boeing_revision_section_footers_accept_boeing_page_labels() -> None:
     ]
 
     assert not any(finding.page in {2, 6} for finding in findings)
+
+
+def test_boeing_revision_section_footers_suggest_boeing_page_labels() -> None:
+    parsed = _consistent_document()
+    parsed.pages.append(
+        _page(
+            6,
+            [_span("RECORD OF REVISIONS", 100.0, 120.0, 6)]
+            + _footer(6, "ROR Page 1", _REVISION_DATE),
+        )
+    )
+    parsed.page_count = 6
+    document = SimpleNamespace(
+        meta_revision_date=_REVISION_DATE,
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+        meta_manufacturer="Boeing",
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed, document)
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ]
+
+    assert {(finding.page, finding.proposed) for finding in findings} == {
+        (2, "LEP-1"),
+        (6, "RR-1"),
+    }
 
 
 def test_unchanged_revision_evidence_downgrades_linked_star_and_footer_dates() -> None:
@@ -410,6 +439,22 @@ def test_footer_date_must_match_the_revision_on_a_modified_page() -> None:
         "JAN 27/26",
         _REVISION_DATE,
     )
+
+
+def test_highlights_footer_date_must_match_the_revision() -> None:
+    parsed = _consistent_document()
+    highlights_page = parsed.pages[0]
+    for span in highlights_page.spans:
+        if span.text == _REVISION_DATE:
+            span.text = "JAN 27/26"
+    highlights_page.text = "\n".join(span.text for span in highlights_page.spans)
+
+    findings = _findings(parsed)
+
+    assert [
+        (finding.control, finding.page, finding.original, finding.proposed)
+        for finding in findings
+    ] == [(revision.FOOTER_DATE, 1, "JAN 27/26", _REVISION_DATE)]
 
 
 def test_footer_page_number_rejects_two_numbers_and_suggests_the_first() -> None:

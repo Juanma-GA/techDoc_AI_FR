@@ -19,6 +19,7 @@ from app.core import structure_heuristics as heur
 from app.core import zone_classifier
 from app.core.ir import InlineRun, IRNode, RawBlock
 from app.core.progress import progress_items
+from app.core.structure_tables import table_node_from_block
 
 _NUMBERED_NOTE_ITEM_RE = re.compile(r"(?m)(?<!\S)(?P<number>\d{1,3})[.)][ \t]+")
 _ORDERED_ITEM_NUMBER_RE = re.compile(r"^\s*(?P<number>\d{1,3})[.)]\s+")
@@ -313,11 +314,7 @@ def build_ir(
         rows = heur.to_table_rows(block)
         if rows is not None:
             close_list()
-            current().children.append(
-                IRNode(id=ids.next(), kind="table", form="table",
-                       page=block.page, zone=block.zone, table_rows=rows,
-                       table_header=block.table_header, confidence=0.6)
-            )
+            current().children.append(table_node_from_block(block, ids.next(), rows))
             continue
 
         # 2) Legende de figure --------------------------------------------

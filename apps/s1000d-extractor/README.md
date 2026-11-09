@@ -26,9 +26,12 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Keep XML and ZIP downloads available when generation reports XSD or mapping problems.
 - Use **Conversion S1000D** at `/migration` and `/migration/:docId`, with resumable
   document URLs and a direct return link from Validation.
-- Preserve unsubmitted files and options across page navigation in a memory-only
-  Zustand store; no document, workflow or session is written to browser storage.
-- Restore saved filenames without downloading their content until Start is used.
+- Preserve the latest selected source and resource files independently from
+  document history in a memory-only Zustand store; document deletion caches
+  available files before removing their server copies. Files are discarded on
+  reload and no document, workflow or session is written to browser storage.
+- Restore saved filenames without downloading their content until Start is used,
+  except when a document deletion requires caching them in memory.
   Repeated uploads reuse document/resource hashes instead of creating duplicates.
 - Validate imported XML in batches of 20 with two concurrent requests and visible
   progress; generated DMs are validated directly on the server.
@@ -144,26 +147,54 @@ generation. **Resume** restores the saved step without automatically advancing i
   Resource tables preserve recognized names, part numbers, manufacturer codes,
   quantities and units; additional columns remain remarks instead of disappearing.
   Missing required resource fields remain explicitly provisional, never inferred.
-  Corrected text autosaves after a short pause. Split an unedited passage at a
-  character boundary to classify its parts independently; its section context
-  is retained.
+  PDF table markers and their associated cell values are reviewed as separate
+  zones. For example, `REQUIRED PERSON(S)` is the source marker and the value
+  below it is the content; table titles, document metadata and visual `|`
+  separators are not emitted as requirements. Table-cell rectangles anchor
+  these zones to the PDF. Resource tables keep their recognized columns and
+  values structured. Each zone gets a category and a schema-valid S1000D tag,
+  from the `Proced` worksheet in `Balise_S1000D.xlsx`. If a workbook spelling
+  conflicts with the S1000D XSD, the schema-valid spelling is used (`noSupportEquips`
+  for the workbook's `noSuppEquips`).
+  Other table rows are split into one review passage per non-empty cell, keeping
+  its row, column, title and PDF anchor separate. The review card shows the
+  detector title separately from the cell content; only the content is
+  corrected and classified. The title is editable in the first procedure and
+  read-only in later ones. Completing the first procedure reuses its category
+  and S1000D tag for cells with matching normalized titles. In PDF table cells,
+  consecutive leading bold uppercase lines are grouped as the cell title when
+  followed by content, ahead of any table-wide header. Resource rows are
+  recombined from those cell decisions for structured XML output. An explicit
+  exclusion action moves a zone into the classic procedure body instead of
+  dropping its content. Completing the first procedure regenerates every other
+  unfinished review from its source and reapplies matching template decisions;
+  fully reviewed procedures with unchanged sources are preserved.
+  The first procedure is the human template: only decisions for the same
+  normalized source marker are reused in later, already-generated procedures.
+  Unmatched, ambiguous or schema-incompatible zones remain for human review;
+  changing the first procedure clears inherited choices. Corrected zone values
+  autosave after a short pause.
 - The PDF reader scrolls continuously, lazily loading page images and anchors.
-  It uses original page numbers, including after PDF cutting. Exact text matches
-  are highlighted on the image when "Show source" is selected. The PDF reader
-  never duplicates page content as extracted text, even when a page image or
+  It uses original page numbers, including after PDF cutting. Table zones use
+  their extracted cell rectangles for highlighting; text search is only a
+  fallback for content without geometry. The PDF reader never duplicates page
+  content as extracted text, even when a page image or
   anchor fails to load. Unavailable image anchors and unknown source pages are
   explicitly flagged instead. Repeated matching text can highlight multiple
   locations and still needs human checking.
 - Word uses extracted structure with approximate reading pagination, **not**
   original Word page numbers. Tables, lists and warning blocks remain
   distinguishable.
-- A procedure is reviewed only after all content passages have decisions **and** the
-  reviewer confirms checking the whole DM, including empty categories. No
-  detection is not equivalent to a verified absence. The separate explicit skip
-  action marks every procedural review as skipped and generates from the original
-  extracted structure without applying review decisions.
-- Decisions, corrections, split source ranges, current procedure, selected
-  passage, page and scroll position persist in SQLite, not browser storage.
+- A procedure is fully reviewed only after all detected content zones and
+  passages have decisions **and** the reviewer confirms checking the whole DM,
+  including empty categories.
+  No detection is not equivalent to a verified absence. The separate explicit
+  skip action preserves procedures with saved edits, applies those explicit
+  decisions, and keeps untouched passages in the original procedure body. Only
+  the remaining unmodified procedures are skipped; if nothing was edited, the
+  original extracted structure is generated unchanged.
+- Decisions, corrections, current procedure, selected zone, page and scroll
+  position persist in SQLite, not browser storage.
   Saving failures remain visible and block leaving via wizard controls.
   Unsaved work triggers the browser's unload protection; queued requests use
   keepalive on navigation, but a failed or interrupted save is never guaranteed.
@@ -173,14 +204,15 @@ generation. **Resume** restores the saved step without automatically advancing i
   review must be restarted explicitly, with double-click confirmation. Going
   back without changing the source preserves decisions.
   The procedural-rule version participates in the fingerprint: reviews made
-  before the source-role/context change become stale and require an explicit
+  before the source-zone change become stale and require an explicit
   restart, without silently migrating or discarding their saved decisions.
-- Human decisions, not heading heuristics, drive reviewed procedural XML in both
-  individual and ZIP exports. Skipped reviews remain distinct from reviewed ones
-  and preserve the original extracted structure for generation. The original
-  source tree is not rewritten. BREX-guided mapping choices remain persisted.
-  Incomplete/stale procedural reviews block generation and export until they are
-  reviewed or explicitly skipped against the current source. Single-document
+- Human decisions, not heading heuristics, drive reviewed or partially edited
+  procedural XML in both individual and ZIP exports. Skipped reviews preserve the
+  original extracted structure; partial reviews apply saved edits and keep
+  undecided passages in the procedure body. The original source tree is not
+  rewritten. BREX-guided mapping choices remain persisted. Incomplete/stale
+  procedural reviews block generation and export until reviewed or explicitly
+  skipped against the current source. Single-document
   extraction/override/XML APIs reject wizard documents rather than bypassing this
   workflow.
 

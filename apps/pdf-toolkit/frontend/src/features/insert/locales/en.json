@@ -1,0 +1,42 @@
+{
+  "tools": {
+    "insert": {
+      "tab": "Insert",
+      "title": "Insert pages",
+      "description": "Insert pages from a source PDF A at the position of your choice in a target PDF B."
+    }
+  },
+  "insert": {
+    "targetHeading": "Target PDF (B)",
+    "targetDescription": "The document that receives the inserted pages.",
+    "targetDrop": "Drop the target PDF",
+    "sourceHeading": "Source PDF (A)",
+    "sourceDescription": "The document whose pages are copied.",
+    "sourceDrop": "Drop the source PDF",
+    "countingPages": "Reading pages…",
+    "documentFailed": "Unreadable PDF",
+    "pageCount_one": "{{count}} page",
+    "pageCount_other": "{{count}} pages",
+    "optionsHeading": "Pages and position",
+    "optionsDescription": "Choose the pages of A and where to place them in B.",
+    "pagesLabel": "Pages of A to insert",
+    "pagesPlaceholder": "All pages, or e.g. 5,1-3",
+    "pagesHelp": "Leave empty to insert everything. Pages 1 to {{count}}, inserted in the typed order.",
+    "positionLabel": "Position in B",
+    "positionStart": "At the beginning",
+    "positionAfter": "After page…",
+    "positionEnd": "At the end",
+    "afterPageLabel": "After page of B",
+    "afterPageHelp": "Page number between 1 and {{count}}.",
+    "outputDescription": "PDF B with the pages of A added.",
+    "summary_one": "{{count}} page inserted after page {{after}} of B.",
+    "summary_other": "{{count}} pages inserted after page {{after}} of B.",
+    "summaryStart_one": "{{count}} page inserted at the beginning of B.",
+    "summaryStart_other": "{{count}} pages inserted at the beginning of B.",
+    "action": "Insert and download",
+    "filesRequired": "Select the target PDF, then the source PDF.",
+    "invalidPages": "Invalid selection: pages out of range, duplicates or descending range.",
+    "invalidPosition": "Invalid position for the target PDF.",
+    "success": "{{fileName}} is ready."
+  }
+}

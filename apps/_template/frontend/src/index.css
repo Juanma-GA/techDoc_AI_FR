@@ -1,7 +1,0 @@
-/* Theme variables, self-hosted fonts and document defaults come from the
-   design system (design-tokens/base.css). Do not import fonts or theme.css here. */
-@import "@internal/design-tokens/base.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;

@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FileDropzone } from "@internal/ui";
+import { FileDropzone, useDemoMode } from "@internal/ui";
 
 import { filesApi } from "../../lib/api";
 import type { CorpusPathOut, FileOut, FolderFileOut, UploadItemResult } from "../../lib/types";
@@ -24,7 +24,9 @@ function skippedLabel(t: TFunction, code: string): string {
 export function FilesCard({ pid }: { pid: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { mode } = useDemoMode();
   const [results, setResults] = useState<UploadItemResult[]>([]);
+  const [analysisUpdated, setAnalysisUpdated] = useState(false);
   const [folderPath, setFolderPath] = useState("");
   // Aperçu du dossier (liste des fichiers) + sélection avant import.
   const [listing, setListing] = useState<FolderFileOut[] | null>(null);
@@ -40,7 +42,11 @@ export function FilesCard({ pid }: { pid: string }) {
     mutationFn: (files: File[]) => filesApi.upload(pid, files),
     onSuccess: (res) => {
       setResults(res.uploaded);
+      setAnalysisUpdated(!!res.analysis_run_id);
       void qc.invalidateQueries({ queryKey: ["files", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
     },
   });
   // Parcourir un dossier : liste ses fichiers pour sélection (sans ingérer).
@@ -58,8 +64,12 @@ export function FilesCard({ pid }: { pid: string }) {
       filesApi.syncFolder(pid, path, only),
     onSuccess: (res) => {
       setResults(res.uploaded);
+      setAnalysisUpdated(!!res.analysis_run_id);
       void qc.invalidateQueries({ queryKey: ["files", pid] });
       void qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
     },
   });
   const disconnectFolder = useMutation({
@@ -70,9 +80,24 @@ export function FilesCard({ pid }: { pid: string }) {
       void qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
     },
   });
+  const connectDemoFolder = useMutation({
+    mutationFn: () => filesApi.connectDemoFolder(pid),
+    onSuccess: async () => {
+      setFolderPath("");
+      setListing(null);
+      setSelected(new Set());
+      await qc.invalidateQueries({ queryKey: ["corpus-folder", pid] });
+    },
+  });
   const remove = useMutation({
     mutationFn: (fileId: string) => filesApi.remove(pid, fileId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["files", pid] }),
+    onSuccess: () => {
+      setAnalysisUpdated(true);
+      void qc.invalidateQueries({ queryKey: ["files", pid] });
+      void qc.invalidateQueries({ queryKey: ["anomalies", pid] });
+      void qc.invalidateQueries({ queryKey: ["kpis"] });
+      void qc.invalidateQueries({ queryKey: ["analysis-runs", pid] });
+    },
   });
 
   const connectedPath = folderQuery.data?.path ?? null;
@@ -125,6 +150,7 @@ export function FilesCard({ pid }: { pid: string }) {
         label={t("projects.upload")}
         accept=".docx,.pdf,.xlsx,.xlsm,.xml,.csv,.txt"
       />
+      {analysisUpdated && <div className="banner">{t("files.analysisUpdated")}</div>}
 
       {/* Connexion d'un dossier corpus (chemin local / OneDrive synchronise) */}
       <div className="folder-connect" style={{ marginTop: 12 }}>
@@ -158,6 +184,17 @@ export function FilesCard({ pid }: { pid: string }) {
               {t("projects.folderDisconnect")}
             </button>
           )}
+          {mode === "demo" && (
+            <button
+              type="button"
+              className="btn ghost small"
+              disabled={connectDemoFolder.isPending}
+              onClick={() => connectDemoFolder.mutate()}
+            >
+              {connectDemoFolder.isPending ? <span className="spinner" /> : null}{" "}
+              {t("projects.demoFolderConnect")}
+            </button>
+          )}
         </div>
         {connectedPath && (
           <div className="label" style={{ marginTop: 6 }}>
@@ -167,6 +204,13 @@ export function FilesCard({ pid }: { pid: string }) {
         {browse.isError && (
           <div className="error" style={{ marginTop: 6 }}>
             {browse.error instanceof Error ? browse.error.message : String(browse.error)}
+          </div>
+        )}
+        {connectDemoFolder.isError && (
+          <div className="error" role="alert" style={{ marginTop: 6 }}>
+            {connectDemoFolder.error instanceof Error
+              ? connectDemoFolder.error.message
+              : String(connectDemoFolder.error)}
           </div>
         )}
 

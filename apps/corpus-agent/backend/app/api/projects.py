@@ -4,39 +4,50 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.demo_mode import (
+    get_demo_enabled,
+    is_embedded_demo_folder,
+    remember_demo_folder,
+    visible_projects,
+)
+from app.core.demo_seed import ensure_demo_connected_folder
 from app.core.errors import AppError
 from app.db.models import Project
 from app.db.session import get_db
-from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
-
+from app.schemas import CorpusPathOut, ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter(tags=["projects"])
 
 
 def _project_or_404(db: Session, project_id: uuid.UUID) -> Project:
-    project = db.get(Project, project_id)
-    if project is None:
+    projects = visible_projects(db, [project_id])
+    if not projects:
         raise AppError(
             code="PROJECT_NOT_FOUND",
             message="Projet introuvable",
             status_code=404,
             detail={"id": str(project_id)},
         )
-    return project
+    return projects[0]
 
 
 @router.get("/projects", response_model=list[ProjectOut])
 def list_projects(db: Session = Depends(get_db)) -> list[Project]:
-    return list(db.scalars(select(Project).order_by(Project.created_at.desc())))
+    return visible_projects(db)
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 def create_project(body: ProjectCreate, db: Session = Depends(get_db)) -> Project:
+    if get_demo_enabled(db):
+        raise AppError(
+            "DEMO_SINGLE_PROJECT",
+            "Le mode demo utilise un seul projet. Revenez en mode normal pour creer un projet.",
+            status_code=409,
+        )
     project = Project(
         name=body.name.strip(),
         description=body.description,
@@ -62,12 +73,31 @@ def get_project(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Project
     return _project_or_404(db, project_id)
 
 
+@router.post("/projects/{project_id}/demo-folder", response_model=CorpusPathOut)
+def connect_demo_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> CorpusPathOut:
+    if not get_demo_enabled(db):
+        raise AppError(
+            "DEMO_MODE_REQUIRED",
+            "Le dossier de démonstration est disponible uniquement en mode démo.",
+            status_code=409,
+        )
+    project = _project_or_404(db, project_id)
+    folder = ensure_demo_connected_folder(project)
+    if project.corpus_path and not is_embedded_demo_folder(project.id, project.corpus_path):
+        remember_demo_folder(db, project.corpus_path)
+    project.corpus_path = str(folder)
+    db.commit()
+    return CorpusPathOut(path=str(folder))
+
+
 @router.put("/projects/{project_id}", response_model=ProjectOut)
 def update_project(
     project_id: uuid.UUID,
     body: ProjectUpdate,
     db: Session = Depends(get_db),
 ) -> Project:
+    if get_demo_enabled(db):
+        raise AppError("DEMO_PROJECT_PROTECTED", "Le projet de demonstration est protege.", status_code=409)
     project = _project_or_404(db, project_id)
 
     if body.name is not None:
@@ -91,8 +121,15 @@ def update_project(
     return project
 
 
-@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete(
+    "/projects/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def delete_project(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    if get_demo_enabled(db):
+        raise AppError("DEMO_PROJECT_PROTECTED", "Le projet de demonstration est protege.", status_code=409)
     project = _project_or_404(db, project_id)
     db.delete(project)
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

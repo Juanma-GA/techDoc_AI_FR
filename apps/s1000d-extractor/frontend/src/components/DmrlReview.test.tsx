@@ -142,15 +142,22 @@ describe("DMRL review", () => {
     expect(markup).toContain("Found chapter");
   });
 
-  it("keeps source pages on exact matches but removes page and approximation wording from checks", () => {
+  it("shows status only for exact, missing, or InfoCode-problem rows", () => {
     const markup = renderToStaticMarkup(
       createElement(DmrlReview, {
         rows: [
           makeRow({ matched: true, match_rank: "exact", page: 1 }),
           makeRow({ index: 1, matched: true, match_rank: "prefix", page: 2 }),
           makeRow({ index: 2, matched: true, match_rank: "contains", page: 3 }),
+          makeRow({ index: 3, matched: false }),
+          makeRow({
+            index: 4,
+            matched: true,
+            match_rank: "contains",
+            type_issue: "unmapped_info_code",
+          }),
         ],
-        dmCount: 3,
+        dmCount: 5,
         busy: false,
         edits: {},
         onTitleChange: vi.fn(),
@@ -160,10 +167,11 @@ describe("DMRL review", () => {
     );
 
     expect(markup).toContain("migration.match.exact:1");
-    expect(markup).toContain("migration.match.prefix");
-    expect(markup).toContain("migration.match.contains");
-    expect(markup).not.toContain("migration.match.prefix:");
-    expect(markup).not.toContain("migration.match.contains:");
+    expect(markup).toContain("migration.match.notFound");
+    expect(markup).toContain("migration.match.infoCodeReview");
+    expect(markup).not.toContain("migration.match.prefix");
+    expect(markup).not.toContain("migration.match.contains");
+    expect(markup).toContain("migration.dmrl.counts:1,1,0");
   });
 
   it("does not alert when the only unmatched row is a publication title", () => {

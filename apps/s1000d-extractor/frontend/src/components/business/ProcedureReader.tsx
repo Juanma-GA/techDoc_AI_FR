@@ -19,17 +19,31 @@ type Props = {
 };
 
 function SourceExcerpt({ item, selected }: { item: ReviewPassage; selected: boolean }) {
+  const { t } = useTranslation();
   const content = selected ? <mark className="bg-warning text-bg">{item.source_text}</mark> : item.source_text;
+  const marker = selected && item.source_marker
+    ? <mark className="bg-warning text-bg">{item.source_marker}</mark>
+    : item.source_marker;
   return (
     <div data-passage={item.id} tabIndex={selected ? -1 : undefined} className="py-2 whitespace-pre-wrap">
-      {item.kind === "section" || item.kind === "title" ? <h4 className="font-semibold">{content}</h4>
-        : item.row !== null ? (
-          <table className="w-full border"><tbody><tr>
-            {item.source_text.split(" | ").map((cell, index) => (
-              <td key={index} className={`border p-2 ${selected ? "bg-warning text-bg" : ""}`}>{cell}</td>
-            ))}
-          </tr></tbody></table>
-        ) : item.kind === "item" ? <ul className="list-disc pl-4"><li>{content}</li></ul>
+      {item.source_marker ? (
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <div><dt className="text-xs text-fg-dim">{t("preliminary.sourceMarker")}</dt><dd>{marker}</dd></div>
+          <div><dt className="text-xs text-fg-dim">{t("preliminary.sourceValue")}</dt><dd>{content}</dd></div>
+        </dl>
+      ) : item.source_cells ? (
+        <table className="w-full border"><tbody><tr>
+          {item.source_cells.map((cell, index) => (
+            <td key={index} className={`border p-2 ${selected ? "bg-warning text-bg" : ""}`}>
+              <span className="block text-xs text-fg-dim">
+                {item.source_labels?.[index] || t("preliminary.sourceCell", { index: index + 1 })}
+              </span>
+              {cell}
+            </td>
+          ))}
+        </tr></tbody></table>
+      ) : item.kind === "section" || item.kind === "title" ? <h4 className="font-semibold">{content}</h4>
+        : item.kind === "item" ? <ul className="list-disc pl-4"><li>{content}</li></ul>
           : item.kind === "admonition" ? <blockquote className="border-l-4 border-warning pl-3">{content}</blockquote>
             : <p>{content}</p>}
     </div>
@@ -172,7 +186,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
   };
   return (
     <section className="min-w-0 space-y-2" aria-label={t("preliminary.reader")}>
-      <p className="text-sm text-fg-dim">{t(pdf ? "preliminary.pdfHelp" : "preliminary.wordHelp")}</p>
+      {!pdf ? <p className="text-sm text-fg-dim">{t("preliminary.wordHelp")}</p> : null}
       {manifest.error ? (
         <div role="alert" className="text-danger">
           {t("preliminary.readerError")}: {formatApiError(t, manifest.error)}
@@ -183,9 +197,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
       {sourcePageUnavailable ? <p role="status" className="text-warning">{t("preliminary.sourcePageUnavailable")}</p> : null}
       <div ref={container} data-testid="procedure-reader" tabIndex={0} role="region"
         aria-label={t("preliminary.reader")} onScroll={capture}
-        className={`h-96 overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 p-3 space-y-4 ${
-          pdf ? "lg:h-[calc(70vh_+_4rem)]" : "lg:h-[70vh]"
-        }`}>
+        className="h-96 overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 px-3 pb-3 pt-0 space-y-4 lg:h-[70vh]">
         {ready ? pageNumbers.map((pageNumber) => {
           const items = grouped.get(pageNumber) ?? [];
           const page = manifest.data?.find((p) => p.page === pageNumber);

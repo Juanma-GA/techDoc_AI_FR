@@ -31,7 +31,7 @@ export function DocumentsList() {
   const [autoOpenUploadDialog] = useState(
     () => (location.state as { openUploadDialog?: boolean } | null)?.openUploadDialog === true,
   );
-  const docs = useDocuments();
+  const docs = useDocuments("control");
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
   // Nombre d'uploads en cours dans TOUT le cache TanStack Query (pas juste
