@@ -78,7 +78,7 @@ test("Windows launcher reuses an up-to-date binary without executing the compile
   const future = new Date(Date.now() + 60_000);
   utimesSync(binary, future, future);
   const script = fileURLToPath(new URL("../../apps/pdf-toolkit/_build_backend.ps1", import.meta.url));
-  const result = spawnSync("powershell", ["-NoProfile", "-File", script, "-AppDir", app], { encoding: "utf8" });
+  const result = spawnSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-AppDir", app], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /up to date/);
   assert.equal(readFileSync(binary, "utf8"), "synthetic cached binary");

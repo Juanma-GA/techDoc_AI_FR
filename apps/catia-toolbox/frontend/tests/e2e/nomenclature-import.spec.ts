@@ -70,12 +70,30 @@ async function mockNomenclatures(page: Page) {
     const run = runs.find((candidate) =>
       pathname === `/api/v1/identification/${candidate.id}/items`);
     if (run) {
-      await route.fulfill({ json: [{
+      const items = [{
         id: `${run.id}-item`,
         sin: run.source_ref === pathFor(1) ? "RESULT-A" : "RESULT-B",
         designation: run.source_ref,
         mono_body: false,
-      }] });
+      }];
+      if (run.source_ref === pathFor(1)) {
+        items.push({
+          id: `${run.id}-duplicate`,
+          sin: " result-a ",
+          designation: "Synthetic duplicate",
+          mono_body: false,
+        });
+        items.push({
+          id: `${run.id}-unique`,
+          sin: "RESULT-C",
+          designation: "Synthetic unique",
+          mono_body: false,
+        });
+      }
+      const monoBodyFilter = new URL(request.url()).searchParams.get("mono_body");
+      await route.fulfill({
+        json: monoBodyFilter === "true" ? items.filter((item) => item.mono_body) : items,
+      });
       return;
     }
     const responses: Record<string, unknown> = {
@@ -118,10 +136,10 @@ test("same-named imports stay separate and only load previews on demand", async 
   await mock.nomenclature.getByRole("button", { name: /^(Aperçu|Preview)$/ }).click();
   await expect(mock.nomenclature.getByText("Preview A", { exact: true })).toBeVisible();
   await mock.nomenclature.getByRole("button", { name: /^(Analyser|Analyze)$/ }).click();
-  await expect(mock.nomenclature.getByRole("cell", { name: "RESULT-A", exact: true })).toBeVisible();
+  await expect(mock.nomenclature.getByRole("cell", { name: /RESULT-A/ })).toBeVisible();
 
   await mock.upload();
-  await expect(mock.nomenclature.getByRole("cell", { name: "RESULT-A", exact: true })).toHaveCount(0);
+  await expect(mock.nomenclature.getByRole("cell", { name: /RESULT-A/ })).toHaveCount(0);
   await expect(mock.nomenclature.locator(".preview-table")).toHaveCount(0);
   await page.waitForTimeout(600);
   expect(mock.previews).toEqual([mock.pathFor(1)]);
@@ -138,8 +156,23 @@ test("same-named imports stay separate and only load previews on demand", async 
   await expect(imported).toHaveCount(2);
   await imported.last().getByRole("button", { name: /^(Voir|View)$/ }).click();
   await expect(page.locator('input[type="text"]').first()).toHaveValue(mock.pathFor(1));
-  await expect(mock.nomenclature.getByRole("cell", { name: "RESULT-A", exact: true })).toBeVisible();
+  await expect(mock.nomenclature.getByRole("cell", { name: /RESULT-A/ })).toBeVisible();
   await expect(mock.nomenclature.getByRole("cell", { name: "RESULT-B", exact: true })).toHaveCount(0);
+});
+
+test("highlights duplicate SINs across the full nomenclature", async ({ page }) => {
+  const mock = await mockNomenclatures(page);
+  await page.goto("/identification");
+  await mock.upload();
+  await mock.nomenclature.getByRole("button", { name: /^(Aperçu|Preview)$/ }).click();
+  await mock.nomenclature.getByRole("button", { name: /^(Analyser|Analyze)$/ }).click();
+
+  await expect(mock.nomenclature.getByText(/^(Doublon SIN|Duplicate SIN)$/)).toHaveCount(2);
+  const filter = mock.nomenclature.getByLabel(/^(Champ de filtre|Filter field)$/);
+  await filter.selectOption("monoBody");
+  await filter.selectOption("sinDuplicates");
+  await expect(mock.nomenclature.locator("table.tbl tbody tr")).toHaveCount(2);
+  await expect(mock.nomenclature.getByText(/^(Doublon SIN|Duplicate SIN)$/)).toHaveCount(2);
 });
 
 for (const kind of ["preview", "analysis"] as const) {

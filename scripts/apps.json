@@ -54,7 +54,7 @@
       "backend": "fastapi",
       "targetPort": 8004,
       "profiles": ["local-first", "files"],
-      "desktop": false,
+      "desktop": true,
       "e2e": true,
       "openapi": true
     },

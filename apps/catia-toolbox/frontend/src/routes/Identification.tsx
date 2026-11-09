@@ -1,7 +1,7 @@
 import { Badge, Button, Select, Spinner } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScanLine, Search } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -130,6 +130,10 @@ function canFilterReplaced(columns: string[]): boolean {
 // sinon toutes les lignes.
 function defaultFilter(columns: string[]): "all" | "replaced" | "color" {
   return canFilterReplaced(columns) ? "replaced" : "all";
+}
+
+function normalizeSin(sin: string): string {
+  return sin.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
 // Lettre de colonne tableur : 0 -> A, 1 -> B, 26 -> AA ...
@@ -746,7 +750,7 @@ export function Identification() {
   const [resultColumns, setResultColumns] = useState<string[]>([]);
   // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
   // via une liste deroulante), + avec couleur / toutes.
-  type ItemFilter = "all" | "replaced" | "monoBody" | "color" | "optimized";
+  type ItemFilter = "all" | "replaced" | "monoBody" | "color" | "optimized" | "sinDuplicates";
   const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -820,7 +824,12 @@ export function Identification() {
   }, [resultRunId, runs]);
 
   const itemsQuery = useQuery<NomenclatureItemDto[]>({
-    queryKey: ["identification", resultRunId, "items", filter],
+    queryKey: [
+      "identification",
+      resultRunId,
+      "items",
+      filter === "all" || filter === "sinDuplicates" ? "all" : filter,
+    ],
     queryFn: () =>
       identificationApi.items(resultRunId!, {
         replaced: filter === "replaced" ? true : undefined,
@@ -831,6 +840,42 @@ export function Identification() {
     enabled: !!resultRunId,
   });
   const items = itemsQuery.data ?? [];
+  const needsUnfilteredSinItems =
+    !!resultRunId &&
+    resultColumns.includes("sin") &&
+    filter !== "all" &&
+    filter !== "sinDuplicates";
+  const allItemsQuery = useQuery<NomenclatureItemDto[]>({
+    queryKey: ["identification", resultRunId, "items", "all"],
+    queryFn: () => identificationApi.items(resultRunId!),
+    enabled: needsUnfilteredSinItems,
+  });
+  const duplicateSourceItems =
+    filter === "all" || filter === "sinDuplicates" ? items : allItemsQuery.data ?? [];
+  const duplicateSinCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of duplicateSourceItems) {
+      const sin = normalizeSin(item.sin);
+      if (sin) counts.set(sin, (counts.get(sin) ?? 0) + 1);
+    }
+    return counts;
+  }, [duplicateSourceItems]);
+  const duplicateItemIds = useMemo(
+    () =>
+      new Set(
+        duplicateSourceItems
+          .filter((item) => {
+            const sin = normalizeSin(item.sin);
+            return sin !== "" && (duplicateSinCounts.get(sin) ?? 0) > 1;
+          })
+          .map((item) => item.id),
+      ),
+    [duplicateSourceItems, duplicateSinCounts],
+  );
+  const visibleItems =
+    filter === "sinDuplicates" ? items.filter((item) => duplicateItemIds.has(item.id)) : items;
+  const itemsLoading = itemsQuery.isLoading || (needsUnfilteredSinItems && allItemsQuery.isLoading);
+  const itemsError = itemsQuery.error ?? (needsUnfilteredSinItems ? allItemsQuery.error : null);
 
   const onMutationError = (setter: (m: string | null) => void) => (e: unknown) =>
     setter(e instanceof ApiClientError ? e.message : String(e));
@@ -1216,6 +1261,9 @@ export function Identification() {
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
                     <option value="monoBody">{t("identification.monoBodyOnly")}</option>
+                    {resultColumns.includes("sin") ? (
+                      <option value="sinDuplicates">{t("identification.sinDuplicates")}</option>
+                    ) : null}
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
@@ -1239,19 +1287,17 @@ export function Identification() {
                   {t("common.exportCsv")}
                 </a>
                 <span className="hint" style={{ marginLeft: "auto" }}>
-                  {t("identification.lines", { count: items.length })}
+                  {t("identification.lines", { count: visibleItems.length })}
                 </span>
               </div>
 
-              {itemsQuery.isLoading ? (
+              {itemsLoading ? (
                 <Spinner aria-label={t("common.loading")} />
-              ) : itemsQuery.isError ? (
+              ) : itemsError ? (
                 <p className="error">
-                  {itemsQuery.error instanceof Error
-                    ? itemsQuery.error.message
-                    : String(itemsQuery.error)}
+                  {itemsError instanceof Error ? itemsError.message : String(itemsError)}
                 </p>
-              ) : items.length ? (
+              ) : visibleItems.length ? (
                 // ~15 lignes visibles puis scroll vertical ; scroll horizontal
                 // quand les colonnes depassent la largeur.
                 <div style={{ maxHeight: "30rem", overflow: "auto" }}>
@@ -1274,11 +1320,14 @@ export function Identification() {
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((it) => (
+                      {visibleItems.map((it) => (
                         <tr key={it.id}>
                           {COLUMN_DEFS.filter((c) => displayColumns(resultColumns).includes(c.key)).map((c) => (
                             <td key={c.key} style={c.center ? { textAlign: "center" } : undefined}>
                               {c.render(it, t)}
+                              {c.key === "sin" && duplicateItemIds.has(it.id) ? (
+                                <Badge variant="warning">{t("identification.duplicateSin")}</Badge>
+                              ) : null}
                             </td>
                           ))}
                         </tr>
@@ -1288,7 +1337,11 @@ export function Identification() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <h3 className="section-title">{t("identification.empty")}</h3>
+                  <h3 className="section-title">
+                    {filter === "sinDuplicates"
+                      ? t("identification.noSinDuplicates")
+                      : t("identification.empty")}
+                  </h3>
                 </div>
               )}
             </div>
